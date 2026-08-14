@@ -890,6 +890,9 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 #view>.pad>*{flex:none}
 .hbtns{margin-top:auto}
 
+/* 得点ゲージ：測定できた配点の位置に印を1本入れる（そこから右は未測定＝取れると見せない） */
+.gauge .gmeas{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--muted);opacity:.5}
+
 /* 設定の配色（9個の見本）。見本そのものにテーマ変数を当てて、実際の色で見せる */
 .throw{display:flex;flex-wrap:wrap;gap:10px}
 .thbtn{display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;
@@ -1037,7 +1040,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='d60d42e3';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='90ae442d';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){

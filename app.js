@@ -365,6 +365,11 @@ function normST(o){
   /* 出題セッション（中断と再開）。SPEC §2 の session は成績用に使っているので run という名前にした。
      {queue:[id...],qi,label,sort,filter,startedAt,lastAt} */
   if(!o.run||typeof o.run!=='object'||!o.run.queue||!o.run.queue.length)o.run=null;
+  if(o.run){
+    if(!Array.isArray(o.run.wrongs))o.run.wrongs=[];      /* 旧データには無い */
+    if(typeof o.run.round!=='number')o.run.round=0;
+    if(typeof o.run.roundVid!=='string')o.run.roundVid=o.run.baseVid||null;
+  }
   return o;
 }
 function saveST(){try{localStorage.setItem(LSK,JSON.stringify(ST));LSOK=true}catch(e){LSOK=false}}
@@ -1088,6 +1093,11 @@ function saveRun(fresh){
   }
   ST.run={queue:S.queue.slice(),qi:S.qi,label:S.label,sort:S.sort,kind:S.kind||'new',
           sT:S.sT||0,sR:S.sR||0,sBest:S.sBest||0,
+          /* 間違えた問題・周回数・基準の動画も保存する。ここが抜けていたため、
+             途中でアプリが再起動されると完走時に「間違えた N問を解く」が出なかった
+             （2026-08-14 本人報告のバグ。iPhoneのホーム画面アプリは他アプリに切り替えると
+             再起動されやすいので、長いセッションではほぼ必ず踏む）。 */
+          wrongs:(S.wrongs||[]).slice(),round:S.round||0,roundVid:S.roundVid||null,
           baseVid:S.baseVid||null,baseSrc:S.baseSrc||DEFSRC,
           filter:JSON.parse(JSON.stringify(F)),
           startedAt:(fresh||!prev||!prev.startedAt)?now:prev.startedAt,lastAt:now,
@@ -1122,6 +1132,10 @@ function resumeRun(fromStart){
   /* ヘッダーに出す「このセッションの成績」も復元する（最初からやり直すときは0に戻す） */
   S.sT=fromStart?0:(r.sT||0);S.sR=fromStart?0:(r.sR||0);
   S.sStreak=0;S.sBest=fromStart?0:(r.sBest||0);
+  /* 間違えた問題・周回数・基準の動画を戻す（最初からやり直すときは捨てる） */
+  S.wrongs=fromStart?[]:(Array.isArray(r.wrongs)?r.wrongs.filter(function(id){return !!BY[id]}):[]);
+  S.round=fromStart?0:(r.round||0);
+  S.roundVid=(r.roundVid&&VTIT[r.roundVid])?r.roundVid:(r.baseVid||null);
   if(r.filter){for(var k in F){if(r.filter[k]!==undefined)F[k]=r.filter[k]}}
   /* 難易度の絞り込みは5段階（A〜E）から3段階（易・普・難）へ変わったので、古い値は落とす
      （残すと「どのチップも選ばれていないのに該当0問」になる） */
@@ -1256,12 +1270,8 @@ function vHome(){
       +'<span style="flex:1">ホーム画面に追加すると記録が残ります</span>'
       +'<button class="btn sm" style="width:auto;min-height:28px;padding:0 8px" data-act="a2hsOK"'
       +' aria-label="閉じる">'+IC.close+'</button></div>';
-  if(LSOK&&needExport()){
-    var eg=exportGap();
-    h+='<div class="warn rowx" style="margin-bottom:12px;gap:8px">'+IC.warn
-      +'<span style="flex:1">'+(eg===null?'記録をまだ書き出していません':'書き出しから '+n3(eg)+'日')+'</span>'
-      +'<button class="btn sm" style="width:auto;min-height:28px;padding:0 10px" data-act="data">書き出す</button></div>';
-  }
+  /* バックアップの促しはホームに出さない（2026-08-14 本人指定＝案C）。
+     解いた記録は1問ごとに自動保存されているので、催促は設定の中だけに置く。 */
 
   /* 今日の流れ＝終わったもの・いま・まだ。学習の順は「動画を見る → その動画の問題を解く」
      なので、その3つを順に並べる（2026-08-14 確定）。数字の枠はホームから外し、
@@ -2038,13 +2048,19 @@ function tg2(k,v,label,on){return '<button class="tog'+(on?' on':'')+'" style="m
 /* ---------- 分析（すべての項目が「次に何をするか」に直結すること）
    棒グラフの羅列（分野別・難易度別・章別の正解率）は廃止した。 ---------- */
 function bigStat(big){
-  var ok=0,ng=0,n=0,a=0;
+  var ok=0,ng=0,n=0,a=0,ready=0;
   ITEMS.forEach(function(it){
     if(it.big!==big)return;n++;
     var r=R(it.id);if(!r)return;
-    ok+=r.ok||0;ng+=r.ng||0;if(att(r)>0)a++;
+    ok+=r.ok||0;ng+=r.ng||0;
+    if(att(r)>0){a++;if((r.streak||0)>0||r.state==='卒業')ready++}
   });
-  return {big:big,n:n,att:a,ok:ok,ng:ng,rate:(ok+ng)?ok/(ok+ng):null,q:BIGQ[big]||0};
+  /* rate＝通算の正誤比（復習で正解を積むと膨らむ）。
+     nowRate＝解いた問題のうち「直近が正解」の割合＝いま出されたら解ける割合。
+     得点予測には nowRate を使う（2026-08-14 本人指摘。通算比は予測に向かない）。 */
+  return {big:big,n:n,att:a,ok:ok,ng:ng,ready:ready,
+          rate:(ok+ng)?ok/(ok+ng):null,
+          nowRate:a?ready/a:null,q:BIGQ[big]||0};
 }
 /* ①今受けたら何点＝大分類の正解率 × 本試験の出題数
    ・1問しか解いていない分野の正解率で点数を出すと誤解を招くので、
@@ -2052,7 +2068,7 @@ function bigStat(big){
    ・1分野も10問に達していなければ点数そのものを出さない（pts=null＝画面は「—」）。 */
 var MINQ=10;
 function scoreNow(){
-  var pts=0,measured=0,unmeasured=[],measuring=[];
+  var pts=0,measured=0,unmeasured=[],measuring=[],done=[];
   BIGS.forEach(function(b){
     var s=bigStat(b);
     if(s.att<MINQ){                                    /* 解いた問題数が10問未満＝推定に入れない */
@@ -2060,10 +2076,11 @@ function scoreNow(){
       else unmeasured.push(b);
       return;
     }
-    pts+=s.q*s.rate;measured+=s.q;
+    pts+=s.q*s.nowRate;measured+=s.q;
+    done.push({big:b,q:s.q,rate:s.nowRate,att:s.att});
   });
   return {pts:measured?pts:null,measured:measured,unmeasured:unmeasured,measuring:measuring,
-          minq:MINQ,total:50};
+          done:done,minq:MINQ,total:50};
 }
 function pace7(){
   var n=0;
@@ -2079,13 +2096,19 @@ function vAnalysis(){
   var hasPts=sc.pts!==null,diff=hasPts?sc.pts-PASS_LINE:null;
   h+='<div class="panel">'
     +'<div class="spread" style="align-items:flex-end;margin-bottom:8px">'
-    +'<div><span class="score">'+(hasPts?sc.pts.toFixed(1):'—')+'</span><span class="mini num"> / 50</span></div>'
-    +(hasPts?'<div class="mini num" style="color:'+(diff>=0?'var(--acc)':'var(--ng)')+'">'
-      +(diff>=0?'+':'−')+Math.abs(diff).toFixed(1)+'</div>':'')+'</div>'
-    +'<div class="gauge"><i style="width:'+(hasPts?Math.max(0,Math.min(100,sc.pts/50*100)).toFixed(1):'0.0')+'%"></i>'
+    +'<div><span class="score">'+(hasPts?sc.pts.toFixed(1):'—')+'</span>'
+    +'<span class="mini num"> / '+(hasPts?n3(sc.measured):'50')+'</span></div>'
+    +(hasPts?'<div class="mini">測定できた範囲</div>':'')+'</div>'
+    /* ゲージは50点の目盛りのまま。測定できた配点まで色を塗り、その中の得点を濃く出す。
+       未測定のぶんを「取れる」ように見せない（2026-08-14 本人指摘の修正）。 */
+    +'<div class="gauge"><i style="width:'+(hasPts?(sc.pts/50*100).toFixed(1):'0.0')+'%"></i>'
+    +'<span class="gmeas" style="left:'+((sc.measured||0)/50*100).toFixed(1)+'%"></span>'
     +'<span class="gline" style="left:'+(PASS_LINE/50*100).toFixed(1)+'%"></span></div>'
     +'<div class="spread" style="margin-top:4px"><span class="mini num">0</span>'
-    +'<span class="mini num">'+PASS_LINE+'</span><span class="mini num">50</span></div>';
+    +'<span class="mini num">'+PASS_LINE+'</span><span class="mini num">50</span></div>'
+    +(hasPts?'<div class="mini" style="margin-top:6px">50点のうち <b>'+n3(sc.measured)
+      +'点ぶん</b>だけ測定（'+sc.done.map(function(d){return esc(d.big)+' '+Math.round(d.rate*100)+'%'}).join('・')
+      +'）／残り '+n3(50-sc.measured)+'点は未測定</div>':'');
   /* 「測定中 n/10問」は③（失点ランキングの下）に1行でまとめて出すので、ここには出さない
      ＝同じ情報を同一画面に2回出さない（SPEC §5-1 引き算の原則）。ここは未測定の分野名だけ。 */
   var notyet=sc.unmeasured.concat(sc.measuring.map(function(m){return m.big}));
