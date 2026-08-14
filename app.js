@@ -328,6 +328,7 @@ function addD(day,n){var d=new Date((dnum(day)+n)*86400000);return d.getUTCFullY
 var LSOK=true;
 var ST=loadST();
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
+setTimeout(function(){try{ghAuto('daily')}catch(e){}},4000);   /* 起動して落ち着いてから1日1回 */
 function loadST(){var o={};try{o=JSON.parse(localStorage.getItem(LSK)||'{}')||{}}catch(e){o={};LSOK=false}return normST(o)}
 function normST(o){
   if(!o||typeof o!=='object')o={};
@@ -353,6 +354,7 @@ function normST(o){
   if(typeof o.settings.lastExport!=='string')o.settings.lastExport=null;
   if(typeof o.settings.a2hs!=='boolean')o.settings.a2hs=false;
   if(!/^[1-9]$/.test(o.settings.theme||''))o.settings.theme='1';   /* 配色（既定＝1 桜鼠） */
+  if(!o.settings.gh||typeof o.settings.gh!=='object')o.settings.gh={};   /* GitHubバックアップの設定 */
   if(o.settings.persist!==true&&o.settings.persist!==false)o.settings.persist=null;
   /* 動画ごとの進捗（完了の単位＝動画1本）。
      {vid:{done:[],wrong:[],round:0,completedAt:null,watchMs:0,quizMs:0}}
@@ -1714,6 +1716,7 @@ function vQuiz(){
         });
       },0);
     }
+    ghAuto('done');            /* 完走したら記録を上げる（失敗しても学習は止めない） */
     return vDone();
   }
   var id=S.queue[S.qi],it=BY[id],r=R(id);
@@ -2324,6 +2327,21 @@ function dataSheet(){
    +'<button class="btn" data-act="share">'+IC.io+'ファイルにして保存・送る</button>'
    +'<div class="mini" style="margin-top:6px">共有から iCloud Drive やメールへ。'
    +'<b>ホーム画面のアイコンを消すと記録も消えます</b>ので、たまに取ってください。</div>'
+   /* GitHubの非公開リポジトリへ自動で上げる。記録は問題文を含まないので置ける。
+      トークンはこの端末の中（localStorage）だけに置き、公開されるコードには入らない。 */
+   +'<div class="hr"></div>'
+   +'<div class="mini" style="margin-bottom:6px">GitHubへ自動バックアップ（非公開リポジトリ）</div>'
+   +'<div class="rowx" style="gap:8px;flex-wrap:wrap">'
+   +'<input id="ghRepo" placeholder="owner/repo" value="'+esc(GH().repo||'')+'" style="flex:1;min-width:150px">'
+   +'<input id="ghTok" type="password" placeholder="トークン" value="'+(GH().token?'••••••••':'')+'" style="flex:1;min-width:120px">'
+   +'<button class="btn sm" style="width:auto" data-act="ghsave">保存</button></div>'
+   +'<div class="rowx" style="gap:8px;margin-top:8px">'
+   +'<button class="btn sm" style="width:auto" data-act="ghpush">今すぐ上げる</button>'
+   +'<button class="btn sm" style="width:auto" data-act="ghpull">記録を取り戻す</button></div>'
+   +'<div class="mini" style="margin-top:6px">最後に上げた '+(GH().at?esc(GH().at):'—')
+   +(GH().err?' ／ <span style="color:var(--ngdeep)">'+esc(GH().err)+'</span>':'')
+   +'<br>トークンはこの端末の中だけに保存します（公開されるコードには入りません）。'
+   +'完走したときと1日1回、自動で上がります。</div>'
    +'<div class="hr"></div>'
    /* 配色は9つ。骨格（配置・余白・丸み・動き）は変わらず、色だけが入れ替わる。 */
    +'<div class="mini" style="margin-bottom:6px">配色</div><div class="throw">'
@@ -2365,6 +2383,88 @@ function dataSheet(){
 function msg(t){var e=document.getElementById('msg');if(e)e.textContent=t}
 /* 記録をJSONのファイルにして共有シートへ渡す。iOSは navigator.share でファイルを扱える。
    使えない場合は既存のテキスト（全選択してコピー）に落とす。 */
+/* ---------- GitHub（非公開リポジトリ）への記録バックアップ ----------
+   置くのは学習記録だけ＝問題文・解説は含まない（著作権の対象にならない）。
+   トークンは端末のlocalStorageのみ。公開しているコードには入れない。 */
+var GHFILE='takken_records.json';
+function GH(){var g=(ST.settings&&ST.settings.gh)||{};return {repo:g.repo||'',token:g.token||'',at:g.at||'',err:g.err||'',sha:g.sha||''}}
+function ghSet(o){ST.settings.gh=Object.assign(GH(),o);saveST()}
+function ghSave(){
+  var r=document.getElementById('ghRepo'),t=document.getElementById('ghTok');
+  var repo=(r&&r.value||'').trim(),tok=(t&&t.value||'').trim();
+  if(repo&&!/^[\w.-]+\/[\w.-]+$/.test(repo)){msg('リポジトリは owner/repo の形で入れてください');return}
+  var o={repo:repo,err:''};
+  if(tok&&tok.indexOf('•')<0)o.token=tok;      /* 伏せ字のままなら変更しない */
+  ghSet(o);msg('保存しました');dataSheet();
+}
+function ghHeaders(){return {Authorization:'Bearer '+GH().token,Accept:'application/vnd.github+json',
+  'X-GitHub-Api-Version':'2022-11-28'}}
+function b64(str){
+  var u=new TextEncoder().encode(str),s='';
+  for(var i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);
+  return btoa(s);
+}
+function unb64(b){
+  var s=atob(b),u=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);
+  return new TextDecoder().decode(u);
+}
+function ghErr(st){
+  if(st===401)return 'トークンが違います（401）';
+  if(st===403)return '権限が足りません（403・Contents の書き込みを許可）';
+  if(st===404)return 'リポジトリかパスが見つかりません（404）';
+  if(st===409)return '競合しました（409）。もう一度';
+  if(st===422)return '中身を受け付けられませんでした（422）';
+  return '通信に失敗しました（'+st+'）';
+}
+/* quiet=true なら画面には出さない（自動実行のとき） */
+function ghPush(quiet){
+  var g=GH();
+  if(!g.repo||!g.token){if(!quiet)msg('リポジトリとトークンを先に保存してください');return Promise.resolve(false)}
+  var url='https://api.github.com/repos/'+g.repo+'/contents/'+GHFILE;
+  if(!quiet)msg('上げています…');
+  /* いまの sha を取ってから上書きする（無ければ新規作成） */
+  return fetch(url,{headers:ghHeaders(),cache:'no-store'})
+    .then(function(res){return res.status===200?res.json():null})
+    .then(function(cur){
+      var body={message:'宅建の記録 '+nowStamp(),content:b64(JSON.stringify(ST))};
+      if(cur&&cur.sha)body.sha=cur.sha;
+      return fetch(url,{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)});
+    })
+    .then(function(res){
+      if(!res.ok){ghSet({err:ghErr(res.status)});if(!quiet){msg(ghErr(res.status));dataSheet()}return false}
+      return res.json().then(function(j){
+        ghSet({at:nowStamp(),err:'',sha:(j.content&&j.content.sha)||''});
+        if(!quiet){msg('上げました');dataSheet()}
+        return true;
+      });
+    })
+    .catch(function(){ghSet({err:'通信できませんでした'});if(!quiet){msg('通信できませんでした');dataSheet()}return false});
+}
+function ghPull(){
+  var g=GH();
+  if(!g.repo||!g.token){msg('リポジトリとトークンを先に保存してください');return}
+  if(!confirm('GitHubの記録で、いまの記録を置き換えます。よろしいですか。'))return;
+  msg('取ってきています…');
+  fetch('https://api.github.com/repos/'+g.repo+'/contents/'+GHFILE,{headers:ghHeaders(),cache:'no-store'})
+    .then(function(res){if(!res.ok)throw res.status;return res.json()})
+    .then(function(j){
+      var o=JSON.parse(unb64(j.content||''));   /* atob は空白と改行を無視するので取り除かなくてよい */
+      if(!o||!o.items)throw 422;
+      var keep=ST.settings.gh;                 /* 接続の設定は残す */
+      ST=normST(o);ST.settings.gh=keep;saveST();
+      msg('取り戻しました（'+Object.keys(ST.items).length+'問）');
+      render();dataSheet();
+    })
+    .catch(function(st){msg(typeof st==='number'?ghErr(st):'読み込めませんでした')});
+}
+/* 自動：完走したときと、1日1回（起動して最初の描画のとき） */
+function ghAuto(reason){
+  var g=GH();
+  if(!g.repo||!g.token)return;
+  if(reason==='daily'&&String(g.at).slice(0,10)===today())return;
+  ghPush(true);
+}
 function shareBackup(){
   var json=JSON.stringify(ST),name='takken_'+today()+'.json';
   try{
@@ -2685,6 +2785,9 @@ document.addEventListener('click',function(e){
   if(a==='reimport'){location.hash='import';location.reload();return}
   /* 記録をファイルにして共有シートへ。使えない端末は下のテキスト方式に落ちる */
   if(a==='share'){shareBackup();return}
+  if(a==='ghsave'){ghSave();return}
+  if(a==='ghpush'){ghPush(false);return}
+  if(a==='ghpull'){ghPull();return}
   /* 配色の切替。色だけを入れ替えるので、開いている画面はそのままでよい */
   if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
     applyTheme();dataSheet();}return}
