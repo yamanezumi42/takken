@@ -116,7 +116,7 @@ function vidsOf(it){
   var a=[];
   if(it.videos&&it.videos.length)a=it.videos;
   else if(it.video&&it.video.vid)a=[it.video];
-  a=a.filter(function(v){return v&&v.vid});
+  a=a.filter(function(v){return v&&v.vid&&!SRCHIDE[VSRC[v.vid]]});
   a.sort(function(x,y){
     var d=srcRank(x.vid)-srcRank(y.vid);
     if(d)return d;
@@ -138,9 +138,16 @@ var VSRC={},VTIT={},VLEN={},VMEM={},VCHN={},VUP={};   /* vid → チャンネル
     });
   });
 })();
-var DEFSRC='あこ課長';                    /* 出題順の基準の既定 */
+/* 主教材＝こざりえ（2026-08-14 本人指定）。分かりやすさで選んだ。
+   1本が科目まるごとなので、一覧は「大分類 → 1本 → 章」の形になる。
+   こざりえに無い所（17%）はあこ課長が受け持ち、「他のチャンネル」に畳んで置く。 */
+var DEFSRC='こざりえ';                    /* 出題順・一覧・ホームの基準 */
+var SRCHIDE={'れくお':1};                  /* 使わないチャンネル（本人指定・2026-08-14） */
 var SRCS=[DEFSRC];                        /* 基準に選べるチャンネル（既定を先頭に） */
-Object.keys(VSRC).forEach(function(v){if(VSRC[v]&&SRCS.indexOf(VSRC[v])<0)SRCS.push(VSRC[v])});
+Object.keys(VSRC).forEach(function(v){
+  var sc=VSRC[v];
+  if(sc&&!SRCHIDE[sc]&&SRCS.indexOf(sc)<0)SRCS.push(sc);
+});
 var VIDIDS={},CHIDS={},SECOK={},NOVID=[];
 ITEMS.forEach(function(it){
   var vs=vidsOf(it);
@@ -266,12 +273,13 @@ function seqCap(vid){
 }
 /* その問題が今の既習範囲で解けるか。need_seq が無いデータでは常に true（後方互換）。
    設定「未習の範囲も出す」がオンなら制限しない。 */
+/* 出題してよい範囲かどうか。判定は unseenItems / newQueue と同じ＝
+   「その科目の動画を見たか」。動画から入ったときはその動画の科目も含める。 */
 function inRange(it,cap){
-  if(!NEEDOK||(ST.settings&&ST.settings.ahead))return true;
-  var n=needSeq(it);
-  if(n===null)return true;                       /* 番号が無い問題は制限しない */
-  if(cap===undefined)cap=seqCap(S.baseVid);
-  return cap!==null&&n<=cap;
+  if(ST.settings&&ST.settings.ahead)return true;
+  var ob=openBigs();
+  if(S.baseVid){var b=bigOfVid(S.baseVid);if(b)ob[b]=1}
+  return !!ob[it.big];
 }
 /* その動画の問題のうち「その動画までの知識で解けるもの」＝動画学習の画面で数える単位 */
 function videoItemsUp(vid){
@@ -891,19 +899,38 @@ function sneakExtra(base,n){
    既習範囲＝need_seq が「見た動画の最大の通し番号」以下（2026-08-14 本人指摘
    「まだ動画も見てないのに新規とか関係なくない？」への対応）。
    need_seq が無い古いデータ・設定「未習の範囲も出す」では全件（＝従来の挙動）。 */
+/* 見た動画から解禁された大分類の集合。こざりえは1本＝1科目なので、
+   その科目の動画を見たら、その科目は全部出せる（章ごとに解くのは一覧から選ぶ）。
+   あこ課長を見た場合も、その動画が属する大分類を解禁する。 */
+function openBigs(){
+  var out={};
+  Object.keys(ST.watched||{}).forEach(function(k){
+    var vid=String(k).split('#')[0],b=bigOfVid(vid);
+    if(b)out[b]=1;
+  });
+  return out;
+}
+function bigOfVid(vid){
+  for(var b in BIGVIDS){if((BIGVIDS[b]||[]).indexOf(vid)>=0)return b}
+  return null;
+}
 function unseenItems(all){
   var lim=NEEDOK&&!all&&!(ST.settings&&ST.settings.ahead);
-  var cap=lim?watchedMaxSeq():null;
+  var ob=lim?openBigs():null;
   var a=ITEMS.filter(function(it){
     if(att(R(it.id))!==0)return false;
     if(!lim)return true;
+    if(!ob[it.big])return false;      /* その科目の動画をまだ見ていない */
+    return true;
+  });
+  var _unused=function(it){
     var n=needSeq(it);
     /* 通し番号が無い問題は「新規」に含めない（順序が決められないものを混ぜると
        「新規＝既習範囲の未着手」の定義が崩れる。2026-08-14 メイン担当の判断）。
        出題順では末尾のまま／復習・抜き打ち・絞り込みからは外さない＝自分で選べば解ける。 */
     if(n===null)return false;
-    return cap!==null&&n<=cap;
-  });
+    return false;
+  };
   if(ST.settings.later){                              /* 「難」を後回しにする（本人が選んだときだけ・3段階） */
     a.sort(function(x,y){
       var lx=(d3(x)==='難')?1:0,ly=(d3(y)==='難')?1:0;
@@ -914,17 +941,20 @@ function unseenItems(all){
 }
 /* 新規の数字を出していいか＝既習範囲があるか（1本も見ていないときは数字を出さない） */
 function newAvail(){
-  if(!NEEDOK)return true;
   if(ST.settings&&ST.settings.ahead)return true;
-  return watchedMaxSeq()!==null;
+  return Object.keys(openBigs()).length>0;
 }
 /* 1日の枠＝（学習時間−動画時間）÷30秒。抜き打ちは学習済み分類の数で自然に決まり、
    残りすべてを新規に配る。新規が余ったぶんは抜き打ちの上積みへ回す。 */
 function plan(){
-  var cap=dayCap(),dl=daysLeft();
+  var dl=daysLeft();
   var all=unseenItems(true);                  /* 全体の残り＝1周の進みと必要ペースはこちらで見る */
   var unseen=unseenItems();                   /* 今日出せる新規＝既習範囲の未着手だけ */
   var needNew=dl?Math.ceil(all.length/dl):all.length;
+  /* 枠は「（1日の時間−動画の実測）÷30秒」だが、主教材が1本60〜127分になったので
+     動画を見た日は枠が尽きて新規が1問になっていた（2026-08-14 実測）。
+     1周を終わらせるための必要ペースを下限にする。 */
+  var cap=Math.max(dayCap(),needNew);
   /* ①新規の枠を先に確保する（1周を終わらせることが最優先） */
   var newRes=Math.min(unseen.length,needNew,cap);
   /* ②残りを抜き打ちへ。入り切らない分は配点の大きい分野を残して切る（件数は画面に出す） */
@@ -954,12 +984,12 @@ function plan(){
    未習の範囲（need_seq が見た動画の最大の通し番号を超えるもの）は入れない。 */
 function newQueue(n){
   var order=vidOrder(),out=[],seen={},late=[];
-  var lim=NEEDOK&&!(ST.settings&&ST.settings.ahead),cap=lim?watchedMaxSeq():null;
+  /* 解禁の判定は unseenItems と揃える＝「その科目の動画を見たか」。
+     主教材が「1本＝1科目」になったので、通し番号（あこ課長の再生リスト順）では判定しない。 */
+  var lim=!(ST.settings&&ST.settings.ahead),ob=lim?openBigs():null;
   function okSeq(it){
     if(!lim)return true;
-    var s=needSeq(it);
-    if(s===null)return false;      /* 通し番号が無い問題は新規に含めない（末尾に回すだけ） */
-    return cap!==null&&s<=cap;
+    return !!ob[it.big];
   }
   function pushIt(it){
     if(ST.settings.later&&d3(it)==='難'){late.push(it);return}
@@ -1057,15 +1087,13 @@ function startQueue(list,label,withSneak,baseVid,keepGrad){
      まだ習っていない知識が必要なので出さない。設定「未習の範囲も出す」でこの制限を外せる。
      一度でも解いた問題は対象にしない（間違い直し・抜き打ちが消えてしまうため）。
      周回（間違い直し）も対象にしない。除外した件数は出題画面に小さく出す（黙って消さない）。 */
+  /* 未習の範囲を出さない判定は inRange（大分類ベース）に一本化した。
+     ここで通し番号（あこ課長の再生リスト順）を使うと、主教材がこざりえになった今は
+     ほぼ全部が落ちる（2026-08-14 実測：162問→1問）。 */
   S.lockedOut=0;
-  if(NEEDOK&&!S.round&&!(ST.settings&&ST.settings.ahead)){
-    var cap=seqCap(baseVid||null),before=arr.length;
-    arr=arr.filter(function(it){
-      if(att(R(it.id))>0)return true;
-      var n=needSeq(it);
-      if(n===null)return true;
-      return cap!==null&&n<=cap;
-    });
+  if(!S.round&&!(ST.settings&&ST.settings.ahead)){
+    var before=arr.length;
+    arr=arr.filter(function(it){return att(R(it.id))>0||inRange(it)});
     S.lockedOut=before-arr.length;
   }
   arr=sortQ(arr);
@@ -1264,7 +1292,9 @@ function vHome(){
   var h='<div class="pad'+stag()+'">';
   /* H3-b：「試験まで」と「1日あたり何本」を同じ大きさで横に並べる（2026-08-14 確定）。
      1日あたり＝まだ終わっていない動画の本数 ÷ 残り日数。問題数ではなく本数で出す。 */
-  var vleft=vidsLeft(),perday=(dl>0?(vleft/dl):vleft);
+  /* 1日あたり＝残りの問題数 ÷ 残り日数。主教材が4本（科目まるごと）になったので
+     本数では意味を持たない（44章÷65日＝0.7章/日）。章の名前は下の「今日の流れ」で出す。 */
+  var left=unseenItems(true).length,perday=(dl>0?Math.ceil(left/dl):left);
   h+='<div class="rowx" style="margin:0 0 12px"><span class="mini">宅建</span>'
     +'<span class="mini" style="margin-left:auto">'+today().slice(5).replace('-','月')+'日</span>'
     +'<button class="btn sm" style="width:auto;min-height:28px;padding:0 8px" data-act="data"'
@@ -1273,7 +1303,7 @@ function vHome(){
     +'<div class="hcard">'+flw(17)+'<div class="hlab">試験まで</div>'
     +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">1日あたり</div>'
-    +'<div class="hnum">'+(perday<10?perday.toFixed(1):n3(Math.ceil(perday)))+'<span>本</span></div></div>'
+    +'<div class="hnum">'+n3(perday)+'<span>問</span></div></div>'
     +'</div>'+hdots();
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
@@ -1307,7 +1337,7 @@ function vHome(){
   if(cv){
     h+='<a class="btn pri" href="'+vurl(cv,0)+'" target="_blank" rel="noreferrer"'
       +' data-act="vwatch" data-k="'+esc(cv+'#0')+'">'+IC.play+'動画を見る</a>'
-      +'<button class="btn" style="margin-top:10px" data-act="startVid" data-v="'+esc(cv)+'">'
+      +'<button class="btn" style="margin-top:10px" data-act="startNew">'
       +IC.book+'問題を解く</button>';
   }else{
     h+='<button class="btn pri" data-act="tab" data-v="fields">'+IC.book+'動画学習</button>';
@@ -1321,7 +1351,9 @@ function vHome(){
 function nextVidAll(){
   var out=null;
   bigsOrdered().some(function(b){
-    var main=(BIGVIDS[b]||[]).filter(function(v){return VSRC[v]===DEFSRC});
+    /* 同じ科目に複数あるので、公開が新しい順（＝2026年版が先）に見る */
+    var main=(BIGVIDS[b]||[]).filter(function(v){return VSRC[v]===DEFSRC})
+      .sort(function(x,y){return (VUP[y]||'').localeCompare(VUP[x]||'')});
     var v=nextVidOf(main);
     if(v){out=v;return true}
     return false;
@@ -1340,29 +1372,43 @@ function vidsLeft(){
   return n;
 }
 /* 今日の流れ＝「直前に終わった問題」「いまの動画」「その動画の問題」の3行 */
+/* 今日の流れ＝①いまの科目の動画 ②その科目の未着手（新規） ③抜き打ち。
+   主教材が「1本＝1科目」になったので、動画は科目単位・問題は枠ぶんで出す。 */
 function flowHtml(){
-  var cur=nextVidAll();
-  if(!cur)return '';
-  var h='<div class="flow">',main=[],idx=-1;
-  bigsOrdered().forEach(function(b){
-    (BIGVIDS[b]||[]).forEach(function(v){if(VSRC[v]===DEFSRC)main.push(v)});
-  });
-  idx=main.indexOf(cur);
-  if(idx>0){
-    var pv=main[idx-1],ps=videoStat(pv);
-    h+='<button class="frow done" data-act="startVid" data-v="'+esc(pv)+'">'
-      +'<span>'+(vno(pv)===null?'':'#'+vno(pv)+' の')+'問題 '+n3(ps.n)+'問</span>'
-      +'<span class="fst">済</span></button>';
+  var cur=nextVidAll(),pl=plan(),h='<div class="flow">';
+  if(cur){
+    var big=bigOfVid(cur)||'',watched=!!ST.watched[cur+'#0'];
+    h+='<a class="frow'+(watched?' done':' now')+'" href="'+vurl(cur,0)+'" target="_blank" rel="noreferrer"'
+      +' data-act="vwatch" data-k="'+esc(cur+'#0')+'">'
+      +'<span>'+esc(big||vshort(vlab(cur)||cur))+' の動画</span>'
+      +'<span class="fst">'+(watched?'見た':'いま')+'</span></a>';
+    /* 次は「その科目の新規を今日の枠ぶん」。こざりえの章は1章＝小分類まるごと
+       （100〜344問）なので、章をそのまま1回分にはしない。章を選んで解くのは一覧から。 */
+    h+='<button class="frow'+(watched?' now':' yet')+'" data-act="startNew">'
+      +'<span>新規</span><span class="fst">'
+      +(pl.newOk&&pl.newN?n3(pl.newN)+'問':'動画を見てから')+'</span></button>';
   }
-  var watched=!!ST.watched[cur+'#0'],vs=videoStat(cur);
-  h+='<a class="frow'+(watched?'':' now')+'" href="'+vurl(cur,0)+'" target="_blank" rel="noreferrer"'
-    +' data-act="vwatch" data-k="'+esc(cur+'#0')+'">'
-    +'<span>'+(vno(cur)===null?'':'#'+vno(cur)+' ')+esc(vshort(vlab(cur)||cur))+'</span>'
-    +'<span class="fst">'+(watched?'見た':'いま')+'</span></a>';
-  h+='<button class="frow'+(watched?' now':' yet')+'" data-act="startVid" data-v="'+esc(cur)+'">'
-    +'<span>'+(vno(cur)===null?'':'#'+vno(cur)+' の')+'問題 '+n3(vs.n)+'問</span>'
-    +'<span class="fst">'+(vs.ok>0?n3(vs.ok)+' / '+n3(vs.n):'まだ')+'</span></button>';
+  h+='<button class="frow'+(pl.sneak.length?'':' yet')+'" data-act="startSneak">'
+    +'<span>抜き打ち</span><span class="fst">'+(pl.sneak.length?n3(pl.sneak.length)+'問':'なし')+'</span></button>';
   return h+'</div>';
+}
+/* その動画の章（skipを除く） */
+function chapsOf2(vid){
+  var out=[],seen={};
+  Object.keys(CHAP).forEach(function(cat){
+    (CHAP[cat]||[]).forEach(function(v){
+      if(v.vid!==vid)return;
+      (v.chapters||[]).forEach(function(c){
+        if(c.skip||seen[c.sec])return;seen[c.sec]=1;out.push({sec:c.sec,label:c.label});
+      });
+    });
+  });
+  return out.sort(function(a,b){return a.sec-b.sec});
+}
+function chapStat(vid,sec){
+  var its=chapItems(vid,sec),ok=0;
+  its.forEach(function(it){var r=R(it.id);if(r&&((r.streak||0)>0||r.state==='卒業'))ok++});
+  return {n:its.length,ok:ok,done:its.length>0&&ok===its.length};
 }
 /* 今日の3枠（新規・復習・抜き打ち）。0のときは押せない見た目にする */
 function q3cell(label,n,act,on){
