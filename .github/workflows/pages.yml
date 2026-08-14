@@ -29,8 +29,8 @@ jobs:
             echo "JSON が含まれています。問題データの混入を疑ってください。"; exit 1
           fi
           total=$(du -sk . --exclude=.git | cut -f1)
-          if [ "$total" -gt 1024 ]; then
-            echo "1MB を超えています（${total}KB）。データ混入の疑い。"; exit 1
+          if [ "$total" -gt 2048 ]; then
+            echo "2MB を超えています（${total}KB）。データ混入の疑い。"; exit 1
           fi
           echo "OK: ${total}KB"
       - uses: actions/configure-pages@v5

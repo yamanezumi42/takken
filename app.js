@@ -43,6 +43,25 @@ var BIGQ={'権利関係':14,'法令上の制限':8,'宅地建物取引業法等'
 
 /* ---------- アイコン（自作SVG・ICOOON MONO風／絵文字は使わない） ---------- */
 function svg(p,w){return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(w||1.6)+'" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'}
+/* 配色は9つ。1が既定（桜鼠）。骨格は共通で、CSS変数だけを差し替える。 */
+var THEMES=[['1','桜鼠'],['2','ミント'],['3','藤'],['4','桃'],['5','水'],
+            ['6','桃と水'],['7','ミルクティー'],['8','白と桃'],['9','生成り']];
+function themeNow(){var t=ST&&ST.settings&&ST.settings.theme;return (t&&/^[1-9]$/.test(t))?t:'1'}
+function applyTheme(){
+  var t=themeNow();
+  if(t==='1')document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t);
+}
+/* 小花。5弁を少し重ねる（4弁を直交で置くと十字に見える）。色は配色の変数から取る。 */
+var FLWP=(function(){var s='';for(var i=0;i<5;i++){var a=(i*72-90)*Math.PI/180;
+  s+='<circle cx="'+(12+5.1*Math.cos(a)).toFixed(2)+'" cy="'+(12+5.1*Math.sin(a)).toFixed(2)+'" r="4.2"/>';}
+  return s;})();
+function flw(n){n=n||16;
+  return '<span class="flw" aria-hidden="true"><svg width="'+n+'" height="'+n+'" viewBox="0 0 24 24">'
+    +'<g fill="var(--petal)">'+FLWP+'</g><circle cx="12" cy="12" r="2.3" fill="var(--core)"/></svg></span>';}
+/* ホームの点線の区切り */
+function hdots(){var s='';for(var i=0;i<17;i++)s+='<circle cx="'+(3+i*7)+'" cy="3" r="1.4" fill="var(--petal)"/>';
+  return '<div class="hdots"><svg width="120" height="6" viewBox="0 0 120 6" aria-hidden="true">'+s+'</svg></div>';}
 var IC={
  home:svg('<path d="M3.5 10.5 12 4l8.5 6.5V20a.5.5 0 0 1-.5.5h-5v-6h-6v6H4a.5.5 0 0 1-.5-.5z"/>'),
  book:svg('<path d="M4 4.5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 4.5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/>'),
@@ -308,6 +327,7 @@ function addD(day,n){var d=new Date((dnum(day)+n)*86400000);return d.getUTCFullY
 /* ---------- 進行状況（localStorage takken_v1） ---------- */
 var LSOK=true;
 var ST=loadST();
+applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
 function loadST(){var o={};try{o=JSON.parse(localStorage.getItem(LSK)||'{}')||{}}catch(e){o={};LSOK=false}return normST(o)}
 function normST(o){
   if(!o||typeof o!=='object')o={};
@@ -332,6 +352,7 @@ function normST(o){
      ／persist＝navigator.storage.persist() の結果（記録用・null＝未対応か未応答） */
   if(typeof o.settings.lastExport!=='string')o.settings.lastExport=null;
   if(typeof o.settings.a2hs!=='boolean')o.settings.a2hs=false;
+  if(!/^[1-9]$/.test(o.settings.theme||''))o.settings.theme='1';   /* 配色（既定＝1 桜鼠） */
   if(o.settings.persist!==true&&o.settings.persist!==false)o.settings.persist=null;
   /* 動画ごとの進捗（完了の単位＝動画1本）。
      {vid:{done:[],wrong:[],round:0,completedAt:null,watchMs:0,quizMs:0}}
@@ -1206,11 +1227,19 @@ function renderTabs(){
 function vHome(){
   var st=allStats(),pl=plan(),dl=pl.daysLeft;
   var h='<div class="pad'+stag()+'">';
-  /* 試験まであと何日（大きく・等幅／残り30日以内は色を変える。点滅はしない＝安全基準） */
-  h+='<div class="spread" style="margin:2px 0 12px;align-items:flex-end">'
-    +'<div><div class="mini">試験まで</div>'
-    +'<div class="num dcount'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
-    +'<button class="btn sm" data-act="data">'+IC.io+'</button></div>';
+  /* H3-b：「試験まで」と「1日あたり何本」を同じ大きさで横に並べる（2026-08-14 確定）。
+     1日あたり＝まだ終わっていない動画の本数 ÷ 残り日数。問題数ではなく本数で出す。 */
+  var vleft=vidsLeft(),perday=(dl>0?(vleft/dl):vleft);
+  h+='<div class="rowx" style="margin:0 0 12px"><span class="mini">宅建</span>'
+    +'<span class="mini" style="margin-left:auto">'+today().slice(5).replace('-','月')+'日</span>'
+    +'<button class="btn sm" style="width:auto;min-height:28px;padding:0 8px" data-act="data"'
+    +' aria-label="記録の書き出しと読み込み">'+IC.io+'</button></div>';
+  h+='<div class="hpair">'
+    +'<div class="hcard">'+flw(17)+'<div class="hlab">試験まで</div>'
+    +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
+    +'<div class="hcard">'+flw(17)+'<div class="hlab">1日あたり</div>'
+    +'<div class="hnum">'+(perday<10?perday.toFixed(1):n3(Math.ceil(perday)))+'<span>本</span></div></div>'
+    +'</div>'+hdots();
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
      ホーム画面の案内は一度閉じたら二度出さない（settings.a2hs）。 */
@@ -1226,21 +1255,10 @@ function vHome(){
       +'<button class="btn sm" style="width:auto;min-height:28px;padding:0 10px" data-act="data">書き出す</button></div>';
   }
 
-  /* 今日の枠：新規／抜き打ち／間違い。達成したら印を出す。
-     まだ動画を1本も見ていないときは「新規」の行を出さない（数字に意味がないため）。 */
-  var todayN=pl.doneToday,goal=(pl.newOk?pl.newN:0)+pl.sneak.length;
-  h+='<div class="panel"><div class="spread" style="margin-bottom:10px">'
-    +'<div class="mini">今日</div>'
-    +'<div class="mini num">'+n3(todayN)+' / '+n3(goal)+'問　'+pl.minutes+'分'
-    +(goal&&todayN>=goal?' <span class="chip">達成'+IC.check+'</span>':'')+'</div></div>'
-    +'<div class="q3">'
-    +(pl.newOk?q3cell('新規',pl.newN,'startNew',pl.newN>0):'')
-    +q3cell('抜き打ち',pl.sneak.length,'startSneak',pl.sneak.length>0)
-    +q3cell('間違い',pl.wrong,'startWrong',pl.wrong>0)
-    +'</div>';
-  if(pl.sneakCut)h+='<div class="mini" style="margin-top:8px">枠から外した抜き打ち '+n3(pl.sneakCut)+'</div>';
-  if(pl.over)h+='<div class="mini" style="margin-top:6px;color:var(--ngdeep)">必要 '+n3(pl.needNew)+' / 日（枠 '+n3(pl.cap)+'）</div>';
-  h+='</div>';
+  /* 今日の流れ＝終わったもの・いま・まだ。学習の順は「動画を見る → その動画の問題を解く」
+     なので、その3つを順に並べる（2026-08-14 確定）。数字の枠はホームから外し、
+     抜き打ちと間違いは復習の画面に集約した＝引き算の原則。 */
+  h+=flowHtml();
 
   /* 中断中の出題セッション */
   if(hasRun()){
@@ -1252,37 +1270,68 @@ function vHome(){
       +'<button class="btn acc" style="width:auto" data-act="runResume">再開</button></div></div>';
   }
 
-  /* 全体の進み＝バー1本（数字は端に小さく）＋4状態の帯（タップで内訳） */
-  var seen=ITEMS.length-pl.unseen;
-  h+='<div class="panel">'
-    +'<div class="spread"><span class="mini num">'+n3(seen)+' / '+n3(ITEMS.length)+'</span>'
-    +'<span class="mini num">'+pct(st.rate)+'</span></div>'
-    +'<div class="track" style="margin-top:6px"><i data-m6v="'+(seen/Math.max(1,ITEMS.length)).toFixed(4)+'" data-m6vk="home:seen"></i></div>'
-    +bandHtml(st)
-    +(S.openStat?'<div class="four" style="margin-top:10px">'
-      +fourTile('hGrad',M4HOME.grad,'卒業','color:var(--acc)')
-      +fourTile('hKeep',M4HOME.keep,'定着','')
-      +fourTile('hLearn',M4HOME.learn,'学習中','')
-      +fourTile('hSev',M4HOME.sev,'重症','color:var(--ng)')
-      +'</div>':'')
-    +'</div>';
-  if(S.openStat)M4HOMENEW=st;
-
-  /* 「1本目の動画から」を置く条件＝まだ1問も解いていない、または動画を1本も見ていない
-     （＝既習範囲が無く新規の数字を出せない）とき。本人の手順が「動画を見る → その動画の
-     問題を解く」なので、数字の代わりにこの導線だけを出してあこ課長の権利関係#1へ送る。 */
-  var fv=(st.att===0||!pl.newOk)?firstVid():null;
-  if(fv&&catOfVid(fv.vid)){
-    h+='<button class="btn pri" style="min-height:60px" data-act="firstvid" data-v="'+esc(fv.vid)+'">'
-      +IC.play+'<span style="display:block;line-height:1.5">まず1本目の動画から'
-      +'<span class="mini" style="display:block;color:inherit;opacity:.75">'+esc(vshort(fv.title))+'</span></span></button>';
-    h+='<button class="btn" style="margin-top:8px" data-act="tab" data-v="fields">'+IC.book+'動画学習</button>';
+  /* ボタンは2つだけ＝「動画を見る」「問題を解く」（2026-08-14 本人指定） */
+  var cv=nextVidAll();
+  h+='<div class="hbtns">';
+  if(cv){
+    h+='<a class="btn pri" href="'+vurl(cv,0)+'" target="_blank" rel="noreferrer"'
+      +' data-act="vwatch" data-k="'+esc(cv+'#0')+'">'+IC.play+'動画を見る</a>'
+      +'<button class="btn" style="margin-top:10px" data-act="startVid" data-v="'+esc(cv)+'">'
+      +IC.book+'問題を解く</button>';
   }else{
-    /* 小分類の一覧（49マス）はホームに置かない。動画学習の画面へ集約した。 */
     h+='<button class="btn pri" data-act="tab" data-v="fields">'+IC.book+'動画学習</button>';
   }
   h+='</div>';
+  h+='</div>';
   return h;
+}
+/* 全部の大分類を学習の順（宅建業法→権利関係→法令→税・その他）にたどって、
+   まだ終わっていない主教材の動画を返す。 */
+function nextVidAll(){
+  var out=null;
+  bigsOrdered().some(function(b){
+    var main=(BIGVIDS[b]||[]).filter(function(v){return VSRC[v]===DEFSRC});
+    var v=nextVidOf(main);
+    if(v){out=v;return true}
+    return false;
+  });
+  return out;
+}
+/* まだ終わっていない主教材の動画の本数（1日あたりの本数の分子） */
+function vidsLeft(){
+  var n=0;
+  bigsOrdered().forEach(function(b){
+    (BIGVIDS[b]||[]).forEach(function(v){
+      if(VSRC[v]!==DEFSRC)return;
+      if(!videoStat(v).done)n++;
+    });
+  });
+  return n;
+}
+/* 今日の流れ＝「直前に終わった問題」「いまの動画」「その動画の問題」の3行 */
+function flowHtml(){
+  var cur=nextVidAll();
+  if(!cur)return '';
+  var h='<div class="flow">',main=[],idx=-1;
+  bigsOrdered().forEach(function(b){
+    (BIGVIDS[b]||[]).forEach(function(v){if(VSRC[v]===DEFSRC)main.push(v)});
+  });
+  idx=main.indexOf(cur);
+  if(idx>0){
+    var pv=main[idx-1],ps=videoStat(pv);
+    h+='<button class="frow done" data-act="startVid" data-v="'+esc(pv)+'">'
+      +'<span>'+(vno(pv)===null?'':'#'+vno(pv)+' の')+'問題 '+n3(ps.n)+'問</span>'
+      +'<span class="fst">済</span></button>';
+  }
+  var watched=!!ST.watched[cur+'#0'],vs=videoStat(cur);
+  h+='<a class="frow'+(watched?'':' now')+'" href="'+vurl(cur,0)+'" target="_blank" rel="noreferrer"'
+    +' data-act="vwatch" data-k="'+esc(cur+'#0')+'">'
+    +'<span>'+(vno(cur)===null?'':'#'+vno(cur)+' ')+esc(vshort(vlab(cur)||cur))+'</span>'
+    +'<span class="fst">'+(watched?'見た':'いま')+'</span></a>';
+  h+='<button class="frow'+(watched?' now':' yet')+'" data-act="startVid" data-v="'+esc(cur)+'">'
+    +'<span>'+(vno(cur)===null?'':'#'+vno(cur)+' の')+'問題 '+n3(vs.n)+'問</span>'
+    +'<span class="fst">'+(vs.ok>0?n3(vs.ok)+' / '+n3(vs.n):'まだ')+'</span></button>';
+  return h+'</div>';
 }
 /* 今日の3枠（新規・復習・抜き打ち）。0のときは押せない見た目にする */
 function q3cell(label,n,act,on){
@@ -1663,14 +1712,18 @@ function vQuiz(){
   var h='<div id="qhead">'+qHead(ses,S.qi/tot)+'</div>';
   h+='<div class="qwrap m3-persp" id="m1quizcard">';
   /* 引き算：章のチップ＋状態の点＋★だけ。根拠・出典は畳んでタップで開く */
-  h+='<div class="rowx m5-qr'+ac()+'"'+ad(0)+'>'
-    +'<span class="chip chapchip">'+esc((chs[0]&&chs[0].label)||it.topic||it.cat)+'</span>'
-    +(S.sneak[id]?'<span class="chip" style="background:#fdf3f2;color:#a33a2f">抜き打ち</span>':'')
+  /* A2：花＋章名、右に何問目、その下に細い線を1本（2026-08-14 確定） */
+  h+='<div class="qhead m5-qr'+ac()+'"'+ad(0)+'><div class="qrow">'+flw(16)
+    +'<span class="qname">'+esc((chs[0]&&chs[0].label)||it.topic||it.cat)+'</span>'
+    +(S.sneak[id]?'<span class="chip">抜き打ち</span>':'')
     +'<span class="sdot s'+STG[stateOf(id)]+' m4-badge" id="stBadge" data-stage="'+STG[stateOf(id)]
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
+    +'<span class="qcnt"><span class="m6-roll" style="--rh:16px;font-size:12px"'
+    +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
+    +' / '+n3(tot)+'</span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
-    +IC.down+'</button></div>';
+    +IC.down+'</button></div><div class="qrule"></div></div>';
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
   h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+esc(it.lead)+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
@@ -1693,10 +1746,7 @@ function vQuiz(){
   if(chs.length>1)
     h+='<button class="btn sm" style="min-height:26px;padding:0 8px;align-self:flex-start" data-act="togsrc">＋'
       +(chs.length-1)+'</button>';
-  /* いま何問目＝値が入れ替わる数字なので桁ロール（幅は data-fmt で固定＝1pxも揺れない） */
-  h+='<div class="prog m5-qr'+ac()+'"'+ad(4)+'><span class="m6-roll" style="--rh:19px;font-size:11px"'
-    +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
-    +'/'+n3(tot)+'</div>';
+  /* 何問目はヘッダー（A2の行）へ移した。ここには置かない＝引き算の原則 */
   /* 未習で出さなかった件数は黙って消さずに小さく出す（設定「未習の範囲も出す」で外せる） */
   if(S.lockedOut)h+='<div class="mini'+ac()+'"'+ad(4)+' id="qlock">未習 '+n3(S.lockedOut)+'問は出していません</div>';
 
@@ -2230,6 +2280,14 @@ function dataSheet(){
    +'<div class="mini">'+(NEEDOK?('見た動画 '+(watchedMaxSeq()===null?'なし':'#'+watchedMaxSeq()+'まで')
        +' ／ 出せる新規 '+n3(unseenItems().length)+'問'):'この問題データには通し番号がないため制限しません')+'</div>'
    +'<div class="hr"></div>'
+   /* 配色は9つ。骨格（配置・余白・丸み・動き）は変わらず、色だけが入れ替わる。 */
+   +'<div class="mini" style="margin-bottom:6px">配色</div><div class="throw">'
+   +THEMES.map(function(t,i){var k=String(i+1);
+     return '<button class="thbtn'+(themeNow()===k?' on':'')+'" data-act="theme" data-v="'+k+'"'
+       +' aria-label="'+t[1]+'"><span class="thsw" data-theme="'+k+'"><i></i><b></b></span>'
+       +'<span class="thnm">'+t[1]+'</span></button>';}).join('')
+   +'</div>'
+   +'<div class="hr"></div>'
    +'<div class="mini" style="margin-bottom:6px">演出（回答したときの見た目）</div><div>'
    +lvs.map(function(x){return '<button class="tog'+(lv===x[0]?' on':'')+'" style="margin:0 6px 6px 0" data-act="fxlv" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')
    +'</div>'
@@ -2556,6 +2614,9 @@ document.addEventListener('click',function(e){
   if(a==='later'){ST.settings.later=!ST.settings.later;saveST();render();return}
   /* 未習の範囲も出す（既定＝オフ。オフのときは need_seq が見た動画の番号を超える問題を出さない） */
   if(a==='ahead'){ST.settings.ahead=(t.getAttribute('data-v')==='1');saveST();dataSheet();return}
+  /* 配色の切替。色だけを入れ替えるので、開いている画面はそのままでよい */
+  if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
+    applyTheme();dataSheet();}return}
   if(a==='gobig'){var gb=t.getAttribute('data-b');S.openBig={};S.openBig[gb]=true;go('fields');return}
   /* 新規は「デフォルト」の出題順（need_seq 昇順→章の秒数→難易度）で解く。
      need_seq が無い古いデータのときだけ従来の「章のタイムライン順」に落とす。 */

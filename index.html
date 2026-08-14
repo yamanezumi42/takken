@@ -8,20 +8,24 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#f7f8f5">
+<meta name="theme-color" content="#f6f2ec">
 <title>宅建 一問一答</title>
 <style>
 :root{
-  --bg:#f7f8f5; --panel:#ffffff; --fg:#1d211f; --muted:#666e69;
-  --acc:#2fa37c; --ng:#e05a4e; --line:#e6e9e5;
-  /* 補助情報の文字色。#8b938e は白に対して 3.15:1 しかなく 4.5:1 に足りなかったので暗くした。
-     #666e69 の実測＝白 5.25:1／背景#f7f8f5 4.93:1／#eef1ee 4.61:1／#e4f3ec 4.58:1（すべて4.5以上）。 */
-  --ngdeep:#a33a2f;   /* 小さい文字に使う赤（--ng #e05a4e は白に3.66:1で不足） */
-  --chipbg:#e4f3ec; --chipfg:#1c6b51;   /* chipfg は白に6.42:1 */
-  --radius:10px; --btnradius:16px;
-  --soft:#eef1ee;
-  --gold:#e0b64a;
-  --h1:#d6ece2; --h2:#8fd0b6; --h3:#2fa37c;
+  /* ============ 配色（2026-08-14 確定：既定は 1 桜鼠＝G1／設定で 1〜9 を切替） ============
+     骨格（配置・余白・丸み・動き）と配色を分けてある。切り替えるのはこの9個だけ。
+     文字色は9案すべて濃色のまま＝宅建の長文を読むため（実測 contrast は 8.6:1 以上）。 */
+  --bg:#f6f2ec; --panel:#fdfbf7; --fg:#332e28; --muted:#8a8074;
+  --acc:#c98b9b; --accd:#a9647a; --ng:#c4736c; --line:#e8e0d8;
+  --ngdeep:#a8534b;
+  --chipbg:#f2e4e7; --chipfg:#a9647a;
+  --tint:radial-gradient(320px 200px at 100% -8%,#f7e6ea,transparent 62%);
+  --petal:#e7c3cc; --core:#c98b9b;
+  /* 角は全部丸。面は大きく、押せるものはピル型（2026-08-14 本人指定） */
+  --radius:22px; --btnradius:99px;
+  --soft:#f2ece4;
+  --gold:#c9a45e;
+  --h1:#f5e6ea; --h2:#e0b6c1; --h3:#c98b9b;
   /* イージングは4つに統一（出現・決定／退場・落下／移動／弾む） */
   --eo:cubic-bezier(.2,.85,.3,1);
   --ei:cubic-bezier(.45,.02,.75,1);
@@ -45,9 +49,37 @@
   --m4back:cubic-bezier(.34,1.4,.64,1);
   --dNum:450ms; --dBar:500ms; --dCell:280ms; --dFade:400ms; --dBox:300ms; --dBadge:300ms;
   --m4gold:#b08432;   /* 卒業の金枠（既存の --gold は連続正解の演出で使用中なので別に持つ） */
+  /* UIはゴシック（iPhone標準＝追加0MB）。問題文だけ明朝を同梱する。 */
   --font:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif;
+  --mincho:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
   --num:"SFMono-Regular",Menlo,Consolas,"Courier New",monospace;
 }
+/* ---- 配色 2〜9（設定で切替。html[data-theme] に付ける） ---- */
+:root[data-theme="2"]{--bg:#f6fbf8;--panel:#fff;--fg:#2f3d38;--muted:#7d938b;--acc:#5cc5a0;--accd:#2f8b6d;
+  --chipbg:#dff3ea;--chipfg:#2f8b6d;--line:#dfeae5;--soft:#eaf5f0;--petal:#bfe6d6;--core:#5cc5a0;
+  --tint:radial-gradient(320px 200px at 100% -8%,#e2f5ec,transparent 62%);--h1:#e0f3ec;--h2:#9ddcc4;--h3:#5cc5a0}
+:root[data-theme="3"]{--bg:#f9f7fd;--panel:#fff;--fg:#39344a;--muted:#8b849c;--acc:#a58ae0;--accd:#6f52b5;
+  --chipbg:#eae4fa;--chipfg:#6f52b5;--line:#e5e0f0;--soft:#efebf8;--petal:#d6c9f2;--core:#a58ae0;
+  --tint:radial-gradient(320px 200px at 100% -8%,#ece4fb,transparent 62%);--h1:#ece4fb;--h2:#c3aeee;--h3:#a58ae0}
+:root[data-theme="4"]{--bg:#fdf6f0;--panel:#fffdfb;--fg:#453630;--muted:#9a8578;--acc:#f2a07a;--accd:#c0653d;
+  --chipbg:#fbe4d5;--chipfg:#c0653d;--line:#eee0d5;--soft:#f8ece3;--petal:#f8d3bd;--core:#f2a07a;
+  --tint:radial-gradient(320px 200px at 100% -8%,#fce8db,transparent 62%);--h1:#fbe6d8;--h2:#f5c3a5;--h3:#f2a07a}
+:root[data-theme="5"]{--bg:#f5fafd;--panel:#fff;--fg:#2e3a44;--muted:#7f95a4;--acc:#68b8e8;--accd:#2b7fb5;
+  --chipbg:#dceffa;--chipfg:#2b7fb5;--line:#dde8ee;--soft:#eaf3f9;--petal:#bcdff5;--core:#68b8e8;
+  --tint:radial-gradient(320px 200px at 100% -8%,#e0f0fb,transparent 62%);--h1:#e0f0fb;--h2:#a6d6f1;--h3:#68b8e8}
+:root[data-theme="6"]{--bg:#fbf9fb;--panel:#fff;--fg:#3a3440;--muted:#8b8290;--acc:#7bb8ea;--accd:#3b7fb8;
+  --chipbg:#e5f0fb;--chipfg:#3b7fb8;--line:#e6e2ea;--soft:#f0edf3;--petal:#f3cad9;--core:#e08fae;
+  --tint:radial-gradient(300px 200px at 0% -6%,#fbe7ef,transparent 60%),radial-gradient(280px 190px at 100% 8%,#e3f0fb,transparent 62%);
+  --h1:#e9f1fb;--h2:#b3d4f0;--h3:#7bb8ea}
+:root[data-theme="7"]{--bg:#faf6f1;--panel:#fffdfa;--fg:#463a2e;--muted:#97866f;--acc:#c9a074;--accd:#8a6540;
+  --chipbg:#eee0d0;--chipfg:#8a6540;--line:#eae0d2;--soft:#f4ece1;--petal:#e6d2b8;--core:#c9a074;
+  --tint:radial-gradient(320px 200px at 100% -8%,#f5e9d9,transparent 62%);--h1:#f2e6d5;--h2:#dcc09a;--h3:#c9a074}
+:root[data-theme="8"]{--bg:#ffffff;--panel:#fbf8f6;--fg:#37302e;--muted:#8d817d;--acc:#ff8fb1;--accd:#d94b78;
+  --chipbg:#ffe0ea;--chipfg:#d94b78;--line:#efe7e4;--soft:#fbeef2;--petal:#ffcadb;--core:#ff8fb1;
+  --tint:none;--h1:#ffe6ee;--h2:#ffb5cd;--h3:#ff8fb1}
+:root[data-theme="9"]{--bg:#f7f2ea;--panel:#fffaf3;--fg:#4a3b31;--muted:#8e7c6c;--acc:#f5b183;--accd:#b9713f;
+  --chipbg:#f7e3d5;--chipfg:#b9713f;--line:#eadfd0;--soft:#f6ece0;--petal:#f8dcc9;--core:#f0a8ab;
+  --tint:radial-gradient(320px 200px at 100% -8%,#fbeadb,transparent 62%);--h1:#fbe8d8;--h2:#f3c9a3;--h3:#f5b183}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 /* 横スクロールを作らないための保険（実際の原因は .qwrap 側で切っている）。
@@ -777,6 +809,95 @@ details.m6-det[open]>summary .m6-mk{transform:rotate(90deg)}
   }
 }
 
+/* ==================================================================
+   2026-08-14 見た目の作り直し（SPEC §5-0-1）
+   骨格は変えず、面の丸み・和紙・書体・ホーム・出題だけを置き換える。
+   ここは既存規則より後ろに置いて上書きする（既存の1行1行は触らない）。
+   ================================================================== */
+
+/* 問題文の書体。使う1,688字だけに絞ってあるので398KB（元5.19MB）。
+   ライセンスは SIL OFL 1.1（fonts/OFL-ZenOldMincho.txt を同梱） */
+@font-face{
+  font-family:"Zen Old Mincho";
+  src:url("fonts/zenoldmincho-subset.woff2") format("woff2");
+  font-weight:400;font-style:normal;font-display:swap;
+}
+
+/* 地に薄い和紙。面の下に敷いて乗算で重ねる＝文字の上には絶対に来ない。
+   明るさ243〜255／墨に対する contrast 12.0〜13.4:1（基準4.5:1の2.7倍） */
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("fonts/washi.png");background-size:128px 128px;mix-blend-mode:multiply}
+body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:var(--tint)}
+#view,.tabs,.topbar,.m6sheet,.m6sheet-bg{position:relative;z-index:1}
+
+/* 面と押せるもの */
+.panel,.card,.qbox,.box{border-radius:var(--radius)}
+.btn,.b,.chip,.q3c,.row,.vrow,.bigrow,.fl{border-radius:var(--btnradius)}
+.panel{border-color:var(--line)}
+
+/* 小花（飾りはSVGで作る。絵文字は使わない） */
+.flw{display:inline-block;vertical-align:middle;line-height:0}
+
+/* ---- ホーム H3-b ---- */
+.hpair{display:flex;gap:11px;margin-bottom:13px}
+.hcard{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:15px 14px;position:relative;overflow:hidden}
+.hcard .flw{position:absolute;top:11px;right:11px}
+.hcard .hlab{font-size:11px;color:var(--muted);letter-spacing:.06em}
+.hcard .hnum{font-size:38px;line-height:1.08;color:var(--accd);font-weight:600;
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.hcard .hnum span{font-size:13px;color:var(--muted);margin-left:5px;font-weight:400}
+.hdots{text-align:center;margin-bottom:13px;line-height:0}
+.flow{margin-bottom:14px}
+.frow{display:flex;align-items:center;gap:9px;min-height:38px;padding:6px 16px;font-size:12.5px;
+  border-radius:99px;margin-bottom:7px;background:var(--panel);border:1px solid var(--line);
+  width:100%;text-align:left;color:var(--fg);font-family:inherit}
+.frow .fst{margin-left:auto;font-size:11px;color:var(--muted)}
+.frow.done{background:transparent;border-color:transparent;color:var(--muted)}
+.frow.now{background:var(--acc);color:#fff;border-color:transparent;font-weight:600}
+.frow.now .fst{color:rgba(255,255,255,.85)}
+.frow.yet{opacity:.55}
+.hbtns .btn{min-height:52px}
+
+/* ---- 出題（A2＝章名の下に一本線／B1＝面は文章の高さに合わせて上に寄せる） ---- */
+.qhead{margin-bottom:14px}
+.qhead .qrow{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.qhead .qname{font-size:13.5px;letter-spacing:.06em;color:var(--accd);font-weight:600}
+.qhead .qcnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qhead .qrule{height:1px;background:var(--accd);opacity:.35}
+.qwrap{padding:16px 16px 0;gap:11px;justify-content:flex-start;
+  min-height:calc(100dvh - 188px)}           /* 上のヘッダーと下のタブを引いた高さ */
+/* B1：面（問題文）は文章の高さにぴったり合わせ、上に寄せる。引き伸ばさない。 */
+.qwrap .stem{flex:0 0 auto;font-family:var(--mincho);font-size:16.5px;line-height:2.0;
+  border-radius:var(--radius)}
+.qwrap .stem .stemtx{font-family:var(--mincho)}
+/* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない */
+.qwrap .qctl{margin-top:auto}
+
+/* 主ボタンは差し色。黒は使わない（配色を9つ切り替えても浮かないため） */
+.btn.pri,.next .bt .p{background:var(--acc);color:#fff;border-color:transparent}
+.next .bt .s{background:var(--chipbg);color:var(--chipfg)}
+/* ホームは下端にボタンを置く＝どの配色・どの進み具合でも押す位置が変わらない */
+#view>.pad{min-height:calc(100dvh - 132px);display:flex;flex-direction:column}
+#view>.pad>*{flex:none}
+.hbtns{margin-top:auto}
+
+/* 設定の配色（9個の見本）。見本そのものにテーマ変数を当てて、実際の色で見せる */
+.throw{display:flex;flex-wrap:wrap;gap:10px}
+.thbtn{display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:none;
+  padding:4px;font-family:inherit;color:var(--muted);font-size:10.5px;cursor:pointer}
+.thbtn.on{color:var(--accd)}
+.thsw{width:46px;height:46px;border-radius:16px;background:var(--bg);border:1px solid var(--line);
+  position:relative;display:block;overflow:hidden}
+.thbtn.on .thsw{outline:2px solid var(--accd);outline-offset:2px}
+.thsw i{position:absolute;left:8px;top:9px;width:18px;height:18px;border-radius:99px;background:var(--acc)}
+.thsw b{position:absolute;right:7px;bottom:8px;width:22px;height:8px;border-radius:99px;background:var(--chipbg)}
+.qwrap .expwrap{margin-top:auto}
+/* ○×は配色から独立させる。差し色（桃）を○に使うと「正解」ではなく「主ボタン」に見えるため。
+   淡い面＋濃い文字で、どの配色に切り替えても同じ意味に見えるようにする。 */
+.qwrap .ans .b{border-radius:99px;background:#eef4f0;color:#4f8a70;border:1px solid #dfeae4}
+.qwrap .ans .b.x{background:#f8eeed;color:#b06a63;border-color:#f0dedb}
+
 /* データ読み込み画面（初回だけ） */
 #importer{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;
           align-items:center;justify-content:center;padding:24px}
@@ -908,7 +1029,7 @@ details.m6-det[open]>summary .m6-mk{transform:rotate(90deg)}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='22bfc53e';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='4f816ad8';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
