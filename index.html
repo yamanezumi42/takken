@@ -875,6 +875,13 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 /* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない */
 .qwrap .qctl{margin-top:auto}
 
+/* 横に引っ張れる余地を作らない。
+   原因＝画面遷移で #view が一瞬 scale(1.03) になり、その3%（390pxなら約11px）が
+   横スクロールの余地として残っていた。html の overflow-x:hidden はビューポートへ
+   伝わらないので（既存コメントの実測どおり）、body 側で切る。
+   clip はスクロール領域そのものを作らないので、上部の sticky は生きたまま。 */
+body{overflow-x:clip;overscroll-behavior-x:none}
+
 /* 主ボタンは差し色。黒は使わない（配色を9つ切り替えても浮かないため） */
 .btn.pri,.next .bt .p{background:var(--acc);color:#fff;border-color:transparent}
 .next .bt .s{background:var(--chipbg);color:var(--chipfg)}
@@ -1030,7 +1037,7 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='d8b8c5d3';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='d60d42e3';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
