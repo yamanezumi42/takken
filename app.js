@@ -107,20 +107,31 @@ function chapsOf(cat){
 /* ---------- 動画の紐づけ（videos[] 配列。旧 video 単数も読める） ----------
    1つの問題が複数の動画のタイムラインに現れるのが正しい状態なので、配列で持つ。
    items.js が旧形式（video が単数オブジェクト）のうちは1件の配列として扱う。 */
+/* 動画リンクの並び。分かりやすい順＝こざりえ → こうのすけ → あこ課長（2026-08-14 本人指定）。
+   同じチャンネル内では新しい動画を先に出す。表に出るのは先頭の1本で、残りは「＋N」に畳む。 */
+var SRCRANK={'こざりえ':0,'こうのすけ':1,'あこ課長':2};
+function srcRank(vid){var r=SRCRANK[VSRC[vid]];return (r===undefined)?9:r}
 function vidsOf(it){
   if(it._vs)return it._vs;
   var a=[];
   if(it.videos&&it.videos.length)a=it.videos;
   else if(it.video&&it.video.vid)a=[it.video];
-  it._vs=a.filter(function(v){return v&&v.vid});
+  a=a.filter(function(v){return v&&v.vid});
+  a.sort(function(x,y){
+    var d=srcRank(x.vid)-srcRank(y.vid);
+    if(d)return d;
+    return (VUP[y.vid]||'').localeCompare(VUP[x.vid]||'');   /* 新しい動画を先に */
+  });
+  it._vs=a;
   return it._vs;
 }
-var VSRC={},VTIT={},VLEN={},VMEM={},VCHN={};   /* vid → チャンネル／題名／尺／メンバー限定／章数 */
+var VSRC={},VTIT={},VLEN={},VMEM={},VCHN={},VUP={};   /* vid → チャンネル／題名／尺／メンバー限定／章数／公開日 */
 (function(){
   var seen={};                            /* 同じ動画が複数の小分類に載るので秒で重複を除く */
   Object.keys(CHAP).forEach(function(cat){
     (CHAP[cat]||[]).forEach(function(v){
       VSRC[v.vid]=v.source||'';VTIT[v.vid]=v.title||'';VLEN[v.vid]=v.len||0;VMEM[v.vid]=!!v.member;
+      VUP[v.vid]=v.upload||'';
       var s=seen[v.vid]=seen[v.vid]||{};
       (v.chapters||[]).forEach(function(c){if(!c.skip)s[c.sec]=1});
       VCHN[v.vid]=Object.keys(s).length;
