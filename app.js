@@ -2311,6 +2311,20 @@ function dataSheet(){
    +'<div class="mini">'+(NEEDOK?('見た動画 '+(watchedMaxSeq()===null?'なし':'#'+watchedMaxSeq()+'まで')
        +' ／ 出せる新規 '+n3(unseenItems().length)+'問'):'この問題データには通し番号がないため制限しません')+'</div>'
    +'<div class="hr"></div>'
+   /* アプリの中から入れ直せるようにする。これが無いとURLに #import を打つために
+      Safariへ戻ることになり、アイコンを付け直して記録を失う事故につながる
+      （2026-08-14 実際に発生。ホーム画面のWebアプリはアイコンごとに別のデータを持ち、
+      アイコンを消すとその記録も消える）。 */
+   +'<div class="mini" style="margin-bottom:6px">問題データ</div>'
+   +'<button class="btn" data-act="reimport">問題データを入れ直す</button>'
+   +'<div class="mini" style="margin-top:6px">いま '+n3(ITEMS.length)+'問。'
+   +'PCで作り直した takken_data.json を選び直します（学習の記録は消えません）。</div>'
+   +'<div class="hr"></div>'
+   +'<div class="mini" style="margin-bottom:6px">記録のバックアップ</div>'
+   +'<button class="btn" data-act="share">'+IC.io+'ファイルにして保存・送る</button>'
+   +'<div class="mini" style="margin-top:6px">共有から iCloud Drive やメールへ。'
+   +'<b>ホーム画面のアイコンを消すと記録も消えます</b>ので、たまに取ってください。</div>'
+   +'<div class="hr"></div>'
    /* 配色は9つ。骨格（配置・余白・丸み・動き）は変わらず、色だけが入れ替わる。 */
    +'<div class="mini" style="margin-bottom:6px">配色</div><div class="throw">'
    +THEMES.map(function(t,i){var k=String(i+1);
@@ -2349,6 +2363,28 @@ function dataSheet(){
   m6SheetOpen();
 }
 function msg(t){var e=document.getElementById('msg');if(e)e.textContent=t}
+/* 記録をJSONのファイルにして共有シートへ渡す。iOSは navigator.share でファイルを扱える。
+   使えない場合は既存のテキスト（全選択してコピー）に落とす。 */
+function shareBackup(){
+  var json=JSON.stringify(ST),name='takken_'+today()+'.json';
+  try{
+    var f=new File([json],name,{type:'application/json'});
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[f]})){
+      navigator.share({files:[f],title:'宅建の記録'})
+        .then(function(){markExport();msg('保存しました（'+name+'）')})
+        .catch(function(){/* 取り消しは何も言わない */});
+      return;
+    }
+  }catch(e){}
+  /* 共有が使えない端末：ダウンロードを試し、それも無理ならテキストを出す */
+  try{
+    var url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+    var a=document.createElement('a');a.href=url;a.download=name;a.click();
+    setTimeout(function(){URL.revokeObjectURL(url)},1000);
+    markExport();msg('保存しました（'+name+'）');return;
+  }catch(e){}
+  msg('この端末では共有が使えません。下のテキストをコピーして保管してください。');
+}
 
 /* =========================================================
    演出（preview_effect6.html と同一。時間＝正解1.55s／不正解1.4s）
@@ -2645,6 +2681,10 @@ document.addEventListener('click',function(e){
   if(a==='later'){ST.settings.later=!ST.settings.later;saveST();render();return}
   /* 未習の範囲も出す（既定＝オフ。オフのときは need_seq が見た動画の番号を超える問題を出さない） */
   if(a==='ahead'){ST.settings.ahead=(t.getAttribute('data-v')==='1');saveST();dataSheet();return}
+  /* 問題データの入れ直し。アプリの中で完結させる（Safariに戻らせない） */
+  if(a==='reimport'){location.hash='import';location.reload();return}
+  /* 記録をファイルにして共有シートへ。使えない端末は下のテキスト方式に落ちる */
+  if(a==='share'){shareBackup();return}
   /* 配色の切替。色だけを入れ替えるので、開いている画面はそのままでよい */
   if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
     applyTheme();dataSheet();}return}
