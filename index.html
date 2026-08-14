@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f7f8f5">
+<title>宅建 一問一答</title>
+<style>
+:root{
+  --bg:#f7f8f5; --panel:#ffffff; --fg:#1d211f; --muted:#666e69;
+  --acc:#2fa37c; --ng:#e05a4e; --line:#e6e9e5;
+  /* 補助情報の文字色。#8b938e は白に対して 3.15:1 しかなく 4.5:1 に足りなかったので暗くした。
+     #666e69 の実測＝白 5.25:1／背景#f7f8f5 4.93:1／#eef1ee 4.61:1／#e4f3ec 4.58:1（すべて4.5以上）。 */
+  --ngdeep:#a33a2f;   /* 小さい文字に使う赤（--ng #e05a4e は白に3.66:1で不足） */
+  --chipbg:#e4f3ec; --chipfg:#1c6b51;   /* chipfg は白に6.42:1 */
+  --radius:10px; --btnradius:16px;
+  --soft:#eef1ee;
+  --gold:#e0b64a;
+  --h1:#d6ece2; --h2:#8fd0b6; --h3:#2fa37c;
+  /* イージングは4つに統一（出現・決定／退場・落下／移動／弾む） */
+  --eo:cubic-bezier(.2,.85,.3,1);
+  --ei:cubic-bezier(.45,.02,.75,1);
+  --eio:cubic-bezier(.4,0,.2,1);
+  --back:cubic-bezier(.2,1.45,.4,1);
+
+  /* ---- M2：入力の手触り（polish/M2_feel.md §2 のトークンをそのまま） ---- */
+  --m2-dur-down:.06s; --m2-dur-up:.14s; --m2-dur-ripple:.4s;
+  --m2-dur-fly:.22s; --m2-dur-return:.3s; --m2-dur-in:.28s;
+  --m2-ease-linear:linear;
+  --m2-ease-back:cubic-bezier(.2,1.5,.4,1);
+  --m2-ease-back-soft:cubic-bezier(.34,1.4,.64,1);
+  --m2-ease-in:cubic-bezier(.7,0,.84,0);
+  --m2-ease-out:cubic-bezier(.16,1,.3,1);
+  --m2-scale-down:.96;
+  /* ---- M3：奥行き（尺は既存の --eo を再利用） ---- */
+  --m3-dur:.3s;
+  /* ---- M4：数値と状態変化（polish/M4_numbers.md §1）---- */
+  --easeOut:cubic-bezier(.16,1,.3,1);
+  --easeIn:cubic-bezier(.7,0,.84,0);
+  --m4back:cubic-bezier(.34,1.4,.64,1);
+  --dNum:450ms; --dBar:500ms; --dCell:280ms; --dFade:400ms; --dBox:300ms; --dBadge:300ms;
+  --m4gold:#b08432;   /* 卒業の金枠（既存の --gold は連続正解の演出で使用中なので別に持つ） */
+  --font:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif;
+  --num:"SFMono-Regular",Menlo,Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+/* 横スクロールを作らないための保険（実際の原因は .qwrap 側で切っている）。
+   html に付けるので縦のスクロールと position:sticky（ヘッダー・進捗バー）は生きる。
+   ※ルート要素の overflow-x:clip はビューポートへ伝わらない（実測：computed が clip でも
+     scrollTo(500,0) で scrollX=51 になった）。hidden も単独では効かなかったため、
+     はみ出している要素そのものを .qwrap で切る形にした。 */
+html{overflow-x:hidden}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.7;
+  -webkit-text-size-adjust:100%}
+#view{padding:0 0 76px;max-width:520px;margin:0 auto;min-height:100dvh}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+b{font-weight:600}
+svg{display:block}
+.ico{width:18px;height:18px;flex:0 0 18px}
+
+/* ---- 共通パーツ ---- */
+.pad{padding:14px}
+.h{font-size:15px;font-weight:600;margin:0 0 8px}
+.sub{font-size:11.5px;color:var(--muted);line-height:1.7}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin:0 0 12px}
+.rowx{display:flex;align-items:center;gap:8px}
+.spread{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:var(--radius);
+  background:var(--chipbg);color:var(--chipfg);border:0}
+.badge{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted);
+  background:var(--soft);border-radius:var(--radius);padding:2px 8px}
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 14px;
+  border-radius:var(--btnradius);border:1px solid var(--line);background:var(--panel);color:var(--fg);
+  font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;width:100%}
+.btn.pri{background:var(--fg);color:#fff;border-color:var(--fg)}
+.btn.acc{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn.sm{min-height:36px;font-size:12px;padding:0 10px;border-radius:12px;width:auto}
+.btn:disabled{opacity:.45}
+.tog{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:0 11px;border-radius:12px;
+  border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12px;font-family:var(--font);cursor:pointer}
+.tog.on{background:var(--chipbg);color:var(--chipfg);border-color:#bfe0d1}
+.hr{height:1px;background:var(--line);margin:12px 0}
+.mini{font-size:11px;color:var(--muted)}
+a{color:var(--chipfg)}
+/* 参考URLのような長い一続きの文字列で枠を突き破らないようにする（右端で見切れる原因） */
+.link{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--chipfg);text-decoration:none;
+  max-width:100%;overflow-wrap:anywhere}
+/* 章名は1行に省略、時刻は折り返さない（「16:」「20」と割れないように） */
+.link .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.link .tm{flex:0 0 auto;white-space:nowrap;color:var(--muted)}
+.li .nm,.cell,.panel,.exp,.lead,.stem{min-width:0;overflow-wrap:anywhere}
+.qlabel{white-space:nowrap}
+.chapchip{max-width:60%}
+
+/* ---- ヘッダー（出題） ---- */
+.hd{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:8px;padding:9px 12px}
+.hd .sc{font-size:11px;color:var(--muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd .sc b{color:var(--fg)}
+.hd .scn{display:inline-block;min-width:9ch;text-align:left}
+.hd .scr{display:inline-block;min-width:6ch;text-align:left}
+.rst{font-size:11px;padding:5px 10px;min-height:32px;border-radius:var(--radius);background:var(--soft);
+  color:#6b736e;border:0;font-family:var(--font);cursor:pointer}
+.bar{height:3px;background:var(--line);position:sticky;top:50px;z-index:5}
+.bar i{display:block;height:3px;background:var(--acc);transition:width .25s var(--eio)}
+
+/* ---- 出題カード ---- */
+/* 主役のカードの光（.m3-glow）は幅144%で外へ出るので、列の外へは出さない。
+   これがないと出題・解説の画面で文書が右51pxはみ出し、横に引っ張れてしまう
+   （実測 scrollWidth 426 / clientWidth 375。htmlへの overflow-x はビューポートに伝わらなかった）。
+   光は closest-side の円なので、切るのは完全に透明な外側だけ＝見た目は変わらない。 */
+.qwrap{padding:14px 14px 0;display:flex;flex-direction:column;gap:11px;overflow-x:clip}
+.qlabel{font-size:11px;font-weight:600;color:var(--chipfg);letter-spacing:.08em}
+.star{margin-left:auto;color:var(--muted);width:22px;height:22px;background:none;border:0;padding:0;cursor:pointer}
+.star.on{color:#d9a422}
+.lead{font-size:12px;color:var(--muted);line-height:1.8;text-wrap:pretty}
+/* 本文（問題文）＝17px・行間1.9（Apple Typography に合わせて数値で固定）。
+   text-wrap:pretty は日本語の折り返しを整える（iOS 26.0以降。未対応環境では無視されるだけ）。
+   word-break:auto-phrase は iOS Safari 非対応なので使わない。 */
+.stem{font-size:17px;line-height:1.9;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:16px;transition:border-color .12s var(--eo);text-wrap:pretty}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
+.dif{font-family:var(--num);padding:2px 7px;border-radius:4px;background:var(--soft);color:#6b736e}
+.prog{font-size:11px;color:var(--muted);text-align:right;font-family:var(--num)}
+.ans{display:flex;gap:10px;margin-top:4px}
+.ans .b{flex:1;height:70px;border-radius:var(--btnradius);display:flex;align-items:center;justify-content:center;
+  font-size:28px;border:0;color:#fff;background:var(--acc);font-family:var(--font);cursor:pointer}
+.ans .b.x{background:var(--ng)}
+.pass{margin:2px auto 0;font-size:12px;min-height:40px;padding:0 18px;border-radius:12px;background:var(--panel);
+  border:1px solid var(--line);color:var(--muted);font-family:var(--font);cursor:pointer}
+
+/* ---- 解説 ---- */
+/* 回答後は「正解： ○」の1行だけ。当たり外れは演出で伝える（判定ブロックは置かない） */
+.ansline{font-size:15px;font-weight:500;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:11px 14px}
+.ansline em{font-style:normal;font-size:20px;margin-left:6px}
+/* 本文（解説文）＝17px・行間1.9 */
+.exp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;text-wrap:pretty;
+  font-size:17px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
+/* 図表：入れ物の幅を超えないこと（超えるものは横スクロール。縦横比は height:auto で保つ） */
+.figbox{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0 0}
+.fig{max-width:100%;height:auto;border:1px solid var(--line);border-radius:var(--radius);display:block}
+.whys{display:flex;flex-wrap:wrap;gap:8px}
+
+/* ---- 動画学習の一覧（B案＋C案）＝大分類 → その大分類の動画を再生リスト順 ----
+   2026-08-14 本人の選択。49マスのヒートマップと小分類を軸にした一覧は廃止した。
+   行＝「#4｜見出し｜実測時間｜12/41｜›」。バーは置かず、行の左から進捗ぶんを薄緑で塗る。
+   「いま」のタグは置かない（本人「いまっていう文字はいらない、見ればわかるからね」）。 */
+.bigrow{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:8px 11px;margin-bottom:6px}
+.bigrow .t{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+  background:none;border:0;padding:0;width:100%;font-family:var(--font);color:var(--fg);cursor:pointer}
+.bigrow .cnt{font-size:11px;color:var(--muted);font-weight:400;font-family:var(--num);
+  font-variant-numeric:tabular-nums}
+.bigrow .ar{margin-left:auto;color:var(--muted);font-size:11px;display:flex;align-items:center}
+.bar3{height:3px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar3 i{display:block;height:3px;background:var(--acc)}
+/* 2026-08-14 作り直し（参照＝preview_list2.html の案A）。本人の指摘＝
+   「エクセルみたいにダサくなった」。原因は①死んだ列2本（実測時間の「—」・全行ゼロの「0/54」）
+   ②行ごとの罫線がグリッド線に見える ③25行が同じ形で次にやることが分からない。
+   直し＝①値があるときだけ出す ②罫線を消して余白で分ける ③次の1本だけカードにする。 */
+.vlist{margin-bottom:8px}
+.vrow{display:flex;align-items:center;gap:9px;padding:0 4px;
+  font-size:12.5px;height:36px;position:relative;overflow:hidden;width:100%;
+  background:none;border:0;font-family:var(--font);color:var(--fg);text-align:left;cursor:pointer}
+.vrow .fill{position:absolute;left:0;top:2px;bottom:2px;background:#eaf6f0;border-radius:6px}
+.vrow .rc{position:relative;display:flex;align-items:center;gap:9px;width:100%;min-width:0}
+.vrow .no,.vrow .n2{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11px;
+  color:var(--muted);white-space:nowrap}
+.vrow .no{width:24px;flex:none;text-align:right}
+.vrow .nm{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.vrow .ar{color:var(--muted);font-size:12px;flex:none}   /* #b9c1bb は1.84:1で不足 */
+.vrow .ck{color:var(--acc);flex:none;display:flex;align-items:center}
+/* 番号なしの補足動画は本編にぶら下げる（字下げ＋小さく淡く） */
+.vrow.sub{padding-left:26px}
+.vrow.sub .nm{font-size:11.5px;color:var(--muted)}
+.vrow.done .nm{color:var(--muted)}
+.vrow .ok{color:var(--chipfg)}
+/* 次にやる1本＝主役のカード */
+.next{background:var(--panel);border:1px solid #cfe6da;border-radius:12px;padding:12px 13px;margin-bottom:10px}
+.next .lb{font-size:11px;color:var(--chipfg);background:var(--chipbg);border-radius:20px;
+  padding:3px 9px;display:inline-block}
+.next .ti{font-size:15px;font-weight:600;margin:8px 0 2px;line-height:1.5}
+.next .me{font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;
+  font-family:var(--num);font-variant-numeric:tabular-nums}
+.next .bt{display:flex;gap:8px;margin-top:10px}
+.next .bt>*{flex:1;min-height:44px;border-radius:var(--btnradius);border:0;font-size:12.5px;
+  font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px;
+  font-family:var(--font);cursor:pointer;text-decoration:none}
+.next .bt .p{background:var(--fg);color:#fff}
+.next .bt .s{background:var(--chipbg);color:var(--chipfg)}
+/* 完了が3本以上のときに畳む1行（タップで開閉） */
+.vfold{width:100%;display:flex;align-items:center;gap:8px;min-height:36px;padding:7px 10px;
+  margin-bottom:6px;background:var(--soft);border:0;border-radius:9px;
+  font-family:var(--font);font-size:11.5px;color:var(--muted);text-align:left;cursor:pointer}
+.vfold .ck{color:var(--acc);display:flex;align-items:center}
+.vfold .ar{margin-left:auto;display:flex;align-items:center}
+/* ここまでで解ける N問（累積で解く入口）＝数字が主役 */
+.cum{width:100%;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;margin-bottom:8px;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  font-family:var(--font);font-size:12.5px;color:var(--fg);text-align:left;cursor:pointer}
+.cum b{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:17px;font-weight:600}
+.cum .ar{margin-left:auto;color:var(--muted);font-size:12px;display:flex;align-items:center}
+
+/* ---- ヒートマップ（廃止した49マスの残り。分析の凡例で色だけ使う） ---- */
+.heat{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.cell{border:1px solid var(--line);border-radius:8px;padding:7px 8px;min-height:44px;background:var(--panel);
+  text-align:left;font-family:var(--font);font-size:11px;line-height:1.35;color:var(--fg);cursor:pointer;overflow:hidden}
+.cell .cn{display:block;font-family:var(--num);font-size:11px;color:var(--muted);margin-top:3px}
+.cell.s1{background:var(--h1)}
+.cell.s2{background:var(--h2)}
+.cell.s3{background:var(--h3);color:#fff;border-color:var(--h3)}
+.cell.s3 .cn{color:#e6f5ee}
+.cell.sev{border-left:3px solid var(--ng)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);
+  vertical-align:-2px;margin-right:4px}
+
+/* ---- 試験までの日数（大きく・等幅。残り30日以内だけ色を変える。点滅はしない） ---- */
+.dcount{font-size:34px;font-weight:600;line-height:1.1}
+.dcount span{font-size:13px;font-weight:400;margin-left:3px;color:var(--muted)}
+.dcount.near{color:var(--ng)}
+/* ---- 今日の3枠 ---- */
+.q3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.q3c{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 2px;border:1px solid var(--line);
+  border-radius:var(--radius);background:var(--panel);font-family:var(--font);cursor:pointer;color:var(--fg)}
+.q3c b{font-family:var(--num);font-size:20px;font-weight:600}
+.q3c span{font-size:11px;color:var(--muted)}
+.q3c.off{opacity:.4;cursor:default}
+/* ---- 4状態の帯（卒業／定着／学習中／未着手） ---- */
+.band{display:flex;width:100%;height:8px;border-radius:4px;overflow:hidden;border:0;padding:0;margin-top:8px;
+  background:var(--soft);cursor:pointer}
+.band i{display:block;height:8px}
+.band i.g{background:var(--acc)}.band i.k{background:var(--h2)}
+.band i.l{background:#e0c98a}.band i.u{background:var(--soft)}
+/* 誤答理由の4色（帯と点） */
+.band i.w0{background:#8fb9a8}.band i.w1{background:#e0c98a}
+.band i.w2{background:#d99a8f}.band i.w3{background:#9aa8c4}
+/* 学習時間の内訳（動画／新規／復習／抜き打ち）＝細い帯1本 */
+.band i.t0{background:#7fb3a4}.band i.t1{background:#a8c6e0}
+.band i.t2{background:#e0c98a}.band i.t3{background:#d99a8f}
+.wdot.t0{background:#7fb3a4}.wdot.t1{background:#a8c6e0}
+.wdot.t2{background:#e0c98a}.wdot.t3{background:#d99a8f}
+.band.thin,.band.thin i{height:5px}
+.wdot{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:-1px}
+.wdot.w0{background:#8fb9a8}.wdot.w1{background:#e0c98a}
+.wdot.w2{background:#d99a8f}.wdot.w3{background:#9aa8c4}
+/* ---- 難易度＝段の点（文字を出さない） ---- */
+.dots{display:inline-flex;gap:3px;align-items:center}
+.dots i{width:6px;height:6px;border-radius:50%;border:1px solid var(--muted);display:block}
+.dots i.on{background:var(--muted)}
+/* ---- 状態＝色の点1つ（凡例は分析に1回だけ） ---- */
+.sdot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--soft);
+  transition:background .3s var(--eo)}
+.sdot.s1{background:#e0c98a}.sdot.s2{background:var(--h2)}.sdot.s3{background:var(--acc)}
+/* ---- 合格ラインつきゲージ（分析①） ---- */
+.gauge{position:relative;height:14px;border-radius:7px;background:var(--soft);overflow:hidden}
+.gauge i{display:block;height:14px;background:var(--acc)}
+.gline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg)}
+.score{font-family:var(--num);font-size:32px;font-weight:600;line-height:1.1}
+/* ---- 2本の線（分析②：必要ペースと実ペース） ---- */
+.spark{width:100%;height:64px;display:block}
+/* ---- 数字4つ ---- */
+.four{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.four div{border:1px solid var(--line);border-radius:var(--radius);padding:9px 2px;background:var(--panel)}
+.four b{display:block;font-family:var(--num);font-size:19px;font-weight:600;line-height:1.3}
+.four span{font-size:11px;color:var(--muted)}
+
+/* ---- リスト行 ---- */
+.li{display:flex;align-items:center;gap:9px;min-height:46px;padding:6px 0;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .nm{flex:1;font-size:13px;line-height:1.5}
+.cb{width:24px;height:24px;flex:0 0 24px;border:1.4px solid #c8cec9;border-radius:6px;background:var(--panel);
+  display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;padding:0}
+.cb.on{background:var(--acc);border-color:var(--acc)}
+.tapline{display:flex;align-items:center;gap:8px;flex:1;background:none;border:0;padding:8px 0;font-family:var(--font);
+  font-size:13px;color:var(--fg);text-align:left;cursor:pointer;min-height:44px}
+.sec{font-family:var(--num);font-size:11px;color:var(--muted)}
+
+/* ---- グラフ ---- */
+.gr{margin:0 0 4px}
+.gr .lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin:0 0 3px}
+.gr .lbl b{color:var(--fg);font-family:var(--num)}
+.track{height:7px;border-radius:4px;background:var(--soft);overflow:hidden}
+.track i{display:block;height:7px;background:var(--acc)}
+/* 失点の棒＝赤。クラス名を warn にすると警告の枠（.warn の padding 10px 12px＋枠1px）が
+   そのまま乗って棒の幅が26px広がるので、棒専用の名前を使う。 */
+.track i.ngbar{background:var(--ng)}
+.days{display:flex;align-items:flex-end;gap:3px;height:70px}
+.days div{flex:1;background:var(--chipbg);border-radius:3px 3px 0 0;position:relative}
+.days div i{position:absolute;left:0;right:0;bottom:0;background:var(--acc);border-radius:3px 3px 0 0;display:block}
+.dayx{display:flex;gap:3px;font-size:11px;color:var(--muted);font-family:var(--num);margin-top:3px}
+.dayx div{flex:1;text-align:center;overflow:hidden}
+
+/* ---- タブ ---- */
+#tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--panel);
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+#tabs button{flex:1;background:none;border:0;padding:9px 0 8px;min-height:52px;color:var(--muted);
+  font-family:var(--font);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px}
+#tabs button .ico{width:23px;height:23px;flex:0 0 23px}
+#tabs button.on{color:var(--acc)}
+/* 選択中は2pxの下線で示す（文字ラベルは置かない。読み上げ用に aria-label を持たせる） */
+#tabs button::after{content:'';display:block;width:22px;height:2px;border-radius:2px;background:transparent}
+#tabs button.on::after{background:var(--acc)}
+
+/* ---- モーダル ---- */
+#modal{position:fixed;inset:0;z-index:40;background:rgba(29,33,31,.45);display:flex;align-items:flex-end;justify-content:center}
+#modal[hidden]{display:none}
+.sheet{background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-width:520px;max-height:88dvh;overflow:auto;padding:16px 14px 24px}
+textarea{width:100%;min-height:150px;font-family:var(--num);font-size:11px;border:1px solid var(--line);
+  border-radius:var(--radius);padding:10px;background:var(--panel);color:var(--fg);line-height:1.5}
+input[type=date],input[type=number]{font-family:var(--num);font-size:14px;min-height:40px;padding:0 10px;
+  border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg)}
+.warn{background:#fdf3f2;border:1px solid #f0c9c4;color:#a33a2f;border-radius:var(--radius);padding:10px 12px;font-size:12px}
+
+/* =========================================================
+   M2 — 入力の手触り（polish/M2_feel.md）
+   ========================================================= */
+.m2-press{position:relative;overflow:hidden;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.m2-press::before{content:"";position:absolute;inset:0;pointer-events:none;background:currentColor;opacity:0;
+  transition:opacity var(--m2-dur-up) var(--m2-ease-out)}
+.m2-press.m2-held::before{opacity:.07;transition-duration:var(--m2-dur-down);transition-timing-function:linear}
+.m2-ripple{position:absolute;border-radius:50%;pointer-events:none;
+  background:var(--m2-ripple-color,rgba(29,33,31,.16))}
+.ans .b{--m2-ripple-color:rgba(255,255,255,.30)}
+/* ○×のスワイプは廃止（2026-08-14 本人指摘「問題のスワイプ機能は必要ないかな」）。
+   スワイプのヒント（.swhint）と案内文（.hint）はここで削除した。○×はボタンのタップだけ。 */
+
+/* =========================================================
+   M3 — 奥行き・視差・光（polish/M3_depth.md）
+   3層は body 直下に position:fixed で置き、window.scrollY で動かす
+   ========================================================= */
+.m3-bg{position:fixed;left:-12%;top:-14%;width:124%;height:132%;z-index:0;
+  will-change:transform;transform:translate3d(0,0,0);
+  background:radial-gradient(120% 70% at 22% 8%,#fff 0,rgba(255,255,255,0) 58%),
+             linear-gradient(180deg,#eef0ec 0,var(--bg) 46%,#f2f3ef 100%);
+  transition:transform var(--m3-dur) var(--eo)}
+.m3-bg b{position:absolute;display:block;border-radius:50%}
+.m3-bg .b1{left:-18%;top:6%;width:78%;height:32%;
+  background:radial-gradient(closest-side,rgba(47,125,99,.10),rgba(47,125,99,0) 72%)}
+.m3-bg .b2{right:-24%;top:26%;width:86%;height:34%;
+  background:radial-gradient(closest-side,rgba(29,33,31,.055),rgba(29,33,31,0) 70%)}
+.m3-bg .b3{left:8%;bottom:2%;width:96%;height:30%;
+  background:radial-gradient(closest-side,rgba(168,130,60,.07),rgba(168,130,60,0) 72%)}
+.m3-bg .m3-grid{position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,rgba(29,33,31,.035) 0 1px,rgba(29,33,31,0) 1px 84px),
+             repeating-linear-gradient(90deg,rgba(29,33,31,.028) 0 1px,rgba(29,33,31,0) 1px 84px)}
+.m3-veil{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;
+  background:linear-gradient(180deg,rgba(20,26,24,.11),rgba(20,26,24,.06));
+  transition:opacity var(--m3-dur) var(--eo)}
+.m3-fg{position:fixed;left:0;top:0;width:100%;height:300%;z-index:3;pointer-events:none;
+  will-change:transform;transform:translate3d(0,0,0)}
+.m3-fg i{position:absolute;display:block;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(255,255,255,.92),rgba(255,255,255,0) 70%)}
+.m3-fg .glare{position:absolute;left:-10%;top:-6%;width:120%;height:16%;
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0))}
+/* 層の順番：bg 0 / veil 1 / #view 2 / fg 3（操作は透過） / #tabs 20 / #fx 30 / #modal 40 */
+#view{position:relative;z-index:2}
+/* 主役（カード）と光 */
+.m3-persp{perspective:900px}
+/* スワイプ廃止に伴い touch-action の制限も外した（横方向を奪う処理が無くなったため） */
+.m3-hero{position:relative;transform-style:preserve-3d}
+.m3-hero.m3-ret{transition:transform .35s var(--m2-ease-back-soft)}
+.m3-glow{position:absolute;left:-22%;top:-18%;width:144%;height:136%;z-index:0;pointer-events:none;
+  opacity:.35;transform:translate3d(0,0,0) scale(.96);
+  background:radial-gradient(closest-side,rgba(47,125,99,.20),rgba(47,125,99,0) 72%),
+             radial-gradient(closest-side at 50% 60%,rgba(255,255,255,.85),rgba(255,255,255,0) 62%);
+  transition:opacity var(--m3-dur) var(--eo),transform var(--m3-dur) var(--eo)}
+.m3-hero.m3-on .m3-glow{opacity:1;transform:translate3d(0,0,0) scale(1)}
+/* 主役の子は光より前に出す。
+   （以前は絶対配置の .swhint がこの一括指定に負けて inline 化し、1行目だけ右へずれていた。
+     スワイプ廃止で .swhint そのものを削除したので、除外の指定も不要になった。） */
+.m3-hero>*:not(.m3-glow){position:relative;z-index:1}
+.m3-focus .panel:not(.m3-keep),.m3-focus .heat:not(.m3-keep){opacity:.5;transition:opacity var(--m3-dur) var(--eo)}
+/* ヒートマップ：奥から手前へ（--i は対角インデックス＝最大13段に畳む） */
+.m3-heat.m3-in>*{animation:m3-rise .3s var(--eo) both;animation-delay:calc(var(--i) * 40ms)}
+@keyframes m3-rise{
+  from{opacity:0;transform:scale(.94) translate3d(0,6px,0)}
+  to{opacity:1;transform:scale(1) translate3d(0,0,0)}}
+
+/* =========================================================
+   M4 — 数値と状態変化（polish/M4_numbers.md）
+   ========================================================= */
+.m4-num{font-family:var(--num);font-variant-numeric:tabular-nums;
+  display:inline-block;text-align:right;white-space:nowrap}
+@keyframes m4pop{0%{transform:scale(1)}12%{transform:scale(.99)}45%{transform:scale(1.045)}100%{transform:scale(1)}}
+.m4-tile{transform-origin:50% 60%}
+.m4-tile.m4-strong{animation:m4pop var(--dCell) var(--easeOut) 1}
+/* 進捗バー：width をやめて scaleX（レイアウトを起こさない）＋先端の光 */
+.bar{position:relative}
+.bar i{display:block;height:3px;background:var(--acc);transform-origin:left center;transform:scaleX(0);transition:none}
+.m4-tip{position:absolute;top:1.5px;left:0;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;opacity:0;
+  pointer-events:none;background:radial-gradient(circle,rgba(47,163,124,.95) 0,rgba(47,163,124,0) 70%)}
+/* 解いた対象（一覧の動画の行）：色は400msでクロスフェード、卒業のときだけ金の枠が1回 */
+.cell,.vrow{transition:background-color var(--dFade) linear,border-color var(--dFade) linear,color var(--dFade) linear}
+@keyframes m4bump{0%{transform:scale(1)}12%{transform:scale(.985)}45%{transform:scale(1.06)}100%{transform:scale(1)}}
+.m4-bump{animation:m4bump var(--dCell) var(--easeOut) 1}
+.m4-ring{position:absolute;inset:-1px;border-radius:8px;border:1.5px solid var(--m4gold);opacity:0;pointer-events:none}
+@keyframes m4ring{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+.m4-grad .m4-ring{animation:m4ring 600ms var(--easeOut) 1}
+/* 復習の箱＝6段の目盛り（解説に出す） */
+.m4-box{position:relative;padding-top:12px}
+.m4-segs{display:flex;gap:4px;height:10px}
+.m4-seg{flex:1 1 0;position:relative;background:var(--line);border-radius:2px;overflow:hidden}
+.m4-seg i{position:absolute;inset:0;background:var(--acc);transform:scaleY(0);transform-origin:bottom}
+.m4-seg.on i{transform:scaleY(1)}
+.m4-ind{position:absolute;top:0;left:8.33%;width:6px;height:6px;margin-left:-3px;background:var(--fg);transform:rotate(45deg)}
+.m4-boxlab{display:flex;gap:4px;margin-top:5px}
+.m4-boxlab span{flex:1 1 0;text-align:center;font-family:var(--num);font-size:11px;color:var(--muted)}
+/* 状態バッジ：縦に回って差し替わる（見た目は既存のバッジのまま） */
+.badge.m4-badge{display:inline-flex;align-items:center;justify-content:center;
+  perspective:240px;overflow:hidden;min-width:74px;height:20px}
+.badge.m4-badge b{font-weight:500;display:inline-block;transform-origin:50% 50%;backface-visibility:hidden}
+
+/* =========================================================
+   M5 — 起動・開始・完走（polish/M5_intro.md）
+   デモの色トークンは既存トークンへの別名にする（色は一切変えない）
+   ========================================================= */
+:root{--paper:var(--bg);--ok:var(--acc);--okdeep:var(--chipfg);--oktint:var(--chipbg);--line2:var(--line)}
+/* app.html はページ全体がスクロールするので fixed で画面を覆う（デモは端末枠内なので absolute）。
+   z-index：#fx 30 / #m1fx 35 / #modal 40 より上、タブ(20)も覆って区切りを強く出す */
+.m5-ov{position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center}
+.m5-ov[hidden]{display:none}
+#m5-intro{background:var(--paper);flex-direction:column}
+#m5-intro .line{width:132px;height:1px;background:var(--fg);opacity:.85;transform-origin:50% 50%}
+#m5-intro .mask{overflow:hidden;padding-top:12px}
+#m5-intro .mask b{display:block;font-size:19px;font-weight:600;letter-spacing:.24em}
+#m5-intro .cap{margin-top:9px;font-size:11px;letter-spacing:.28em;color:var(--muted)}
+#m5-start{background:rgba(20,24,22,.5);flex-direction:column}
+#m5-start .box{min-width:236px;padding:22px 26px;border-radius:16px;background:var(--panel);
+  border:1px solid var(--line);text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.14)}
+#m5-start .k{font-size:11px;letter-spacing:.26em;color:var(--muted)}
+#m5-start .n{margin-top:9px;font-size:19px;font-weight:600;letter-spacing:.08em}
+#m5-start .q{margin-top:9px;padding-top:9px;border-top:1px solid var(--line2);font-size:12px;color:var(--muted);letter-spacing:.06em}
+#m5-start .q b{font-size:17px;font-weight:600;color:var(--fg);margin-right:2px}
+#m5-result{background:var(--paper);align-items:stretch;flex-direction:column;padding:26px 20px 18px;overflow:auto}
+#m5-result .rh{text-align:center}
+#m5-result .rh .k{font-size:11px;letter-spacing:.28em;color:var(--muted)}
+#m5-result .rh .t{margin-top:8px;font-size:17px;font-weight:600;letter-spacing:.12em}
+#m5-result .rh .u{margin:9px auto 0;width:44px;height:1px;background:var(--line)}
+.rrow{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.rrow .k{font-size:11px;letter-spacing:.16em;color:var(--muted)}
+.rrow .v{margin-top:5px;display:flex;align-items:baseline;gap:6px}
+.rrow .v b{font-size:27px;font-weight:600;line-height:1;letter-spacing:.01em;font-family:var(--num)}
+.rrow .v s{text-decoration:none;font-size:12px;color:var(--muted)}
+.rrow.two{display:flex;gap:14px;align-items:flex-end}
+.rrow.two>div{flex:1}
+.rrow .rate b{color:var(--ok)}
+.rbar{height:4px;background:var(--line2);border-radius:2px;margin-top:10px;overflow:hidden}
+.rbar i{display:block;height:100%;width:100%;background:var(--ok);border-radius:2px;
+  transform:scaleX(0);transform-origin:left center}
+.rbtns{margin-top:auto;display:flex;flex-direction:column;gap:9px;padding-top:16px}
+.rbtns button{min-height:48px;border-radius:14px;border:1px solid var(--line);background:var(--panel);
+  color:var(--fg);font-family:inherit;font-size:13px;letter-spacing:.08em;cursor:pointer}
+.rbtns button.pri{background:var(--oktint);border-color:#d3e6dd;color:var(--okdeep)}
+/* 全問正解して周回が終わったときの主役＝「次の動画へ」 */
+.rbtns button.acc{background:var(--acc);border-color:var(--acc);color:#fff}
+/* 暗幕に blur は使わない（iOS Safari で全画面の filter/backdrop-filter はフェード中に重くなるため。
+   不透明度0.86の面だけで文字の可読性は足りる＝デモの3pxぼかしは移植しない） */
+#m5-closed{background:rgba(16,20,18,.86);flex-direction:column;z-index:46}
+#m5-closed .seal{position:relative;width:132px;height:132px;display:flex;align-items:center;justify-content:center}
+#m5-closed .ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(47,163,124,.55)}
+#m5-closed .glow{position:absolute;left:50%;top:50%;width:300px;height:300px;transform:translate(-50%,-50%);
+  border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.5),rgba(47,163,124,.24) 46%,rgba(200,162,74,.10) 68%,transparent 78%)}
+#m5-closed .disc{position:relative;width:104px;height:104px;border-radius:50%;background:var(--panel);
+  border:1px solid #d3e6dd;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(0,0,0,.16)}
+#m5-closed .disc svg{width:44px;height:44px;color:var(--okdeep)}
+#m5-closed .word{margin-top:20px;font-size:20px;font-weight:600;letter-spacing:.16em;color:#fff}
+#m5-closed .wline{margin-top:11px;width:120px;height:1px;background:rgba(255,255,255,.55);transform-origin:50% 50%}
+#m5-closed .catn{margin-top:11px;font-size:12px;letter-spacing:.14em;color:rgba(255,255,255,.78)}
+#m5-closed .tap{position:absolute;left:0;right:0;bottom:26px;text-align:center;font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.72)}
+.m5-launch{position:absolute;left:50%;bottom:300px;width:0;height:0;pointer-events:none}
+.m5-launch .p{position:absolute;left:0;top:0;animation:m5grav 1.05s cubic-bezier(.45,.02,.75,1) both}
+@keyframes m5grav{0%{transform:translateY(0)}18%{transform:translateY(-8px)}100%{transform:translateY(var(--fall))}}
+.m5-launch .dir{transform:rotate(var(--ang))}
+.m5-launch .up{display:block;animation:m5shoot .42s cubic-bezier(.05,.9,.25,1) both}
+@keyframes m5shoot{from{transform:translateY(0)}to{transform:translateY(calc(-1 * var(--d)))}}
+.m5-launch .pc{display:block;width:6px;height:11px;border-radius:1px;opacity:0;
+  animation:m5spin 1.05s linear both,m5in .08s both}
+.m5-launch .pc.thin{width:3px;height:13px;border-radius:3px}
+@keyframes m5in{to{opacity:1}}
+@keyframes m5spin{to{transform:rotate(var(--spin))}}
+@media (prefers-reduced-motion:reduce){.m5-launch{display:none}}
+
+/* =========================================================
+   M1 — 遷移の連続性（polish/M1_transition.md §2）
+   ========================================================= */
+#m1fx{position:absolute;left:0;top:0;width:100%;height:0;overflow:visible;z-index:35;pointer-events:none}
+.m1-ghost{position:absolute;left:0;top:0}
+.m1-ghost-bg{position:absolute;inset:0;transform-origin:0 0;background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.m1-g-out{position:absolute;display:flex;align-items:center;justify-content:center;
+  font-size:11px;line-height:1.3;color:var(--fg);text-align:center}
+.m1-g-in{position:absolute;inset:0;padding:14px 12px 0}
+
+@media (prefers-reduced-motion:reduce){
+  .viewin,.stag>*,.qin,.stagexp>*,.m3-heat.m3-in>*,.m4-bump,.m4-tile.m4-strong{animation:none}
+  .m3-bg,.m3-fg,.m3-veil,.m3-glow,.m3-hero{transition:none}
+}
+
+/* =========================================================
+   演出（preview_effect6.html と同一の設計）
+   参考＝ゲームUI演出の基本 https://gameanimation.info/archives/5603
+   入力確認 0.1〜0.2s ／ 画面遷移 0.25〜0.5s ／ 主役は1画面1つ ／ ループ演出なし
+   ========================================================= */
+
+/* ---- 入力確認：すべてのボタンに 0.12s のタップ反応 ---- */
+button,.btn,.cell,.tog,.cb,.tapline,.rst,.pass,.star{transition:transform .12s var(--eo)}
+button:active,.btn:active,.cell:active,.tog:active,.cb:active,.tapline:active,.rst:active,.pass:active{transform:scale(.96)}
+.tapfx{animation:tap .12s var(--eo)}
+@keyframes tap{0%{transform:scale(1)}45%{transform:scale(.93)}100%{transform:scale(1)}}
+
+/* ---- 画面遷移：0.28s のフェード＋10pxの上方向スライド（見た目だけ・操作は止めない） ---- */
+.viewin{animation:viewIn .28s var(--eo) both}
+@keyframes viewIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* タブ切替は横に12px（進む＝左から／戻る＝右から） */
+.viewin.fwd{animation:viewInFwd .28s var(--eo) both}
+.viewin.bwd{animation:viewInBwd .28s var(--eo) both}
+@keyframes viewInFwd{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+@keyframes viewInBwd{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+
+/* ---- 中の要素を段差で出す（40msずつ・8要素目以降は固定） ---- */
+.stag>*{animation:cardIn .28s var(--eo) both}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.stag>*:nth-child(1){animation-delay:0ms}
+.stag>*:nth-child(2){animation-delay:40ms}
+.stag>*:nth-child(3){animation-delay:80ms}
+.stag>*:nth-child(4){animation-delay:120ms}
+.stag>*:nth-child(5){animation-delay:160ms}
+.stag>*:nth-child(6){animation-delay:200ms}
+.stag>*:nth-child(7){animation-delay:240ms}
+.stag>*:nth-child(n+8){animation-delay:280ms}
+/* 出題カード・解説の段差（遅延は要素ごとにインラインで指定＝50msずつ） */
+.qin{animation:cardIn .28s var(--eo) both}
+/* 退場：上へ8pxフェードアウト（0.16s・Ease In）。入りと向きを揃える */
+.qout{animation:cardOut .16s var(--ei) both}
+@keyframes cardOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
+/* 解説ブロック・操作ブロックは1つの入れ物にまとめる（間隔は親と同じ11px） */
+.expwrap,.qctl{display:flex;flex-direction:column;gap:11px}
+/* 解説の段差：正誤の行→解説文→図表→誤答理由 の順に50msずつ */
+.stagexp>*{animation:cardIn .28s var(--eo) both}
+.stagexp>*:nth-child(1){animation-delay:0ms}
+.stagexp>*:nth-child(2){animation-delay:50ms}
+.stagexp>*:nth-child(3){animation-delay:100ms}
+.stagexp>*:nth-child(4){animation-delay:150ms}
+.stagexp>*:nth-child(n+5){animation-delay:200ms}
+
+/* ---- 連続正解（ヘッダー常時／高さを固定して回答時のズレを0にする） ---- */
+.hd .combow{min-width:0;height:22px;display:flex;align-items:center}
+/* 11pxへ上げてもヘッダーの高さ（.combow=22px固定）を超えないよう行間と余白で吸収する
+   ＝連続数が出ても問題文が1pxも動かないため */
+.combo{font-size:11px;font-weight:600;color:var(--chipfg);background:var(--chipbg);border-radius:20px;
+  padding:2px 9px;line-height:1.4;white-space:nowrap}
+.combo.hot{color:#7a5b0d;background:#fbf0d2;border:1px solid #e8d79a}
+.combo.broke{color:#a93226;background:#fdecea;animation:broke 1.2s both}
+@keyframes broke{0%,50%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(10px)}}
+
+/* ---- 彩度・明るさの変化だけ（座標は動かさない） ----
+   animation ではなく filter の transition で行う。こうすると画面遷移（viewIn）の
+   animation と competing せず、遷移中に回答しても問題文が1pxも動かない。 */
+#view,#tabs{transition:filter .3s var(--eo)}
+
+/* ---- 演出オーバーレイ（固定・非操作。#view の外に置くのでレイアウトに一切影響しない） ---- */
+#fx{position:fixed;inset:0;pointer-events:none;z-index:30;overflow:hidden}
+#fx[hidden]{display:none}
+.fx{position:absolute;inset:0;overflow:hidden}
+.fx .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+/* 消えは出現より必ず短く（出現0.30s／消失0.15s＝30fps換算 9f／4.5f） */
+.fx.out{animation:fadeAll .34s 1.5s both}          /* 節目＝フル（合計1.55s） */
+.fx.out.lite{animation:fadeAll .15s .3s both}      /* 毎問＝軽量（合計0.45s） */
+.fx.out.max{animation:fadeAll .34s 1.7s both}      /* 閉じた瞬間＝最大 */
+.fx.out.weak{animation:fadeAll .15s .45s both}     /* 設定「弱」 */
+.fx.bad.out.lite{animation:fadeAll .15s .35s both} /* 不正解・毎問（合計0.50s） */
+@keyframes fadeAll{to{opacity:0}}
+@keyframes fade{to{opacity:0}}
+.mark{position:relative;width:140px;height:140px}
+.mark svg{width:140px;height:140px;display:block}
+.mark path{fill:none;stroke-width:8.5;stroke-linecap:round;stroke-dasharray:130;stroke-dashoffset:130}
+.mark circle{fill:none;stroke-width:8.5;stroke-linecap:round;stroke-dasharray:98;stroke-dashoffset:98;
+  transform:rotate(-90deg);transform-origin:24px 24px}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* ---- 正解：予備0〜0.08s → 本動作0.08〜0.40s（一筆書き） → 余韻 ---- */
+.ok .mark{animation:anticip .08s ease-in both,cheer .42s .08s var(--back) both}
+@keyframes anticip{from{transform:scale(1)}to{transform:scale(.82)}}
+@keyframes cheer{0%{transform:scale(.82) translateY(4px)}
+                 55%{transform:scale(1.18) translateY(-13px)}
+                 100%{transform:scale(1.05) translateY(-6px)}}
+.ok .mark circle{stroke:var(--acc);animation:draw .3s .08s var(--eo) forwards}
+/* 毎問＝軽量：○の一筆書き0.30s（Ease Out）＋光だけ。予備動作・跳ね返り・紙吹雪は出さない */
+.ok.lite .mark{animation:none}
+.ok.lite .mark circle{animation:draw .3s var(--eo) forwards}
+.ok.lite .glow{width:250px;height:250px;animation:fade .3s .1s both}
+/* 薄い光の円は○マークの子要素（中心を必ず一致させる。画面基準に戻さない） */
+.ok .glow{position:absolute;left:50%;top:50%;width:340px;height:340px;transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(circle,rgba(47,163,124,.26),rgba(224,182,74,.10) 55%,transparent 72%);
+  animation:fade .7s .22s both}
+/* 補助＝紙吹雪：主役より0.14s遅らせる */
+.launch{position:absolute;left:50%;bottom:96px;width:0;height:0}
+.launch .p{position:absolute;left:0;top:0;animation:grav 1.55s var(--ei) both}
+@keyframes grav{0%{transform:translateY(0)}18%{transform:translateY(-8px)}100%{transform:translateY(var(--fall))}}
+.launch .dir{transform:rotate(var(--ang))}
+.launch .up{display:block;animation:shoot .5s cubic-bezier(.05,.9,.25,1) both}
+@keyframes shoot{from{transform:translateY(0)}to{transform:translateY(calc(-1 * var(--d)))}}
+.launch .pc{display:block;width:7px;height:12px;border-radius:1px;opacity:0;
+  animation:spin 1.55s linear both,confIn .08s both}
+.launch .pc.thin{width:3px;height:15px;border-radius:3px}
+@keyframes confIn{to{opacity:1}}
+@keyframes spin{to{transform:rotate(var(--spin))}}
+.ok .cmb{margin-top:14px;display:flex;align-items:baseline;gap:7px;animation:pop .26s .3s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.ok .cmb .n{font-size:66px;font-weight:600;color:var(--acc);line-height:1;font-family:var(--num)}
+.ok .cmb .t{font-size:15px;font-weight:600;color:var(--chipfg)}
+.ok .cmb.hot .n{color:var(--gold)}
+.ok .cmb.hot .t{color:#7a5b0d}
+.ok .word{margin-top:12px;font-size:22px;font-weight:600;color:var(--acc);letter-spacing:.06em;
+  animation:pop .24s .3s cubic-bezier(.2,1.6,.4,1) both}
+/* 軽量では文字を出さない（主役＝○だけ・0.5秒で次に進める） */
+.ok.lite .word,.ok.lite .cmb{display:none}
+/* 閉じた瞬間＝最大：白く飛ぶ光・数字を巨大化・確定表示 */
+.ok.max .glow{background:radial-gradient(circle,rgba(255,255,255,.62),rgba(47,163,124,.30) 44%,rgba(224,182,74,.14) 68%,transparent 78%)}
+.ok.max .cmb .n{font-size:78px}
+.ok .fixed{margin-top:10px;text-align:center;animation:pop .26s .55s cubic-bezier(.2,1.6,.4,1) both}
+.ok .fixed .t1{font-size:19px;font-weight:600;color:var(--acc);letter-spacing:.04em}
+.ok .fixed .t2{font-size:12.5px;color:#54605a;margin-top:3px}
+
+/* ---- 不正解：円形の要素は一切使わない ---- */
+.bad .mark{animation:hold .09s var(--eo) both,drop 1.05s .37s var(--ei) both}
+.fx.weak.bad .mark{animation:hold .09s var(--eo) both}
+/* 不正解・毎問＝彩度が落ちる＋×が落ちるだけ（0.5s／雨・破片・暗さは出さない） */
+.bad.lite .mark{animation:hold .06s var(--eo) both,dropLite .2s .3s var(--ei) both}
+.bad.lite .mark path{animation:draw .2s .06s var(--eo) forwards}
+.bad.lite .mark path.p2{animation-delay:.18s}
+.bad.lite .word,.bad.lite .lost{display:none}
+@keyframes dropLite{0%{transform:translateY(-5px) rotate(0);opacity:1}
+                    100%{transform:translateY(34px) rotate(-6deg);opacity:.2}}
+@keyframes hold{from{transform:translateY(0)}to{transform:translateY(-5px)}}
+@keyframes drop{0%{transform:translateY(-5px) rotate(0);opacity:1}
+                100%{transform:translateY(70px) rotate(-9deg);opacity:.15}}
+.bad .mark path{stroke:#c25046;animation:draw .26s .09s var(--eo) forwards}
+.bad .mark path.p2{animation-delay:.24s}
+.bad .shade{position:absolute;left:0;right:0;top:0;height:0;
+  background:linear-gradient(rgba(88,94,91,.32),rgba(88,94,91,0));animation:shade 1.15s var(--eo) both}
+@keyframes shade{0%{height:0;opacity:1}12%{height:0;opacity:1}55%{height:100%;opacity:1}100%{height:100%;opacity:0}}
+.bad .rain{position:absolute;inset:0}
+.bad .rain i{position:absolute;top:-16px;width:2px;height:17px;border-radius:2px;background:#a3aaa6;opacity:0;
+  animation:rain 1.2s linear both}
+@keyframes rain{0%{opacity:0;transform:translateY(0)}12%{opacity:.78}100%{opacity:0;transform:translateY(600px)}}
+.bad .deb{position:absolute;left:50%;top:44%}
+.bad .deb i{position:absolute;width:6px;height:6px;background:#c9827c;border-radius:1px;opacity:0;
+  animation:debris 1.05s .4s var(--ei) both}
+@keyframes debris{0%{opacity:0;transform:translate(0,0) rotate(0)}18%{opacity:.85}
+                  100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(var(--spin))}}
+.bad .word{margin-top:14px;font-size:20px;font-weight:600;color:#a93226;animation:sag .5s .3s var(--eo) both}
+@keyframes sag{0%{transform:translateY(-9px);opacity:0}60%{transform:translateY(2px);opacity:1}100%{transform:translateY(0);opacity:1}}
+.bad .lost{margin-top:6px;font-size:12.5px;color:var(--muted);animation:lostDrop 1s .5s var(--ei) both}
+@keyframes lostDrop{0%{opacity:0;transform:translateY(-4px)}22%{opacity:1;transform:translateY(0)}100%{opacity:.3;transform:translateY(14px)}}
+.bad .lost s{color:#a93226}
+/* =========================================================================
+   M6 — 手で触る層（移植元＝polish/M6_feel2.html ／ 手順書＝polish/M6_feel2.md）
+   接頭辞＝CSS m6- ／ JS m6・M6。既存の m1〜m5 とは衝突しない。
+   イージングは既存の4種（--eo/--ei/--eio/--back）だけを使い、1つも増やさない（尺だけ足す）。
+   使わないもの（iOS 26.6 の未修正バグ・SPEC §5-3）：<dialog>／Popover API／View Transitions／
+   animation-timeline:view()／100vh／filter:blur／振動／animation-iteration-count:infinite。
+   ========================================================================= */
+:root{
+  --d-sheet-in:320ms; --d-sheet-out:240ms;
+  --d-move:320ms; --d-in:280ms; --d-out:200ms;
+  --d-fill:400ms; --d-roll:400ms;
+  --d-tab:300ms; --d-tab-out:150ms;
+  --d-pop:200ms; --stag:40ms;
+}
+
+/* ---- 1. シート（既存の #modal / .sheet を作り替える。新設しない） ---- */
+#modal{opacity:0;will-change:opacity}
+.sheet{transform:translate3d(0,100%,0);will-change:transform;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.m6-handle{height:22px;display:flex;align-items:center;justify-content:center}
+.m6-handle i{display:block;width:36px;height:4px;border-radius:2px;background:var(--line)}
+/* 上端の影＝シート内スクロールの手掛かり。スクローラ（.sheet）の内側に sticky で置く。 */
+.m6-shadow{position:sticky;top:0;z-index:3;height:6px;margin:0 -14px -6px;opacity:0;pointer-events:none;
+  background:linear-gradient(rgba(29,33,31,.10),rgba(29,33,31,0))}
+@keyframes m6shadow{from{opacity:0}to{opacity:1}}
+/* ④スクロール駆動（compositor化は Safari 26.4+）。内部スクローラ基準の scroll(nearest) だけ。
+   view()（ビューポート基準）は使わない＝アドレスバー変形でアニメが飛び戻る未修正バグ 310210。 */
+@supports (animation-timeline: scroll(nearest)){
+  .m6-shadow{animation-name:m6shadow;animation-duration:auto;animation-timing-function:linear;
+    animation-fill-mode:both;animation-timeline:scroll(nearest);animation-range:0px 48px}
+}
+
+/* ---- 2. 進捗の塗りは width をやめて transform:scaleX（レイアウトを起こさない） ---- */
+.bar3>i,.track>i,.vrow .fill{width:100%;transform:scaleX(0);transform-origin:left center;will-change:transform}
+
+/* ---- 3. スケルトン（初回の待ちにだけ。明滅は 0.9秒×2＝1.8秒で必ず止まる） ---- */
+#m6boot{position:absolute;left:0;right:0;top:0;max-width:520px;margin:0 auto;z-index:1;pointer-events:none}
+.m6-skel{display:flex;align-items:center;gap:9px}
+.m6-sk{background:#eceee9;border-radius:4px;display:block;flex:0 0 auto}
+.m6-sk.t{flex:1 1 auto}
+@keyframes m6skel{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
+/* ショートハンドに var() を混ぜない（longhand が読めず安全基準の自動走査ができなくなる） */
+.m6-skel.on .m6-sk{animation-name:m6skel;animation-duration:900ms;
+  animation-timing-function:var(--eio);animation-iteration-count:2;animation-fill-mode:both}
+
+/* ---- 4. 数字の桁ロール（幅は tabular-nums ＋ 1ch 固定＋空白で右詰め＝絶対に揺れない） ---- */
+.m6-roll{display:inline-flex;align-items:flex-start;overflow:hidden;vertical-align:bottom;
+  height:var(--rh,18px);line-height:var(--rh,18px);
+  font-family:var(--num);font-variant-numeric:tabular-nums}
+/* overflow:hidden の箱はベースラインが下端になる＝隣の単位は vertical-align:bottom と
+   line-height を桁の高さに合わせて揃える（合わせないと単位だけ数pxずれる） */
+.m6-col{position:relative;width:1ch;height:var(--rh,18px);overflow:hidden;text-align:center;flex:0 0 auto}
+.m6-strip{display:block;will-change:transform;transform:translate3d(0,0,0)}
+.m6-strip span{display:block;height:var(--rh,18px)}
+
+/* ---- 5. タブアイコン（下線を実要素にして transform で伸ばす） ---- */
+#tabs button.on::after{background:transparent}   /* 高さ2pxの場所は残して色だけ止める＝配置は不変 */
+#tabs button{position:relative}
+.m6-uline{position:absolute;left:50%;bottom:8px;width:22px;height:2px;margin-left:-11px;border-radius:1px;
+  background:var(--acc);transform:scaleX(0);transform-origin:50% 50%;opacity:0}
+
+/* ---- 6. 長押しのプレビュー ---- */
+[data-m6pv]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.m6-pop{position:absolute;z-index:7;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:11px 13px;box-shadow:0 6px 22px rgba(29,33,31,.10);
+  transform:translate3d(0,0,0) scale(.96);opacity:0;visibility:hidden;will-change:transform,opacity}
+.m6-pop.on{visibility:visible}
+.m6-pk{font-family:var(--num);font-size:10px;letter-spacing:.06em;color:var(--muted)}
+.m6-ptxt{margin-top:7px;font-size:12px;line-height:1.9;color:var(--fg)}
+.m6-stxt{font-size:12.5px;line-height:1.95}
+
+/* ---- 7. iOS 26.6 で使える手（すべて @supports で囲む＝未対応でも表示は崩れない） ---- */
+/* ①長く読む面の折り返し（Safari 26.0+）。本文（.lead .exp .card）には既に入っているので重複させない */
+@supports (text-wrap: pretty){
+  .m6-ptxt,.m6-stxt{text-wrap:pretty}
+}
+/* ②長い一覧の画面外を描画しない（iOS 18.0+）。高さは実測どおり36pxで宣言する */
+@supports (content-visibility: auto){
+  .vlist .vrow{content-visibility:auto;contain-intrinsic-size:auto 36px}
+}
+/* ③章の開閉をCSSだけで（::details-content=18.4+／2回目以降も入場が出るのは26.4+）。
+   高さは動かさない（layout を起こす）。中身のフェード＋4pxだけ。 */
+details.m6-det{border-bottom:1px solid var(--line)}
+details.m6-det>summary{display:flex;align-items:center;gap:9px;min-height:46px;padding:6px 0;
+  list-style:none;cursor:pointer}
+details.m6-det>summary::-webkit-details-marker{display:none}
+details.m6-det:last-child{border-bottom:0}
+details.m6-det>summary .nm{flex:1;font-size:13px;line-height:1.5;min-width:0;overflow-wrap:anywhere}
+.m6-mk{flex:0 0 auto;color:var(--muted);display:flex;align-items:center;
+  transition:transform var(--d-tab) var(--eio)}
+details.m6-det[open]>summary .m6-mk{transform:rotate(90deg)}
+.m6-dtxt{padding:2px 0 10px 4px}
+@supports selector(::details-content){
+  details.m6-det::details-content{opacity:0;transform:translate3d(0,-4px,0);content-visibility:hidden;
+    transition:opacity var(--d-in) var(--eo),transform var(--d-in) var(--eo),
+               content-visibility var(--d-in) allow-discrete}
+  details.m6-det[open]::details-content{opacity:1;transform:translate3d(0,0,0);content-visibility:visible}
+  @starting-style{
+    details.m6-det[open]::details-content{opacity:0;transform:translate3d(0,-4px,0)}
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:1ms!important;animation-delay:0ms!important;
+    transition-duration:1ms!important;transition-delay:0ms!important}
+  /* スクロール駆動は「スクロール位置＝進捗」。1msに潰すと少し動かすだけで満タンになり
+     進捗の意味が失われるので、ここだけ auto に戻す */
+  @supports (animation-timeline: scroll(nearest)){
+    .m6-shadow{animation-duration:auto!important}
+  }
+  /* ::details-content のような擬似要素は * / *::before / *::after では拾えないので個別に書く */
+  @supports selector(::details-content){
+    details.m6-det::details-content{transition-duration:1ms!important}
+  }
+}
+
+/* データ読み込み画面（初回だけ） */
+#importer{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;
+          align-items:center;justify-content:center;padding:24px}
+#importer .impbox{max-width:340px;width:100%}
+#importer .imptitle{font-size:17px;font-weight:600;margin-bottom:10px}
+#importer .impnote{font-size:13px;line-height:1.9;color:var(--muted);margin:0 0 18px}
+#importer .impbtn{display:block;text-align:center;background:var(--fg);color:#fff;
+                  border-radius:var(--btnradius);padding:14px 0;font-size:14px;font-weight:500}
+#importer .impstat{font-size:12px;color:var(--muted);margin-top:12px;min-height:18px;text-align:center}
+
+</style>
+</head>
+<body>
+<!-- M3：3層（背景0.3倍／明度低下の面／前景1.15倍）。操作は透過する -->
+<div class="m3-bg" id="m3bg"><span class="m3-grid"></span><b class="b1"></b><b class="b2"></b><b class="b3"></b></div>
+<div class="m3-veil" id="m3veil"></div>
+<div id="view"></div>
+<!-- M6：初回のスケルトン。単一HTML（宅建.html）はデータが十数MBあるため、body を描いてから
+     JS が動き出すまでに実際の待ちがある。その間だけ見えている静的な骨組み。
+     明滅は 0.9秒×2＝1.8秒で止まる（infinite にしない）。最初の render() でクロスフェードして消える。 -->
+<div id="m6boot" class="pad" aria-hidden="true">
+  <div class="m6-skel on" style="margin:2px 0 12px">
+    <i class="m6-sk t" style="height:26px;max-width:132px"></i>
+    <i class="m6-sk" style="width:58px;height:13px"></i></div>
+  <div class="panel">
+    <div class="m6-skel on"><i class="m6-sk t" style="height:13px;max-width:38%"></i>
+      <i class="m6-sk" style="width:44px;height:13px"></i></div>
+    <div class="m6-skel on" style="margin-top:13px"><i class="m6-sk t" style="height:11px;max-width:64%"></i></div>
+  </div>
+  <div class="panel">
+    <div class="m6-skel on"><i class="m6-sk t" style="height:13px;max-width:46%"></i>
+      <i class="m6-sk" style="width:36px;height:13px"></i></div>
+    <div class="m6-skel on" style="margin-top:13px"><i class="m6-sk t" style="height:11px;max-width:52%"></i></div>
+    <div class="m6-skel on" style="margin-top:13px"><i class="m6-sk t" style="height:11px;max-width:70%"></i></div>
+  </div>
+  <div class="panel">
+    <div class="m6-skel on"><i class="m6-sk t" style="height:13px;max-width:30%"></i></div>
+    <div class="m6-skel on" style="margin-top:13px"><i class="m6-sk t" style="height:11px;max-width:58%"></i></div>
+  </div>
+</div>
+<div class="m3-fg" id="m3fg" aria-hidden="true"><span class="glare"></span></div>
+<nav id="tabs"></nav>
+<!-- 演出オーバーレイ。#view の外に置く（＝彩度変化のフィルタ対象外・レイアウトに影響しない） -->
+<div id="fx" hidden></div>
+<!-- M1：遷移の連続性（FLIP）用のオーバーレイ。position:fixed は使わずドキュメント座標で置く -->
+<div id="m1fx"></div>
+<div id="modal" hidden></div>
+
+<!-- M5：起動・開始・完走・分野を閉じた（タブまで覆う。タップで即スキップ） -->
+<div class="m5-ov" id="m5-intro" hidden>
+  <div class="line" id="i-line"></div>
+  <div class="mask"><b id="i-name">宅建 一問一答</b></div>
+  <div class="cap" id="i-cap">ICHIMON ICHITOU</div>
+</div>
+<div class="m5-ov" id="m5-start" hidden>
+  <div class="box" id="s-box">
+    <div class="k">SESSION</div>
+    <div class="n" id="s-label">—</div>
+    <div class="q"><b class="num" id="s-n">0</b>問</div>
+  </div>
+</div>
+<div class="m5-ov" id="m5-result" hidden>
+  <div class="rh" id="r-head">
+    <div class="k" id="r-kind">COMPLETE</div>
+    <div class="t" id="r-title">この範囲を解き終えました</div>
+    <div class="u"></div>
+  </div>
+  <div class="rrow two" id="r-1">
+    <div><div class="k">正解</div><div class="v"><b class="num" id="r-right">0</b><s class="num" id="r-total">／ 0問</s></div></div>
+    <div class="rate"><div class="k">正解率</div><div class="v"><b class="num" id="r-rate">0.0</b><s>%</s></div></div>
+  </div>
+  <div class="rrow" id="r-2"><div class="k">連続正解の最高記録</div>
+    <div class="v"><b class="num" id="r-best">0</b><s>連続</s></div></div>
+  <div class="rrow" id="r-3"><div class="k">かかった時間</div>
+    <div class="v"><b class="num" id="r-time">0:00</b><s class="num" id="r-per">／ 1問あたり 0.0秒</s></div></div>
+  <div class="rrow" id="r-4"><div class="k" id="r-catk">達成度</div>
+    <div class="v"><b class="num" id="r-cat">0</b><s class="num" id="r-catfrom">%　／ 開始 0%</s></div>
+    <div class="rbar"><i id="r-catbar"></i></div></div>
+  <div class="rrow" id="r-5"><div class="k">新しく卒業した問題</div>
+    <div class="v"><b class="num" id="r-grad">0</b><s>問（通常出題から外れました）</s></div></div>
+  <!-- 全問正解のときは「もう一度この範囲を解く」を出さない（2026-08-14 本人指摘）。
+       間違いが残っていれば「間違えた N問を解く」が主役で、0になるまで周回する。
+       「ホームへ戻る」は下部タブがあるので置かない。 -->
+  <div class="rbtns" id="r-btns">
+    <button class="pri" type="button" data-act="round" id="r-round" hidden>間違えた問題を解く</button>
+    <button class="acc" type="button" data-act="nextvid" id="r-next" hidden>次の動画へ</button>
+    <button class="pri" type="button" data-act="again" id="r-again" hidden>もう一度この範囲を解く</button>
+    <button type="button" data-act="tab" data-v="fields">別の分野を選ぶ</button>
+  </div>
+</div>
+<div class="m5-ov" id="m5-closed" hidden>
+  <div class="seal" id="c-seal">
+    <div class="glow" id="c-glow"></div>
+    <div class="ring" id="c-ring"></div>
+    <div class="disc" id="c-disc">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.6l4.2 4.2L19 7"/>
+      </svg>
+    </div>
+  </div>
+  <div class="word" id="c-word">この分野を閉じた</div>
+  <div class="wline" id="c-line"></div>
+  <div class="catn" id="c-cat">—</div>
+  <div class="tap" id="c-tap">タップで続ける</div>
+</div>
+
+<!-- 本番データ（別担当が生成）。存在しない場合はブラウザが無視するだけで、fetchは一切使わない。 -->
+<!-- あこ課長の動画の通し番号（need_seq の基準）。data/curriculum.json を
+     window.TAKKEN_CURRICULUM に入れたもの。無い場合は chapters.js の seq を見る。 -->
+<!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
+
+
+<div id="importer" hidden>
+  <div class="impbox">
+    <div class="imptitle">問題データを読み込む</div>
+    <p class="impnote">
+      問題と解説はこのアプリには入っていません。<br>
+      端末に保存した <b>takken_data.json</b> を選んでください。<br>
+      一度読み込めば、次からは自動で開きます。
+    </p>
+    <label class="impbtn" for="impfile">ファイルを選ぶ</label>
+    <input id="impfile" type="file" accept="application/json,.json" hidden>
+    <div class="impstat" id="impstat"></div>
+  </div>
+</div>
+<script>
+/* ---------- データの読み込み（IndexedDB） ----------
+   殻には問題を持たせない。端末に置いた takken_data.json を一度だけ読み、
+   IndexedDB に入れる。以後はオフラインでもここから起動する。
+   #import を付けて開くと入れ直しの画面を出す。 */
+(function(){
+  var DB='takken-data', STORE='blob', KEY='v1', VER='22bfc53e';
+  var $=function(id){return document.getElementById(id)};
+
+  function idb(){return new Promise(function(res,rej){
+    var r=indexedDB.open(DB,1);
+    r.onupgradeneeded=function(){var d=r.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE)};
+    r.onsuccess=function(){res(r.result)};
+    r.onerror=function(){rej(r.error)};
+  })}
+  function get(){return idb().then(function(d){return new Promise(function(res,rej){
+    var t=d.transaction(STORE,'readonly').objectStore(STORE).get(KEY);
+    t.onsuccess=function(){res(t.result||null)};t.onerror=function(){rej(t.error)};
+  })})}
+  function put(v){return idb().then(function(d){return new Promise(function(res,rej){
+    var t=d.transaction(STORE,'readwrite');
+    t.objectStore(STORE).put(v,KEY);
+    t.oncomplete=function(){res(true)};t.onerror=function(){rej(t.error)};
+  })})}
+
+  function apply(d){
+    window.TAKKEN_ITEMS=d.items||[];
+    window.TAKKEN_CHAPTERS=d.chapters||{};
+    window.TAKKEN_CURRICULUM=d.curriculum||null;
+    window.TAKKEN_FIGS=d.figs||{};
+  }
+  /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
+     console に出すだけで画面には出さない（引き算の原則）。 */
+  window.TAKKEN_BOOT={t0:Math.round(performance.now())};
+  function boot(){
+    var T=window.TAKKEN_BOOT; T.data=Math.round(performance.now());
+    var im=$('importer'); if(im&&im.parentNode)im.parentNode.removeChild(im);
+    var s=document.createElement('script');
+    s.src='app.js?v='+VER;
+    s.onload=function(){T.ready=Math.round(performance.now());
+      T.n=(window.TAKKEN_ITEMS||[]).length;
+      try{console.log('起動 '+T.ready+'ms（データ '+T.data+'ms・'+T.n+'問）')}catch(e){}};
+    document.body.appendChild(s);
+  }
+  function ask(msg){
+    var im=$('importer'); im.hidden=false;
+    var b=$('m6boot'); if(b)b.style.display='none';
+    if(msg)$('impstat').textContent=msg;
+    $('impfile').onchange=function(e){
+      var f=e.target.files&&e.target.files[0]; if(!f)return;
+      $('impstat').textContent='読み込み中…（'+(f.size/1048576).toFixed(1)+'MB）';
+      var done=function(text){
+        var d;
+        try{d=JSON.parse(text)}catch(err){$('impstat').textContent='このファイルは読めません（JSONではありません）';return}
+        if(!d||!d.items||!d.items.length){$('impstat').textContent='問題が入っていないファイルです';return}
+        var n=d.items.length;
+        put(d).then(function(){apply(d);$('impstat').textContent=n+'問を保存しました';setTimeout(boot,150)})
+              .catch(function(err){$('impstat').textContent='保存できませんでした（'+(err&&err.name||'不明')+'）'});
+      };
+      if(f.text)f.text().then(done,function(){$('impstat').textContent='ファイルを開けません'});
+      else{var r=new FileReader();r.onload=function(){done(r.result)};
+           r.onerror=function(){$('impstat').textContent='ファイルを開けません'};r.readAsText(f)}
+    };
+  }
+
+  var force=(location.hash||'').indexOf('import')>=0;
+  get().then(function(d){
+    if(d&&d.items&&d.items.length&&!force){apply(d);boot()}
+    else ask(force?'入れ直します。ファイルを選んでください。':'');
+  }).catch(function(){ ask('この端末では保存領域が使えません。ホーム画面に追加してから開いてください。') });
+
+  /* オフラインで起動できるようにする（殻だけキャッシュ。データは上のIndexedDB） */
+  if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost'))
+    addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+})();
+</script>
+
+</body>
+</html>

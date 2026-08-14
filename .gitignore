@@ -1,0 +1,8 @@
+# 問題・解説・図表は絶対に置かない。ここに JSON が入ることはない。
+*.json
+!*.webmanifest
+takken_data*
+_test*
+figs/
+data/
+*.pdf
