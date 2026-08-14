@@ -747,22 +747,30 @@ function applyWhy(id,reason){
 }
 
 /* ---------- 重症・閉じる ---------- */
-function severeItem(id){var r=R(id);return !!r&&(r.ng||0)>=3}
+/* 重症の基準（2026-08-14 見直し）。旧＝「誤答3回」または「同じ章で2問ミス」だったが、
+   1小分類は平均108問あるので、2問ミス（1.9%）で章ごと重症になり広すぎた。
+   ・問題：誤答3回以上で、かつ直近が正解していない（正解が続けば重症から外れる）
+   ・章　：5問以上解いたうえで誤答した問題が35%以上、または重症の問題が2つ以上 */
+function severeItem(id){var r=R(id);return !!r&&(r.ng||0)>=3&&(r.streak||0)===0}
+var SEV_MIN=5,SEV_RATE=0.35,SEV_HARD=2;
 function severeTopics(){
   var m={},out=[];
   ITEMS.forEach(function(it){
-    var r=R(it.id);if(!r||!(r.ng>0))return;
+    var r=R(it.id);if(!r||att(r)===0)return;
     var k=it.cat+'|:|'+(it.topic||'未分類');
-    (m[k]=m[k]||[]).push(it.id);
+    var o=m[k]||(m[k]={att:0,ids:[],ng:0,hard:0});
+    o.att++;
+    if((r.ng||0)>0){o.ids.push(it.id);o.ng+=r.ng||0}
+    if(severeItem(it.id))o.hard++;
   });
   Object.keys(m).forEach(function(k){
-    var ids=m[k],hard=ids.filter(severeItem);
-    if(ids.length>=2||hard.length>=1){
+    var o=m[k],rate=o.att?o.ids.length/o.att:0;
+    if((o.att>=SEV_MIN&&rate>=SEV_RATE)||o.hard>=SEV_HARD){
       var p=k.split('|:|');
-      out.push({cat:p[0],topic:p[1],ids:ids,hard:hard.length,ng:ids.reduce(function(a,i){return a+(R(i).ng||0)},0)});
+      out.push({cat:p[0],topic:p[1],ids:o.ids,hard:o.hard,ng:o.ng,att:o.att,rate:rate});
     }
   });
-  out.sort(function(a,b){return b.ng-a.ng});return out;
+  out.sort(function(a,b){return (b.rate-a.rate)||(b.ng-a.ng)});return out;
 }
 /* 「閉じる」＝未出題ゼロ／全肢が2回目以降の正解（ok>=2）／直近が連続正解（streak>=2） */
 function closed(cat){
@@ -2000,12 +2008,12 @@ function vReview(){
   h+='</div>';
 
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
-  if(!sev.length)h+='<div class="mini">誤答3回以上、または同じ章で2問以上ミスした章が出ます。今はありません。</div>';
+  if(!sev.length)h+='<div class="mini">5問以上解いて誤答が35%以上の章、または誤答3回の問題が2つ以上ある章が出ます。今はありません。</div>';
   sev.forEach(function(x){
     var ch=chapsOf(x.cat).filter(function(cc){return cc.topic===x.topic})[0];
     /* 長押し＝その章で間違えた問題の出典と解説の先読み（押している間だけ） */
     var pit=BY[x.ids[0]],pv=pit?(srcLabel(pit)+'|'+String(pit.exp||pit.stem||'').slice(0,70)):'';
-    h+='<div class="li"'+(pv?' data-m6pv="'+esc(pv)+'"':'')+'><div class="nm"><b>'+esc(x.topic)+'</b><div class="mini">'+esc(x.cat)+' ／ '+x.ids.length+'問ミス ／ 誤答'+x.ng+'回 — この章は動画に戻る</div></div>'
+    h+='<div class="li"'+(pv?' data-m6pv="'+esc(pv)+'"':'')+'><div class="nm"><b>'+esc(x.topic)+'</b><div class="mini">'+esc(x.cat)+' ／ '+x.ids.length+' / '+x.att+'問ミス（'+Math.round(x.rate*100)+'%） ／ 誤答'+x.ng+'回 — この章は動画に戻る</div></div>'
       +(ch?'<a class="btn sm" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
         +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.play+mmss(ch.sec)+' から</a>':'')
       +'<button class="btn sm" data-act="startTopic" data-c="'+esc(x.cat)+'" data-t="'+esc(x.topic)+'">解く</button></div>';
@@ -2446,8 +2454,8 @@ function doAnswer(userOx){
     }
     ev.topicDone=(!doneBefore&&sibs.every(function(x){return att(R(x.id))>0}));
   }else{
-    var ngSibs=sibs.filter(function(x){var rr=R(x.id);return rr&&(rr.ng||0)>0}).length;
-    ev.severe=((r.ng||0)>=3)||ngSibs>=2;   /* SPEC §3 の重症判定と同じ条件 */
+    /* 演出の「重症」も判定と揃える。同じ章で2問ミスした程度で暗い演出は出さない。 */
+    ev.severe=severeItem(id);
   }
   FXST.cat=it.cat;
   S.tier=pickTier(id,S.res.ok,ev);S.ev=ev;
