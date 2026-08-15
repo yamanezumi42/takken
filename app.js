@@ -40,6 +40,50 @@ var PASS_LINE=35;                   /* 合格ラインの目安 */
 /* 本試験の出題数（計50） */
 var BIGQ={'権利関係':14,'法令上の制限':8,'宅地建物取引業法等':20,'税に関する法令':2,
           '不動産価格の評定':1,'土地・建物その他の需給':5};
+/* ---------- 本試験の実測配点（単元＝小分類ごとの1年あたりの出題数・合計 50.00） ----------
+   出どころ＝data/weights.json（配点担当が過去問の出典年・問番号から数え、検算済み）。
+   直近10年（2016〜2025）ぶん。ファイルを読みに行かずJSの定数として持つ＝
+   データを入れ直さなくても効くようにするため（問題文・解説は含まない数値表なので公開してよい）。
+   使い道は2つだけ：①分析の得点予測 scoreNow() ②単元一覧の「毎年N問」。
+   同じ表から出すので、2箇所で違う数字にならない。
+
+   ★1単元だけ実測を直している：「不動産の需給・統計」＝実測 0.09問 → 1.00問。
+     理由＝統計（本試験の問48）は毎年数字が変わるため過去問集にほぼ収録されておらず、
+     手元のデータでは直近12回のうち11回で欠落している。本試験では毎年必ず1問出るので、
+     0.09 のまま出すと「統計はやらなくていい」と読めてしまう＝データの都合を実力の判断に
+     持ち込むことになる。上げたぶん（0.91問）は残り48単元を 49.0/49.9148 倍して按分し、
+     合計は 50.00 のまま保っている（丸めの端数は残差の大きい単元で±0.01調整・検算済み）。 */
+var CATQ={
+  /* 宅地建物取引業法等 計 20.07問 */
+  '業務上の規制':3.60,'35条書面':2.84,'宅地建物取引業・免許':2.17,'8種制限':2.17,'37条書面':2.09,
+  '宅地建物取引士':1.42,'媒介契約':1.34,'報酬関連':1.09,'住宅瑕疵担保責任履行法':1.00,'営業保証金':0.92,
+  '保証協会':0.84,'監督処分・罰則':0.59,
+  /* 権利関係 計 13.88問 */
+  '家族法（親族・相続）':1.34,'所有権・共有・占有権・用益物権':1.26,'債権総則（保証・連帯債務など）':1.25,
+  '売買契約':1.25,'借地借家法（土地）':1.00,'借地借家法（建物）':1.00,'区分所有法':1.00,'不動産登記法':1.00,
+  '賃貸借契約':0.92,'担保物権（抵当権など）':0.75,'条件・期間・時効':0.67,'その他の契約':0.59,
+  '制限行為能力者':0.42,'意思表示':0.42,'代理':0.42,'不法行為・事務管理':0.42,'条文問題・その他':0.17,
+  /* 法令上の制限 計 8.02問 */
+  '都市計画法':2.01,'建築基準法':2.01,'農地法':1.00,'土地区画整理法':1.00,'盛土規制法':1.00,
+  '国土利用計画法':0.92,'その他の法令':0.08,
+  /* 土地・建物その他の需給 計 5.00問（★統計を1.00に直してある） */
+  '住宅金融支援機構法':1.00,'不当景品類及び不当表示防止法':1.00,'不動産の需給・統計':1.00,
+  '土地の形質・地積・地目及び種別':1.00,'建物の形質・構造及び種別':1.00,
+  /* 税に関する法令 計 2.02問 */
+  '不動産取得税':0.50,'固定資産税':0.50,'所得税':0.34,'印紙税':0.34,'登録免許税':0.34,'贈与税':0.00,
+  /* 不動産価格の評定 計 1.01問 */
+  '不動産鑑定評価基準':0.59,'地価公示法':0.42};
+/* 配点表の検算。合計が50.00でない／問題データに無い単元名がある、を起動時に console へ出す。
+   （数字が不自然なら検算する＝TEAM.md の決めごと。目で足し算しない） */
+function catqCheck(){
+  var s=0,ks=Object.keys(CATQ);ks.forEach(function(k){s+=CATQ[k]});
+  s=Math.round(s*100)/100;
+  var miss=CATS.filter(function(c){return CATQ[c]===undefined});
+  var extra=ks.filter(function(k){return CINFO[k]===undefined});
+  var o={sum:s,cats:ks.length,itemCats:CATS.length,missing:miss,unknown:extra};
+  if(s!==50||miss.length||extra.length)console.warn('CATQ 検算 NG',o);else console.log('CATQ 検算 OK',o);
+  return o;
+}
 
 /* ---------- アイコン（自作SVG・ICOOON MONO風／絵文字は使わない） ---------- */
 function svg(p,w){return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(w||1.6)+'" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'}
@@ -68,6 +112,8 @@ var IC={
  again:svg('<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.5V7h-3.5"/>'),
  chart:svg('<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 20v-6"/><path d="M13 20V9"/><path d="M18 20v-9"/>'),
  star:svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/>'),
+ /* 汎用の再生。2026-08-15 に動画の導線は全部 IC.yt（YouTubeのマーク）へ移したので今は未使用。
+    動画以外の「再生」が出てきたとき用に残す。 */
  play:svg('<circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.6l5 3.4-5 3.4z"/>'),
  check:svg('<path d="M4.5 12.5l4.5 4.5L19.5 6.5"/>',2),
  chev:svg('<path d="M9 5l7 7-7 7"/>'),
@@ -79,6 +125,18 @@ var IC={
  clock:svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
  lock:svg('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>')
 };
+/* YouTube を開くボタン・リンク用。線画の自作近似ではなく、YouTube のマークそのものの形を使う
+   （出典：Simple Icons の youtube.svg／viewBox 0 0 24 24。輪郭・角の曲率・三角の位置と大きさは原寸のまま）。
+   色だけ currentColor の単色にしてある＝配色1〜9に追従させるため（本来のブランド規約の赤ではない）。
+   塗りのマークは線画より重く見えるので、中心から0.72倍に縮めて置く。実測（72pxに描いて画素を数えた）：
+   既存の線画アイコン＝幅18前後・塗り面積21〜23%／このマーク＝原寸で幅24・面積64%、0.72倍で幅17.3・面積33.5%。
+   三角は同じパスの2つ目のサブパスで、塗り規則（nonzero）により背景色に抜ける＝実際のマークと同じ見え方。 */
+IC.yt='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">'
+  +'<g transform="translate(3.36,3.36) scale(0.72)"><path fill="currentColor" d="'
+  +'M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505'
+  +'A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136'
+  +'c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136'
+  +'C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></g></svg>';
 
 /* ---------- 大分類・小分類・章の索引 ---------- */
 var BIGS=[],CATS=[],CINFO={};
@@ -275,11 +333,19 @@ function seqCap(vid){
    設定「未習の範囲も出す」がオンなら制限しない。 */
 /* 出題してよい範囲かどうか。判定は unseenItems / newQueue と同じ＝
    「その科目の動画を見たか」。動画から入ったときはその動画の科目も含める。 */
-function inRange(it,cap){
-  if(ST.settings&&ST.settings.ahead)return true;
+/* いま解禁されている大分類の集合を1つ作る（見た動画＋いま基準にしている動画・科目）。
+   問題1件ごとに作り直すと、視聴キー×全動画168本の線形走査が積み上がって
+   全範囲5,294問で約4,400万回の比較になり、iPhoneが数秒固まる（2026-08-15 批評）。
+   セッションの開始で1回だけ作り、inRange に渡して使い回す。 */
+function openBigsNow(){
   var ob=openBigs();
   if(S.baseVid){var b=bigOfVid(S.baseVid);if(b)ob[b]=1}
   if(S.baseBig)ob[S.baseBig]=1;      /* 小分類から解くときはその科目を基準にする */
+  return ob;
+}
+function inRange(it,ob){
+  if(ST.settings&&ST.settings.ahead)return true;
+  if(!ob)ob=openBigsNow();           /* 渡されなければ従来どおり自分で作る（呼び出し側を壊さない） */
   return !!ob[it.big];
 }
 /* その動画の問題のうち「その動画までの知識で解けるもの」＝動画学習の画面で数える単位 */
@@ -339,7 +405,23 @@ function mmss(s){s=Math.max(0,Math.round(s||0));return Math.floor(s/60)+':'+pad(
 /* ---------- 日付 ---------- */
 function pad(n){return n<10?'0'+n:''+n}
 function nowStamp(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())}
-function today(){return nowStamp().slice(0,10)}
+/* 「その日」の区切りは0時ではなく3時（本人は未明に解く日がある。別アプリ Focus と同じ規約）。
+   0時で切ると、日をまたいだ瞬間に ①今日の「◯/83問」が0に戻り ②抜き打ちがもう1回出て
+   ③復習の休み日数が1日進む＝1回の勉強が2日に割れる（2026-08-15 批評）。
+   記録に残す時刻（nowStamp）は実時刻のまま。変えるのは「どの日として数えるか」だけ。 */
+var DAYSHIFT=3;
+function today(){
+  var d=new Date(Date.now()-DAYSHIFT*3600000);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+/* 保存してある時刻の文字列（nowStamp形式）を論理日に直す。
+   日付だけの文字列（lastOk など）は既に論理日なのでそのまま返す。 */
+function dayOfStamp(s){
+  if(!s)return null;
+  s=String(s);
+  if(s.length<13)return s.slice(0,10);
+  return (+s.slice(11,13)<DAYSHIFT)?addD(s.slice(0,10),-1):s.slice(0,10);
+}
 function dnum(s){if(!s)return null;var p=String(s).slice(0,10).split('-');if(p.length<3)return null;return Date.UTC(+p[0],+p[1]-1,+p[2])/86400000}
 function dgap(a,b){var x=dnum(a),y=dnum(b);return (x===null||y===null)?0:Math.round(y-x)}
 function addD(day,n){var d=new Date((dnum(day)+n)*86400000);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())}
@@ -387,6 +469,9 @@ function normST(o){
   /* settings.hint（スワイプの案内を出した回数）はスワイプ廃止で不要になったので持たない */
   if(o.settings.hint!==undefined)delete o.settings.hint;
   if(typeof o.settings.ahead!=='boolean')o.settings.ahead=false;  /* 未習の範囲も出す（既定＝オフ） */
+  /* 学習タブのどちらで進んでいたか（video＝動画で進む／cat＝単元で進む）。
+     次に開いたときも同じ側を出す（2026-08-15 本人の注文「動画学習か単元学習で分けて」）。 */
+  if(o.settings.fmode!=='cat')o.settings.fmode='video';
   /* 記録を失わないための3つ。lastExport＝最後に書き出した日／a2hs＝ホーム画面の案内を閉じたか
      ／persist＝navigator.storage.persist() の結果（記録用・null＝未対応か未応答） */
   if(typeof o.settings.lastExport!=='string')o.settings.lastExport=null;
@@ -404,6 +489,10 @@ function normST(o){
   if(!o.wpend||typeof o.wpend!=='object')o.wpend=null;
   /* 出題セッション（中断と再開）。SPEC §2 の session は成績用に使っているので run という名前にした。
      {queue:[id...],qi,label,sort,filter,startedAt,lastAt} */
+  /* 直前に解いた章（ホームの「続き」の起点）。{vid,sec,label}。
+     S.roundSec はセッションを跨げないので記録の側に持つ（2026-08-15 本人指示）。 */
+  if(!o.lastChap||typeof o.lastChap!=='object'||typeof o.lastChap.vid!=='string'
+     ||typeof o.lastChap.sec!=='number')o.lastChap=null;
   if(!o.run||typeof o.run!=='object'||!o.run.queue||!o.run.queue.length)o.run=null;
   if(o.run){
     if(!Array.isArray(o.run.wrongs))o.run.wrongs=[];      /* 旧データには無い */
@@ -438,7 +527,7 @@ function refreshRec(r){
 function restDays(r){return REST[Math.min(REST.length-1,Math.max(0,(r&&r.streak)||0))]}
 function lastDay(r){
   var d=(r&&((r.streak>0?r.lastOk:null)||r.lastNg||r.last))||today();
-  return String(d).slice(0,10);
+  return dayOfStamp(d);      /* lastNg・last は実時刻なので論理日（3時区切り）に直してから比べる */
 }
 /* 抜き打ちに出せるか＝休みが明けているか */
 function restReady(id){
@@ -776,6 +865,20 @@ function bigsOrdered(){
   });
   return a;
 }
+/* 小分類から解くときの「基準の動画」。主教材（こざりえ）を優先し、その中では公開が新しいもの。
+   2026-08-15 検証：**その小分類と同じ科目の動画に限る**。こざりえは1本＝1科目なので、
+   税の小分類にも「税・価格」1本が付き、bigOfVid が『不動産価格の評定』になる。
+   それを基準にすると解禁の集合に『税に関する法令』が入らず、54問すべてが落ちて0問になっていた。
+   同じ科目の動画が無ければ null を返し、科目基準（S.pendBig）だけで解禁する。 */
+function catBaseVid(cat,big){
+  var best=null,up='';
+  (CHAP[cat]||[]).forEach(function(v){
+    if(big&&bigOfVid(v.vid)!==big)return;          /* 別の科目の動画は基準にしない */
+    var pr=(v.source===DEFSRC)?2:1,cur=best?((VSRC[best]===DEFSRC)?2:1):0;
+    if(pr>cur||(pr===cur&&(v.upload||'')>up)){best=v.vid;up=v.upload||''}
+  });
+  return best;
+}
 /* 大分類の進み＝その大分類の問題のうち1回でも正解した数 */
 function bigProg(big){
   var n=0,ok=0;
@@ -825,11 +928,16 @@ function applyWhy(id,reason){
 }
 
 /* ---------- 重症・閉じる ---------- */
-/* 重症の基準（2026-08-14 見直し）。旧＝「誤答3回」または「同じ章で2問ミス」だったが、
-   1小分類は平均108問あるので、2問ミス（1.9%）で章ごと重症になり広すぎた。
-   ・問題：誤答3回以上で、かつ直近が正解していない（正解が続けば重症から外れる）
-   ・章　：5問以上解いたうえで誤答した問題が35%以上、または重症の問題が2つ以上 */
-function severeItem(id){var r=R(id);return !!r&&(r.ng||0)>=3&&(r.streak||0)===0}
+/* 重症の基準（2026-08-15 見直し）。直しても消えないのが最大の問題だった。
+   ・章の分子が「これまで一度でも誤答した問題」だったが、r.ng は減らないので、
+     3回連続で正解しても分子から抜けず、一度重症になった章は永久に重症のままだった
+     （批評のモンテカルロ：初回正答率70%で、5問以上ある336章のうち112章が消えない）。
+     → 分子を「いま誤答状態の問題」＝誤答があって直近が正解していない数に変える。直せば消える。
+   ・問題の側は streak===0 を条件にしていたが、同じ日の間違い直し周回で必ず streak が立つので
+     全条件で0件＝機能していなかった。「2回続けて正解するまで重症」＝ streak<2 にする。
+   ・問題：誤答3回以上で、連続正解が2回に届いていない（卒業した問題は除く）
+   ・章　：5問以上解いたうえで、いま誤答状態の問題が35%以上、または重症の問題が2つ以上 */
+function severeItem(id){var r=R(id);return !!r&&(r.ng||0)>=3&&(r.streak||0)<2&&!isGrad(r)}
 var SEV_MIN=5,SEV_RATE=0.35,SEV_HARD=2;
 function severeTopics(){
   var m={},out=[];
@@ -838,7 +946,8 @@ function severeTopics(){
     var k=it.cat+'|:|'+(it.topic||'未分類');
     var o=m[k]||(m[k]={att:0,ids:[],ng:0,hard:0});
     o.att++;
-    if((r.ng||0)>0){o.ids.push(it.id);o.ng+=r.ng||0}
+    o.ng+=r.ng||0;                                        /* 誤答の延べ回数（表示と並べ替え用） */
+    if((r.ng||0)>0&&(r.streak||0)===0)o.ids.push(it.id);  /* いま誤答状態＝直せば分子から抜ける */
     if(severeItem(it.id))o.hard++;
   });
   Object.keys(m).forEach(function(k){
@@ -862,13 +971,19 @@ function closed(cat){
   return true;
 }
 function catStat(cat){
-  var its=itemsOfCat(cat),n=its.length,a=0,ok=0,ng=0,grad=0,keep=0,okn=0;
-  its.forEach(function(it){var r=R(it.id);if(!r)return;if(att(r)>0)a++;ok+=r.ok||0;ng+=r.ng||0;
+  var its=itemsOfCat(cat),n=its.length,a=0,ok=0,ng=0,grad=0,keep=0,okn=0,ready=0;
+  its.forEach(function(it){var r=R(it.id);if(!r)return;
+    /* ready＝解いた問題のうち「直近が正解」の数。bigStat() と同じ数え方に揃える
+       （得点予測を単元単位に変えたので、大分類と単元で定義が違うと数字が食い違う） */
+    if(att(r)>0){a++;if((r.streak||0)>0||r.state==='卒業')ready++}
+    ok+=r.ok||0;ng+=r.ng||0;
     if((r.ok||0)>0)okn++;          /* 一度でも正解した問題の数＝達成度の分子 */
     var s=stateOf(it.id);if(s==='卒業')grad++;else if(s==='定着')keep++;});
   var lv=0;
   if(closed(cat))lv=3;else if(a>0&&(grad+keep)>=Math.ceil(n*0.5))lv=2;else if(a>0)lv=1;
-  return {n:n,att:a,ok:ok,ng:ng,okn:okn,grad:grad,keep:keep,lv:lv,rate:(ok+ng)?ok/(ok+ng):null,
+  return {n:n,att:a,ok:ok,ng:ng,okn:okn,grad:grad,keep:keep,lv:lv,ready:ready,
+          rate:(ok+ng)?ok/(ok+ng):null,
+          nowRate:a?ready/a:null,       /* いま出されたら解ける割合＝得点予測に使う */
           prog:n?Math.round(okn/n*100):0};   /* prog＝正解済みの割合＝達成度 */
 }
 /* ---------- 復習＝抜き打ち中心（2026-08-14 確定の設計） ----------
@@ -892,7 +1007,8 @@ function wrongToday(){
   var t=today();
   return ITEMS.filter(function(it){
     var r=R(it.id);
-    return !!r&&(r.streak||0)===0&&(r.ng||0)>0&&r.lastNg&&String(r.lastNg).slice(0,10)===t;
+    /* lastNg は実時刻なので論理日に直して比べる（未明に間違えた分が「今日」から消えないように） */
+    return !!r&&(r.streak||0)===0&&(r.ng||0)>0&&r.lastNg&&dayOfStamp(r.lastNg)===t;
   });
 }
 /* 学習済みの小分類（1問以上解いた） */
@@ -962,10 +1078,9 @@ function openBigs(){
   });
   return out;
 }
-function bigOfVid(vid){
-  for(var b in BIGVIDS){if((BIGVIDS[b]||[]).indexOf(vid)>=0)return b}
-  return null;
-}
+/* 動画→大分類。BIGVIDS を総当たりすると1回で全168本の線形走査になるので、
+   同じ表から作ってある逆引き VBIG を使う（2026-08-15 批評：解禁判定が重い件） */
+function bigOfVid(vid){return VBIG[vid]||null}
 function unseenItems(all){
   var lim=NEEDOK&&!all&&!(ST.settings&&ST.settings.ahead);
   var ob=lim?openBigs():null;
@@ -1019,8 +1134,11 @@ function plan(){
   });
   var room1=Math.max(0,cap-newRes);
   var sneak=base.slice(0,room1),sneakCut=base.length-sneak.length;
-  /* ③それでも余ったら新規を増やし（1周を早める）、新規が尽きていれば抜き打ちを上積みする */
-  var newN=Math.min(unseen.length,newRes+Math.max(0,cap-newRes-sneak.length));
+  /* ③それでも余ったら新規を増やし（1周を早める）、新規が尽きていれば抜き打ちを上積みする。
+     ただし新規は「その日に必要な数」needNew を超えない。超えていたせいで、ホームに
+     「◯/83問」と「新規162問」の2つの目標が並び、どちらを終えれば今日の分か分からなかった
+     （2026-08-15 批評）。83問を終えた後も、章・動画・小分類から続けて解く道は残してある。 */
+  var newN=Math.min(unseen.length,needNew,newRes+Math.max(0,cap-newRes-sneak.length));
   var extra=sneakExtra(sneak,Math.max(0,cap-newN-sneak.length));
   sneak=sneak.concat(extra);
   var doneToday=(ST.days[today()]||{}).n||0;
@@ -1066,7 +1184,7 @@ function matchF(it){
   if(F.unseen&&a>0)return false;
   if(F.wrong&&!(r&&r.ng>0))return false;
   if(F.ngMin&&!(r&&(r.ng||0)>=F.ngMin))return false;
-  if(F.recent){if(!(r&&r.lastNg))return false;if(dgap(r.lastNg,today())>F.recent-1)return false}
+  if(F.recent){if(!(r&&r.lastNg))return false;if(dgap(dayOfStamp(r.lastNg),today())>F.recent-1)return false}
   if(F.rateMax!==null){var rt=rateOf(r);if(rt===null||rt*100>F.rateMax)return false}
   return true;
 }
@@ -1186,12 +1304,30 @@ function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
 var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:null,label:'',sneak:{},
         openBig:{},openCat:{},openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
         wrongs:[],round:0,roundVid:null,srcOpen:false,lockedOut:0,kind:'new',studyVid:null,
+        pickExplicit:false,   /* 本人が範囲を選んだ入口＝未習フィルタを通さない印（startQueue で降りる） */
+        pendBig:null,         /* 次の1回だけ効く科目基準（startQueue の冒頭で baseBig に移す） */
+        /* 学習タブの入口（video＝動画で進む／cat＝単元で進む）。記録から復元する */
+        fmode:((ST.settings&&ST.settings.fmode==='cat')?'cat':'video'),
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
         enter:true,dir:null,tier:null,ev:null,broke:false};
 
-function startQueue(list,label,withSneak,baseVid,keepGrad){
+function startQueue(list,label,withSneak,baseVid,keepGrad,keepRound){
+  /* 周回（間違い直し）以外は、ここで必ず周回数を0に戻す。入口ごとに S.round=0 と書いていたため
+     6か所（startFilter/startSel/startAll/startCat/startTopic/startChap）で書き漏れていて、
+     前のセッションの間違いリストと基準の動画がそのまま持ち越されていた（2026-08-15 批評）。
+     周回を続けたい呼び出しだけが keepRound=true を渡す。 */
+  if(!keepRound)S.round=0;
   S.baseVid=baseVid||null;                 /* 基準の動画（指定が無ければ既定のチャンネル基準） */
-  if(baseVid)S.baseBig=null;               /* 動画・章から解くときは科目基準を持ち越さない */
+  /* 科目基準（解禁の保険）は「次の1回だけ効く」受け渡しにする。
+     2026-08-15 検証：startCat が S.baseBig を入れてから startQueue を呼んでいたのに、
+     ここにあった `if(baseVid)S.baseBig=null` が毎回それを消していた。
+     基準の動画が別の科目のものだと（税の小分類に「税・価格」の動画が付く等）
+     解禁の集合に科目が入らず、ラベルは「解く（54問）」なのに押すと0問になっていた。
+     S.pendBig 経由なら baseVid の有無に関係なく渡り、次のセッションにも漏れない。 */
+  S.baseBig=S.pendBig||null;S.pendBig=null;
+  /* 本人が範囲を選んだ入口（絞り込み・選択範囲・全範囲・小分類の章）は未習でも出す。
+     1回使ったら降ろす＝次のセッションに漏らさない。 */
+  var explicit=!!S.pickExplicit;S.pickExplicit=false;
   /* 卒業した問題は通常出題から外す。ただし抜き打ち（keepGrad）と周回は別 */
   var arr=list.filter(function(it){return !isGrad(R(it.id))||S.round>0||keepGrad});
   /* 未習の範囲を出さない（既定）。need_seq が「見た動画の最大の通し番号」を超える問題は、
@@ -1201,10 +1337,13 @@ function startQueue(list,label,withSneak,baseVid,keepGrad){
   /* 未習の範囲を出さない判定は inRange（大分類ベース）に一本化した。
      ここで通し番号（あこ課長の再生リスト順）を使うと、主教材がこざりえになった今は
      ほぼ全部が落ちる（2026-08-14 実測：162問→1問）。 */
+  /* 本人が明示的に選んだ範囲（explicit）は落とさない。落としていたせいで、絞り込みで
+     権利関係を選ぶと1,541問→0問になっていた（2026-08-15 実測）。自分で選んだのだから出す。 */
   S.lockedOut=0;
-  if(!S.round&&!(ST.settings&&ST.settings.ahead)){
+  if(!S.round&&!explicit&&!(ST.settings&&ST.settings.ahead)){
     var before=arr.length;
-    arr=arr.filter(function(it){return att(R(it.id))>0||inRange(it)});
+    var ob=openBigsNow();      /* 解禁の集合は1回だけ作って全問で使い回す（1件ごとに作ると重い） */
+    arr=arr.filter(function(it){return att(R(it.id))>0||inRange(it,ob)});
     S.lockedOut=before-arr.length;
   }
   arr=sortQ(arr);
@@ -1376,6 +1515,7 @@ function render(){
   S.enter=false;S.dir=null;S.anim=null;ANIMON=false;
   LASTVIEW=S.view;
   if(S.view==='quiz')bindTilt();
+  syncNextBar();                       /* 解説中だけ下に「次の問題」を出す（描画のたびに合わせる） */
   /* 入場アニメーションが終わったらクラスを外す。終わった時点の見た目は最終状態と同じなので
      見た目は変わらず、あとで再描画されても座標が飛ばない。 */
   Array.prototype.forEach.call(v.querySelectorAll('.qin'),function(el){
@@ -1410,21 +1550,23 @@ function vHome(){
     +'<span class="mini" style="margin-left:auto">'+today().slice(5).replace('-','月')+'日</span>'
     +'<button class="btn sm" style="width:auto;min-height:28px;padding:0 8px" data-act="data"'
     +' aria-label="記録の書き出しと読み込み">'+IC.io+'</button></div>';
+  /* 4枚とも「小花＋見出し＋数字」の同じ作りにする。1枚だけ違う形にしない。
+     復習の数は捨てず、見出しに添える（数字の行に入れると3桁のときだけ折り返して1枚だけ窮屈になる）。 */
+  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0,drev=Math.max(0,dn-dnew),sc0=scoreNow();
   h+='<div class="hpair">'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">試験まで</div>'
     +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">1日あたり</div>'
     +'<div class="hnum">'+n3(newToday())+'<span>/ '+n3(perday)+'問</span></div></div>'
+    +'<div class="hcard">'+flw(17)+'<div class="hlab">今日'+(drev?'・復習 '+n3(drev):'')+'</div>'
+    +'<div class="hnum">'+n3(dn)+'<span>問</span></div></div>'
+    +'<div class="hcard">'+flw(17)+'<div class="hlab">いま</div>'
+    +'<div class="hnum">'+sc0.pts.toFixed(1)+'<span>/ 50点</span></div></div>'
     +'</div>';
   /* 今日の実績を1行だけ。カードは増やさない（引き算の原則）。
      合計＝その日の回答数／新規＝はじめて解いた数／復習＝残り／正解＝その日の正答率。 */
-  /* 新規の数は上の「◯/83」に出ているので書かない。正解率は分析にある。
-     ここは「今日の合計と復習」＋「いま何点取れるか」だけ（2026-08-15 本人指摘）。 */
-  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0,sc0=scoreNow();
-  if(dn||sc0.pts>0)
-    h+='<div class="mini" style="text-align:center;margin:-4px 0 10px">'
-      +(dn?'今日 '+n3(dn)+'問（復習 '+n3(dn-dnew)+'）　':'')
-      +'いま '+sc0.pts.toFixed(1)+' / 50点</div>';
+  /* 「今日 ◯問（復習 ◯）　いま ◯/50点」の1行は、上の4枚のカードに畳んだので置かない
+     （2026-08-15 本人指示。同じ数字を2か所に出さない）。 */
   h+=hdots();
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
@@ -1457,7 +1599,7 @@ function vHome(){
   h+='<div class="hbtns">';
   if(cv){
     h+='<a class="btn pri" href="'+vurl(cv,0)+'" target="_blank" rel="noreferrer"'
-      +' data-act="vwatch" data-k="'+esc(cv+'#0')+'">'+IC.play+'動画を見る</a>'
+      +' data-act="vwatch" data-k="'+esc(cv+'#0')+'">'+IC.yt+'動画を見る</a>'
       +'<button class="btn" style="margin-top:10px" data-act="startNew">'
       +IC.book+'問題を解く</button>';
   }else{
@@ -1467,27 +1609,37 @@ function vHome(){
   h+='</div>';
   return h;
 }
+/* その大分類を「今日の流れ」で解禁する動画たち。
+   主教材（こざりえ）だけを見ていたので、こざりえの動画が1本も無い大分類
+   ＝不動産価格の評定（あこ課長4本のみ・112問＝本試験の不動産鑑定評価1点）が、
+   1周の分母には入っているのにホームの導線からは一生出てこなかった（2026-08-15 批評）。
+   こざりえが無ければ SRCRANK の順（こざりえ→こうのすけ→あこ課長）で次のチャンネルに落とす。 */
+function flowVids(b){
+  var vs=(BIGVIDS[b]||[]).filter(function(v){
+    return !SRCHIDE[VSRC[v]]&&videoItemsUp(v).length;    /* 問題が0本の動画は解禁の役に立たない */
+  });
+  var best=9;
+  vs.forEach(function(v){var r=srcRank(v);if(r<best)best=r});
+  return vs.filter(function(v){return srcRank(v)===best})
+    .sort(function(x,y){return (VUP[y]||'').localeCompare(VUP[x]||'')});  /* 公開が新しい順＝2026年版が先 */
+}
 /* 全部の大分類を学習の順（宅建業法→権利関係→法令→税・その他）にたどって、
-   まだ終わっていない主教材の動画を返す。 */
+   まだ終わっていない動画を返す。 */
 function nextVidAll(){
   var out=null;
   bigsOrdered().some(function(b){
-    /* 同じ科目に複数あるので、公開が新しい順（＝2026年版が先）に見る */
-    var main=(BIGVIDS[b]||[]).filter(function(v){return VSRC[v]===DEFSRC})
-      .sort(function(x,y){return (VUP[y]||'').localeCompare(VUP[x]||'')});
-    var v=nextVidOf(main);
+    var v=nextVidOf(flowVids(b),true);   /* true＝「未着手が0」で次へ進む（全問正解では進まない） */
     if(v){out=v;return true}
     return false;
   });
   return out;
 }
-/* まだ終わっていない主教材の動画の本数（1日あたりの本数の分子） */
+/* まだ終わっていない動画の本数（1日あたりの本数の分子） */
 function vidsLeft(){
   var n=0;
   bigsOrdered().forEach(function(b){
-    (BIGVIDS[b]||[]).forEach(function(v){
-      if(VSRC[v]!==DEFSRC)return;
-      if(!videoStat(v).done)n++;
+    flowVids(b).forEach(function(v){
+      if(restCount(videoItemsUp(v))>0)n++;
     });
   });
   return n;
@@ -1497,17 +1649,24 @@ function vidsLeft(){
    主教材が「1本＝1科目」になったので、動画は科目単位・問題は枠ぶんで出す。 */
 function flowHtml(){
   var cur=nextVidAll(),pl=plan(),h='<div class="flow">';
-  if(cur){
-    var big=bigOfVid(cur)||'',watched=!!ST.watched[cur+'#0'];
-    h+='<a class="frow'+(watched?' done':' now')+'" href="'+vurl(cur,0)+'" target="_blank" rel="noreferrer"'
+  /* 動画の行は「まだ見ていないとき」だけ出す。科目を解禁する導線なので消してはいけないが、
+     見たあとも居座らせない（2026-08-15 本人指示）。 */
+  if(cur&&!ST.watched[cur+'#0']){
+    var big=bigOfVid(cur)||'';
+    h+='<a class="frow now" href="'+vurl(cur,0)+'" target="_blank" rel="noreferrer"'
       +' data-act="vwatch" data-k="'+esc(cur+'#0')+'">'
       +'<span>'+esc(big||vshort(vlab(cur)||cur))+' の動画</span>'
-      +'<span class="fst">'+(watched?'見た':'いま')+'</span></a>';
-    /* 次は「その科目の新規を今日の枠ぶん」。こざりえの章は1章＝小分類まるごと
-       （100〜344問）なので、章をそのまま1回分にはしない。章を選んで解くのは一覧から。 */
-    h+='<button class="frow'+(watched?' now':' yet')+'" data-act="startNew">'
-      +'<span>新規</span><span class="fst">'
-      +(pl.newOk&&pl.newN?n3(pl.newN)+'問':'動画を見てから')+'</span></button>';
+      +'<span class="fst">いま</span></a>';
+  }
+  /* 「新規」は全範囲から取り直すので章の続きにならず、本人は結局 学習タブから章を選び直していた
+     （2026-08-15 本人指摘）。直前に解いた章の残りをそのまま出す＝押すと学習タブの
+     「残り N問」と同じ経路（startChap）に入る。 */
+  var cc=contChap();
+  if(cc){
+    h+='<button class="frow now" data-act="startChap" data-v="'+esc(cc.vid)+'"'
+      +' data-s="'+cc.sec+'" data-l="'+esc(cc.label)+'">'
+      +'<span>続き　'+esc(cc.label)+'</span>'
+      +'<span class="fst">残り '+n3(cc.rest)+'問</span></button>';
   }
   h+='<button class="frow'+(pl.sneak.length?'':' yet')+'" data-act="startSneak">'
     +'<span>抜き打ち</span><span class="fst">'
@@ -1518,6 +1677,28 @@ function flowHtml(){
   h+='<button class="frow'+(wp?'':' yet')+'" data-act="startWrongAll">'
     +'<span>間違えた問題</span><span class="fst">'+(wp?n3(wp)+'問':'なし')+'</span></button>';
   return h+'</div>';
+}
+/* ホームの「続き」＝次に解く章。順に見る：
+   ①直前に解いた章（ST.lastChap）に未着手が残っていればそこ
+   ②残っていなければ同じ動画の次の章（nextChap＝未着手が残っている章だけ返す）
+   ③記録が無い／その動画も終わったら、いまの動画の最初の（未着手が残る）章
+   どれも無ければ null＝行を出さない。 */
+function contChap(){
+  var lc=ST.lastChap;
+  if(lc&&lc.vid&&VTIT[lc.vid]!==undefined){
+    var rest=restCount(chapItemsUp(lc.vid,lc.sec));
+    if(rest>0)return {vid:lc.vid,sec:lc.sec,label:lc.label||'章',rest:rest};
+    var nx=nextChap(lc.vid,lc.sec);
+    if(nx)return {vid:lc.vid,sec:nx.sec,label:nx.label||'章',rest:restCount(chapItemsUp(lc.vid,nx.sec))};
+  }
+  var v=nextVidAll();
+  if(!v)return null;
+  var cs=chapsOf2(v);
+  for(var i=0;i<cs.length;i++){
+    var r2=restCount(chapItemsUp(v,cs[i].sec));
+    if(r2>0)return {vid:v,sec:cs[i].sec,label:cs[i].label||'章',rest:r2};
+  }
+  return null;
 }
 /* その動画の章（skipを除く） */
 function chapsOf2(vid){
@@ -1584,8 +1765,105 @@ function allStats(){
    （小分類は絞り込みと分析にだけ残す）。
    行＝「#4｜見出し｜実測時間｜12/41｜›」。行の左から進捗ぶんを薄緑で塗る（バーは置かない）。
    時間は動画の尺ではなく、その動画に実際に費やした時間（視聴＋その動画の問題）＝vidMs()。 */
+/* ---------- 単元で進む（小分類ごとに解く） ----------
+   本人の注文（2026-08-15）「過去問道場の小分類ごとに問題を解いてもいいような気がした」
+   「動画学習か単元学習で分けて勉強できるようにもできないかな？」。
+   動画で進む側は一切変えず、入口を1つ増やして横に並べる。 */
+
+/* 単元の中を、こざりえの字幕で割った小見出しで束ねる（chapters.json の subs と対になる
+   肢側の videos[].sub／videos[].csec を使う）。sub を持たない肢は「その他」等にまとめない
+   ＝無理に分けず、親の行の「全 N問」でだけ解けるようにする（本人指示）。
+   一覧を開くたびに5,237肢を走らないよう、単元ごとに1回だけ作って持っておく。 */
+var CSUB={};
+function catSubs(cat){
+  if(CSUB[cat])return CSUB[cat];
+  var map={},order=[],none=0;
+  itemsOfCat(cat).forEach(function(it){
+    if(!it)return;
+    var vs=vidsOf(it),g=null;
+    /* vidsOf は こざりえ→こうのすけ→あこ課長 の順に並んでいるので、先頭に近い方の小見出しを採る */
+    for(var i=0;i<vs.length;i++){if(vs[i]&&vs[i].sub){g=vs[i];break}}
+    if(!g){none++;return}
+    if(!map[g.sub]){
+      map[g.sub]={sub:g.sub,vid:g.vid,ids:[],
+                  sec:(typeof g.sec==='number'?g.sec:0),
+                  csec:(typeof g.csec==='number'?g.csec:0)};
+      order.push(g.sub);
+    }
+    map[g.sub].ids.push(it.id);
+  });
+  var a=order.map(function(k){return map[k]});
+  /* 並びは動画を見る順（章の秒 → 小見出しの秒）＝解く順が動画の進行と一致する */
+  a.sort(function(x,y){return x.csec-y.csec||x.sec-y.sec});
+  CSUB[cat]={subs:a,none:none};
+  return CSUB[cat];
+}
+/* 単元の1行。小見出しが2つ以上あるときだけ <details> にする（1つなら開いても中身が同じ）。
+   開閉はJSでやらない＝章の一覧と同じ <details>（m6-det）に乗せ、開いた状態だけ S.openChap に写す。 */
+function urowHtml(c){
+  var st=catStat(c),g=catSubs(c),subs=g.subs,rest=st.n-st.att,q=CATQ[c]||0;
+  var many=subs.length>=2,ck='u:'+c,op=many&&!!S.openChap[ck];
+  /* 数字の出し方は章の一覧と同じ規則（途中なら「残り N」・そうでなければ総数）にそろえる */
+  var head='<span class="nm">'+esc(c)+'<span class="qn">毎年 '+q.toFixed(2)+'問</span></span>'
+    +'<span class="badge">'+(rest>0&&rest<st.n?('残り '+n3(rest)):(n3(st.n)+'問'))+'</span>'
+    +(many?'<span class="m6-mk">'+IC.chev+'</span>':'')
+    +'<span class="bt">'+twoBtns('startCat',' data-c="'+esc(c)+'"',rest,st.n,'','')+'</span>';
+  if(!many)return '<div class="ur-flat"><div class="urh">'+head+'</div></div>';
+  var body='';
+  subs.forEach(function(s,i){
+    var list=s.ids.map(function(x){return BY[x]}).filter(Boolean);
+    body+='<div class="usub"><span class="nm">'+esc(s.sub)+'</span>'
+      +'<span class="bt">'+twoBtns('startSub',' data-c="'+esc(c)+'" data-i="'+i+'"',
+                                   restCount(list),list.length,'','')+'</span></div>';
+  });
+  /* 小見出しに入らなかった肢は黙って消さない（件数だけ出す。分けられないものを無理に分けない） */
+  if(g.none)body+='<div class="mini" style="padding:0 0 8px">小見出しが付いていない '+n3(g.none)
+    +'問（この単元の '+n3(st.n)+'問 に含まれています）</div>';
+  return '<details class="m6-det ur" data-k="'+esc(ck)+'"'+(op?' open':'')+'>'
+    +'<summary class="urh" data-act="openchap" data-k="'+esc(ck)+'">'+head+'</summary>'
+    +'<div class="m6-dtxt">'+body+'</div></details>';
+}
+/* 単元の一覧。大分類ごとにまとめ、その中は本試験の出題頻度（CATQ）が高い順に並べる。
+   残り64日でどこから手を付けるかが一覧で分かることが目的なので、頻度順は動かさない。 */
+function vFieldsCat(){
+  var h='';
+  bigsOrdered().forEach(function(b){
+    var cs=catsOfBig(b);
+    if(!cs.length)return;
+    cs=cs.slice().sort(function(x,y){
+      return (CATQ[y]||0)-(CATQ[x]||0)                       /* ①毎年の出題数が多い順 */
+        ||CINFO[y].ids.length-CINFO[x].ids.length            /* ②同点なら肢が多い順 */
+        ||(x<y?-1:1);
+    });
+    var bq=0,br=0;
+    cs.forEach(function(c){bq+=CATQ[c]||0;br+=restCount(itemsOfCat(c))});
+    h+='<div class="panel"><div class="spread" style="margin-bottom:2px">'
+      +'<span style="font-size:13px;font-weight:600">'+esc(b)+'</span>'
+      +'<span class="mini num">毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'</span></div>';
+    cs.forEach(function(c){h+=urowHtml(c)});
+    h+='</div>';
+  });
+  h+='<div class="panel"><div class="mini">「毎年N問」は過去問10年（2016〜2025）の出典から数えた'
+    +'1年あたりの出題数です。統計だけは過去問集にほぼ載らないため実測を使わず1問としています。</div></div>';
+  return h;
+}
+
 function vFields(){
-  var h='<div class="pad'+stag()+'"><div class="h">動画学習</div>';
+  /* 学習の入口は2つ。「動画で進む」＝今までの画面（動画→章→問題）、
+     「単元で進む」＝小分類の一覧。選んだ側は記録（settings.fmode）に残し、次に開いたときも同じ側を出す。 */
+  var cm=(S.fmode==='cat');
+  var h='<div class="pad'+stag()+'"><div class="h">'+(cm?'単元学習':'動画学習')+'</div>'
+    +'<div style="margin:0 0 12px">'
+    +'<button class="tog'+(cm?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画で進む</button>'
+    +'<button class="tog'+(cm?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="cat">単元で進む</button>'
+    +'</div>';
+  h+=(cm?vFieldsCat():vFieldsVideo());
+  h+='</div>';
+  return h;
+}
+/* 動画で進む＝2026-08-15 までの学習タブそのもの（外枠と見出しだけ vFields() へ移した） */
+function vFieldsVideo(){
+  var h='';
   /* 誰の動画かを先に選ぶ。ここで絞ると、下の一覧はそのチャンネルの動画だけになる。 */
   h+='<div style="margin:0 0 12px">'
     +'<button class="tog'+(S.srcF?'':' on')+'" style="margin:0 6px 6px 0" data-act="srcf" data-v="">すべて</button>'
@@ -1640,7 +1918,6 @@ function vFields(){
       +'（新規に入れない）':'')+'</div>'
     +'</div>';
   h+='<button class="btn" data-act="startAll">全 '+n3(ITEMS.length)+'問から出題する</button>';
-  h+='</div>';
   return h;
 }
 /* 一覧の1行（動画1本）。進捗＝その動画に対応する問題のうち正解済みの割合。
@@ -1669,16 +1946,22 @@ function vrowHtml(vid){
 }
 /* 次にやる1本＝その大分類で、通し番号が最小の「まだ完了していない」動画。
    完了＝videoStat().done（その動画で解ける問題を全部正解した状態）。
-   対応する問題が0問の動画は完了になりようがないので飛ばす（ここで止まると先へ進めない）。 */
-function nextVidOf(vids){
+   対応する問題が0問の動画は完了になりようがないので飛ばす（ここで止まると先へ進めない）。
+   byRest=true のときは完了を「未着手が0」で見る。ホームの「今日の流れ」はこちら＝
+   こざりえは1本1,524問なので全問正解には事実上到達せず、同じ動画を出し続けていた
+   （2026-08-15 批評。リザルト側は先に「一周した」に直してある）。 */
+function nextVidOf(vids,byRest){
   for(var i=0;i<vids.length;i++){
     var vs=videoStat(vids[i]);
-    if(vs.n>0&&!vs.done)return vids[i];
+    if(vs.n===0)continue;
+    if(byRest?(restCount(videoItemsUp(vids[i]))>0):!vs.done)return vids[i];
   }
   return null;
 }
 function nextCardHtml(vids){
-  var vid=nextVidOf(vids);
+  /* ホームの「今日の流れ」と同じ基準で選ぶ（byRest＝未着手が0で次へ）。
+     ここだけ「全問正解」にしていると、ホームと学習タブで次の1本が食い違う。 */
+  var vid=nextVidOf(vids,true);
   if(!vid)return '';                       /* 全部完了＝カードを出さない */
   var vs=videoStat(vid),no=vno(vid),len=VLEN[vid]||0,cn=VCHN[vid]||0,me=[];
   if(len)me.push('<span>'+mmss(len)+'</span>');
@@ -1689,7 +1972,7 @@ function nextCardHtml(vids){
     +'<div class="me">'+me.join('')+'</div>'
     +'<div class="bt">'
     +'<a class="p" href="'+vurl(vid,0)+'" target="_blank" rel="noreferrer" '
-    +'data-act="vwatch" data-k="'+esc(vid+'#0')+'">'+IC.play+'動画を見る</a>'
+    +'data-act="vwatch" data-k="'+esc(vid+'#0')+'">'+IC.yt+'動画を見る</a>'
     +'<button class="s" data-act="startVid" data-v="'+esc(vid)+'">問題を解く</button>'
     +'</div></div>';
 }
@@ -1802,7 +2085,7 @@ function vStudy(){
       +(wv?'<span class="mini num">視聴 '+esc(String(wv).slice(5))+'</span>':'')+'</div>'
       +(vlater?'<div class="mini" style="margin-bottom:8px">後の動画の知識が必要な '+n3(vlater)+'問は入れていません</div>':'')
       +'<a class="btn" href="'+vurl(v.vid,0)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(wkey)+'">'
-      +IC.play+'動画を見る</a>'
+      +IC.yt+'動画を見る</a>'
       +(vn?twoBtns('startVid',' data-v="'+esc(v.vid)+'"',restCount(videoItemsUp(v.vid)),vn,'','margin-top:8px')
           :'<button class="btn" style="margin-top:8px" disabled>この動画の問題を解く（0問）</button>');
     var empty=0;
@@ -1821,13 +2104,17 @@ function vStudy(){
       /* 章の開閉は <details>＝JSで開閉しない（開くたびに render() を呼ばない）。
          入場は ::details-content ＋ @starting-style（iOS 18.4+／26.4+ で2回目以降も出る）。
          高さは動かさず、中身のフェード＋4pxだけ（高さを動かすと layout が起きる）。 */
-      h+='<details class="m6-det" data-k="'+esc(ck)+'"'+(op?' open':'')+'>'
+      /* chrow＝章名を1段目に丸ごと置き、バッジ・動画・ボタン・開閉記号を2段目にまわす。
+         2026-08-15 検証：「残り N問」「全 N問」の2つが並ぶと章名の列が 84px まで痩せ、
+         「宅建業/の事務/所」と縦に折れていた。章名を「…」で切ると何の章か分からなくなるので、
+         名前を優先して段を分ける（ボタンが1つの行も同じ形にして、行ごとに姿が変わらないようにする）。 */
+      h+='<details class="m6-det chrow" data-k="'+esc(ck)+'"'+(op?' open':'')+'>'
         +'<summary data-act="openchap" data-k="'+esc(ck)+'">'
         +'<span class="nm">'+esc(ch.label)+' <span class="sec">'+mmss(ch.sec)+'</span>'
         +(w?' <span class="mini num">視聴 '+esc(String(w).slice(5))+'</span>':'')+'</span>'
         +'<span class="badge">'+(rest>0&&rest<n?('残り '+rest):(n+'問'))+'</span>'
-        +'<a class="btn sm" href="'+vurl(v.vid,ch.sec)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(key)+'">'+IC.play+'</a>'
-        +(n?twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'"',rest,n,'sm',''):'')
+        +'<a class="btn sm" href="'+vurl(v.vid,ch.sec)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(key)+'">'+IC.yt+'</a>'
+        +(n?'<span class="chbt">'+twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'"',rest,n,'sm','')+'</span>':'')
         +'<span class="m6-mk">'+IC.chev+'</span></summary>';
       /* 紐づけの根拠を見せる（本人の指摘「どういう基準でその問題を選んでいるか分からない」） */
       h+='<div class="m6-dtxt">';
@@ -1967,7 +2254,7 @@ function vQuiz(){
   var showLinks=chs.slice(0,1);
   showLinks.forEach(function(ch){
     h+='<a class="link'+ac()+'" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
-      +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'"'+ad(4)+'>'+IC.play
+      +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'"'+ad(4)+'>'+IC.yt
       +'<span class="lbl">'+esc(ch.label)+'</span>'
       +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
   });
@@ -1989,8 +2276,28 @@ function vQuiz(){
   }else{
     h+='<div class="expwrap'+(EA?' stagexp':'')+'">'+expBlock(it,id)+'</div>';
   }
-  h+='<div class="qsp" style="height:20px"></div></div>';
+  /* 末尾の余白。解説の間は下に「次の問題」が固定で乗るので、その高さぶん多く空ける
+     （一番下までスクロールしたときに解説の末尾が固定ボタンに隠れないように） */
+  h+='<div class="qsp" style="height:'+(S.phase==='exp'?76:20)+'px"></div></div>';
   return h;
+}
+/* 解説の間だけ、画面の下に固定した「次の問題」を出す。
+   完走の演出（M5）は z-index 45 で上に乗るので、そのときは queue の終わりで自動的に消える。 */
+function syncNextBar(){
+  var b=document.getElementById('nextbar');
+  if(!b)return;
+  b.hidden=!(S.view==='quiz'&&S.phase==='exp'&&S.queue.length&&S.qi<S.queue.length);
+}
+/* 回答したら、正誤の行が画面の上（固定ヘッダーのすぐ下）に来るまでスクロールする。
+   これが無いと、長い問題では○×を押しても解説の頭が画面の外にあって読めない。
+   演出（stagexp・m2-press）と喧嘩しないよう瞬間移動（behavior:auto）にする。 */
+function scrollToAnsline(){
+  var el=document.querySelector('.ansline');
+  if(!el)return;
+  var hd=document.querySelector('.hd'),off=hd?hd.getBoundingClientRect().height:0;
+  var y=window.scrollY+el.getBoundingClientRect().top-off-10;
+  var max=Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
+  window.scrollTo(0,Math.min(Math.max(0,y),max));
 }
 /* 難易度＝3段階の点（易=1／普=2／難=3）。色は使わず塗り／抜きで示す。
    diff_ai が null（未評価）は点を出さず「—」＝数字・記号の表記を他の未測定と揃える。 */
@@ -2031,7 +2338,8 @@ function applyExpDom(it,id){
   ew.className='expwrap stagexp';
   ew.innerHTML=expBlock(it,id);
   var sp=w.querySelector('.qsp');
-  if(sp)w.insertBefore(ew,sp);else w.appendChild(ew);
+  if(sp){w.insertBefore(ew,sp);sp.style.height='76px';}   /* 固定した「次の問題」のぶん末尾を空ける */
+  else w.appendChild(ew);
   m4BoxPlay(id);
   return true;
 }
@@ -2101,7 +2409,7 @@ function expBlock(it,id){
       h+='<div class="mini" style="margin-top:6px">次は '+restDays(r)+'日後</div>';
       var ch=chapFor(it);
       if(r._why==='知らなかった'&&ch)h+='<a class="btn" style="margin-top:8px" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
-        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.play+'この章の動画を '+mmss(ch.sec)+' から見る</a>';
+        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.yt+'この章の動画を '+mmss(ch.sec)+' から見る</a>';
     }
   }
   /* 抜き打ちで間違えたら「この分野は怪しい」＋その章のタイムスタンプへ（自分で見に行く導線） */
@@ -2115,7 +2423,8 @@ function expBlock(it,id){
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
   var sv=severeTopics().filter(function(x){return x.cat===it.cat&&x.topic===(it.topic||'未分類')})[0];
   if(sv)h+='<div class="warn" style="margin-top:10px">'+IC.warn+' 重症：この章は動画に戻る（'+esc(sv.topic)+'／誤答'+sv.ng+'回）</div>';
-  h+='<button class="btn pri" style="margin-top:12px" data-act="next">次の問題</button>';
+  /* 「次の問題」はカードの中に置かない。画面の下に固定した #nextbar が唯一の置き場所
+     （同じボタンを2つ見せない。2026-08-15 本人指示）。 */
   return h;
 }
 /* 完走リザルトのボタンの出し分け（2026-08-14 本人の指示）
@@ -2241,9 +2550,9 @@ function vReview(){
     var ch=chapsOf(x.cat).filter(function(cc){return cc.topic===x.topic})[0];
     /* 長押し＝その章で間違えた問題の出典と解説の先読み（押している間だけ） */
     var pit=BY[x.ids[0]],pv=pit?(srcLabel(pit)+'|'+String(pit.exp||pit.stem||'').slice(0,70)):'';
-    h+='<div class="li"'+(pv?' data-m6pv="'+esc(pv)+'"':'')+'><div class="nm"><b>'+esc(x.topic)+'</b><div class="mini">'+esc(x.cat)+' ／ '+x.ids.length+' / '+x.att+'問ミス（'+Math.round(x.rate*100)+'%） ／ 誤答'+x.ng+'回 — この章は動画に戻る</div></div>'
+    h+='<div class="li"'+(pv?' data-m6pv="'+esc(pv)+'"':'')+'><div class="nm"><b>'+esc(x.topic)+'</b><div class="mini">'+esc(x.cat)+' ／ '+x.att+'問中 '+x.ids.length+'問がまだ直っていない（'+Math.round(x.rate*100)+'%） — この章は動画に戻る</div></div>'
       +(ch?'<a class="btn sm" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
-        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.play+mmss(ch.sec)+' から</a>':'')
+        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.yt+mmss(ch.sec)+' から</a>':'')
       +'<button class="btn sm" data-act="startTopic" data-c="'+esc(x.cat)+'" data-t="'+esc(x.topic)+'">解く</button></div>';
   });
   h+='</div></div>';
@@ -2289,17 +2598,33 @@ var MINQ=10;
    旧：その分野を10問解いたら、配点20点ぶんを正答率で丸ごと推定していた。
        宅建業法を37問（2,016肢中1.8%）解いただけで「20点満点ぶん」を見積もるのは無理がある。
    新：**配点 × その分野の消化率 × 直近の正答率**。未着手のぶんは0点として数える。
-       だから進めば増える。分母は本試験と同じ50点で固定する。 */
+       だから進めば増える。分母は本試験と同じ50点で固定する。
+   2026-08-15 さらに単元（小分類）単位に変えた。本人の問い「章ごとの問題の配分や点を見て
+   正確に出しているんだよね？」に対して、見ていなかった＝大分類6つの配点しか使わず、
+   科目の中は肢数の比でしかなかった。肢数の比は本試験の配点と一致しない
+   （例：宅建業法の「業務上の規制」は毎年3.60問だが、肢は353で科目の17%しかない）。
+   いまは CATQ（実測配点）で単元ごとに計算し、画面の内訳だけ大分類へ足し戻している。 */
 function scoreNow(){
-  var pts=0,covered=0,done=[];
-  BIGS.forEach(function(b){
-    var s=bigStat(b);
+  var pts=0,covered=0,agg={};
+  CATS.forEach(function(c){
+    var q=CATQ[c];
+    if(!q)return;                                       /* 配点0の単元（贈与税）は寄与しない */
+    var s=catStat(c);
     if(!s.n)return;
-    var cov=s.att/s.n;                                  /* その分野をどれだけ見たか */
-    var rate=(s.nowRate===null)?0:s.nowRate;
-    pts+=s.q*cov*rate;
-    covered+=s.q*cov;
-    if(s.att>0)done.push({big:b,q:s.q,att:s.att,n:s.n,cov:cov,rate:rate});
+    var cov=s.att/s.n;                                  /* その単元をどれだけ解いたか */
+    var rate=(s.nowRate===null)?0:s.nowRate;            /* 直近が正解の割合 */
+    var b=CINFO[c].big,g=agg[b]||(agg[b]={big:b,q:0,att:0,n:0,pts:0,cov:0});
+    g.q+=q;g.att+=s.att;g.n+=s.n;g.pts+=q*cov*rate;g.cov+=q*cov;
+    pts+=q*cov*rate;covered+=q*cov;
+  });
+  /* 内訳は今までどおり大分類で出す（画面は変えない）。単元で出した点を大分類へ足し、
+     表示の式「配点 × 解いた割合 × 正答率」が成り立つように cov・rate を配点で重み付けした
+     平均に直す（q*cov*rate が単元ごとの合計と一致する＝画面と計算がずれない）。 */
+  var done=[];
+  Object.keys(agg).forEach(function(b){
+    var g=agg[b];
+    if(!g.att)return;
+    done.push({big:b,q:g.q,att:g.att,n:g.n,cov:g.q?g.cov/g.q:0,rate:g.cov?g.pts/g.cov:0});
   });
   done.sort(function(x,y){return y.q*y.cov*y.rate-x.q*x.cov*x.rate});
   return {pts:pts,covered:covered,done:done,total:50};
@@ -2405,7 +2730,7 @@ function vAnalysis(){
     h+='<div class="li"><div class="nm">'+esc(x.t)+'<div class="mini">'+esc(x.c)+'</div></div>'
       +'<span class="mini num">'+(x.wr*100).toFixed(0)+'%</span>'
       +(ch?'<a class="btn sm" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
-        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.play+mmss(ch.sec)+'</a>':'')+'</div>';
+        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.yt+mmss(ch.sec)+'</a>':'')+'</div>';
   });
   h+='</div>';
 
@@ -2869,6 +3194,8 @@ function doAnswer(userOx){
   /* まずはDOMを作り直さない差分更新を試す。できなければ通常の描画に落とす。 */
   if(!applyExpDom(it,id))render();
   S.anim=null;
+  syncNextBar();          /* 差分更新（applyExpDom）は render を通らないのでここでも合わせる */
+  scrollToAnsline();      /* 正誤の行を画面の上へ＝押した直後に○×と解説の頭が目に入る */
   playFx(S.res.ok,S.tier);
 }
 /* 「次の問題」＝今のカードを上へ8pxフェードアウト（0.16s）→ 次のカードが下から入る */
@@ -2887,6 +3214,9 @@ function advance(){
   clearFx();
   S.qi++;S.phase='q';S.res=null;S.broke=false;
   if(S.qi>=S.queue.length){
+    /* 抜き打ちは「解き終えたとき」に今日の印を付ける（開始時に付けると、途中でやめただけで
+       その日の抜き打ちが失われる。途中でやめたら印は付かない＝またできる。2026-08-15 批評）。 */
+    if(S.kind==='sneak'){var ds=ST.days[today()]||{n:0,ok:0};ds.sneak=1;ST.days[today()]=ds;saveST()}
     /* 完走。間違いが残っていなくて動画を仕上げていたら「この動画は完了」を記録する */
     if(!S.wrongs.length&&S.roundVid){
       var vp2=vpOf(S.roundVid);
@@ -2936,6 +3266,13 @@ document.addEventListener('click',function(e){
     if(!confirm('解きかけのセッションを破棄します。問題ごとの履歴は残ります。'))return;
     closeRunClock();      /* 破棄でも、それまでに解いていた時間は実測に残す */
     dropRun();S.queue=[];S.qi=0;go('home');return;
+  }
+  /* 学習タブの入口の切り替え（動画で進む／単元で進む）。次に開いたときも同じ側を出す */
+  if(a==='fmode'){
+    var fm=(t.getAttribute('data-v')==='cat')?'cat':'video';
+    if(S.fmode===fm)return;
+    S.fmode=fm;ST.settings.fmode=fm;saveST();
+    S.dir=null;go('fields');return;
   }
   if(a==='cat'){S.studyVid=null;m1ToStudy(t,t.getAttribute('data-c'));return}
   /* 一覧の動画の行＝その動画1本の画面（章と問題）へ */
@@ -3041,7 +3378,8 @@ document.addEventListener('click',function(e){
     if(sneakDone()){msg&&msg('今日の抜き打ちは終わっています');return}
     S.round=0;S.kind='sneak';var sq=plan().sneak;
     if(!sq.length)return;
-    var d=ST.days[today()]||{n:0,ok:0};d.sneak=1;ST.days[today()]=d;saveST();  /* 1日1回の印 */
+    /* 「今日は済」の印は完走したときに付ける（advance()）。ここで付けると、誤タップや
+       ホームに戻っただけで1問も解かずにその日の抜き打ちが消えていた（2026-08-15 批評）。 */
     startQueue(sq,'抜き打ち',false,null,true);
     sq.forEach(function(it){S.sneak[it.id]=true});   /* 画面に「抜き打ち」の印を出す */
     render();return;
@@ -3052,9 +3390,11 @@ document.addEventListener('click',function(e){
     var wbg=t.getAttribute('data-b');
     S.round=0;S.kind='review';startQueue(wrongPool().filter(function(it){return it.big===wbg}),wbg+' の間違い',false);return;
   }
-  if(a==='startFilter'){S.kind='review';startQueue(filtered(),'絞り込み');return}
-  if(a==='startSel'){S.kind='new';startQueue(selItems(),'選択範囲');return}
-  if(a==='startAll'){S.kind='new';startQueue(ITEMS,'全範囲');return}
+  /* 本人が範囲を選んだ入口は未習フィルタを通さない（pickExplicit）。
+     通していたせいで、絞り込みで権利関係を選ぶと0問になっていた（2026-08-15 批評）。 */
+  if(a==='startFilter'){S.kind='review';S.pickExplicit=true;startQueue(filtered(),'絞り込み');return}
+  if(a==='startSel'){S.kind='new';S.pickExplicit=true;startQueue(selItems(),'選択範囲');return}
+  if(a==='startAll'){S.kind='new';S.pickExplicit=true;startQueue(ITEMS,'全範囲');return}
   /* ここまでで解ける＝視聴済みの範囲で解ける未着手をまとめて解く（出題順はデフォルト＝need_seq 昇順） */
   if(a==='startCum'){
     var cb=t.getAttribute('data-b'),cl=cumItems(cb);
@@ -3067,22 +3407,31 @@ document.addEventListener('click',function(e){
     var cc=t.getAttribute('data-c');
     /* 章・動画と揃えて未着手だけ（2026-08-15 の見直しで漏れていた） */
     /* 小分類から解くときも基準の動画を渡す（渡さないと解禁判定で全部落ちて0問になる。
-       章・動画は渡していたのにここだけ抜けていた＝2026-08-15 批評で判明）。 */
-    /* 基準の動画は「先頭」ではなく主教材の新しいものを選ぶ。先頭だと法改正まとめ等の
-       外れ動画が来て解禁が効かず0問になる。動画が無い小分類もあるので、
-       科目そのものを基準にする S.baseBig を併用する（2026-08-15 実機検証で判明）。 */
-    var cbv=null,cbu='';
-    (CHAP[cc]||[]).forEach(function(v){
-      var pr=(v.source===DEFSRC)?2:1, cur=(cbv?((VSRC[cbv]===DEFSRC)?2:1):0);
-      if(pr>cur||(pr===cur&&(v.upload||'')>cbu)){cbv=v.vid;cbu=v.upload||''}
-    });
-    var cbb=null;
-    for(var ci=0;ci<ITEMS.length;ci++)if(ITEMS[ci].cat===cc){cbb=ITEMS[ci].big;break}
-    S.kind='new';m1ToQuiz(t,function(){S.baseBig=cbb;startQueue(pickRest(itemsOfCat(cc),t),cc,false,cbv)});return;
+       章・動画は渡していたのにここだけ抜けていた＝2026-08-15 批評で判明）。
+       基準の動画は catBaseVid() で選ぶ＝その小分類と同じ科目の動画に限る。
+       動画が無い小分類もあるので、科目そのものを基準にする S.pendBig を併用する。 */
+    var cbb=CINFO[cc]?CINFO[cc].big:null,cbv=catBaseVid(cc,cbb);
+    S.kind='new';m1ToQuiz(t,function(){S.pendBig=cbb;startQueue(pickRest(itemsOfCat(cc),t),cc,false,cbv)});return;
+  }
+  /* 単元の中の小見出し（字幕で割った区切り）から解く。本人が範囲を選んだ入口なので
+     未習フィルタは通さない（pickExplicit）。基準の動画＝その小見出しが載っている動画。 */
+  if(a==='startSub'){
+    var su=t.getAttribute('data-c'),si=+t.getAttribute('data-i');
+    var sg=(catSubs(su)||{}).subs[si];
+    if(!sg)return;
+    var sl=sg.ids.map(function(x){return BY[x]}).filter(Boolean);
+    if(!sl.length)return;
+    /* 基準の動画（sg.vid）は こざりえ＝1本1科目なので、科目が食い違うことがある。
+       解禁は pickExplicit で外れるが、保険として科目基準も同じ1回だけ渡しておく。 */
+    var sb=CINFO[su]?CINFO[su].big:null;
+    S.kind='new';m1ToQuiz(t,function(){
+      S.pickExplicit=true;S.pendBig=sb;startQueue(pickRest(sl,t),sg.sub,false,sg.vid);
+    });return;
   }
   if(a==='startTopic'){
     var c3=t.getAttribute('data-c'),t3=t.getAttribute('data-t');
-    S.kind='review';m1ToQuiz(t,function(){startQueue(itemsOfTopic(c3,t3||'未分類'),t3||'未分類')});return;
+    /* 章（小分類の中の章）も本人が選んだ範囲なので未習フィルタを通さない */
+    S.kind='review';m1ToQuiz(t,function(){S.pickExplicit=true;startQueue(itemsOfTopic(c3,t3||'未分類'),t3||'未分類')});return;
   }
   /* 動画単位でまとめて解く＝その動画の章の秒数の昇順（基準の動画＝この動画） */
   if(a==='startVid'){
@@ -3099,7 +3448,8 @@ document.addEventListener('click',function(e){
     S.kind='review';                                 /* 間違い直しの時間は「復習」に積む */
     S.round=(S.round||0)+1;
     if(S.roundVid){var vp=vpOf(S.roundVid);vp.round=S.round;saveST()}
-    startQueue(S.wrongs.map(function(i){return BY[i]}).filter(Boolean),'間違い直し '+S.round+'周目',false,S.baseVid);
+    /* 第6引数 keepRound=true ＝ startQueue で周回数を0に戻さない（周回を続ける唯一の呼び出し） */
+    startQueue(S.wrongs.map(function(i){return BY[i]}).filter(Boolean),'間違い直し '+S.round+'周目',false,S.baseVid,false,true);
     return;
   }
   if(a==='nextchap'){
@@ -3108,6 +3458,7 @@ document.addEventListener('click',function(e){
     if(!nch||isNaN(ns)){go('home');return}
     var nlab=nch.label;
     S.round=0;S.kind='new';S.sort='timeline';
+    ST.lastChap={vid:nvid,sec:ns,label:nlab||'章'};saveST();   /* ホームの「続き」の起点を進める */
     m1ToQuiz(t,function(){
       startQueue(restOnly(chapItemsUp(nvid,ns)),nlab||'章',true,nvid);
       S.roundSec=ns;
@@ -3130,6 +3481,7 @@ document.addEventListener('click',function(e){
   if(a==='startChap'){
     var cv=t.getAttribute('data-v'),cs2=+t.getAttribute('data-s'),cl=t.getAttribute('data-l');
     /* 既定は未着手だけ。「全 N問」を押したときは解いた分も含めて全部（2026-08-15 本人指摘）。 */
+    ST.lastChap={vid:cv,sec:cs2,label:cl||'章'};saveST();      /* ホームの「続き」の起点にする */
     S.kind='new';m1ToQuiz(t,function(){
       startQueue(pickRest(chapItemsUp(cv,cs2),t),cl||'章',true,cv);
       S.roundSec=cs2;                      /* 完走時に「次の章へ」を出すため */
@@ -3969,6 +4321,9 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   BIGLEARN:BIGLEARN,BIGVIDS:BIGVIDS,VBIG:VBIG,bigsOrdered:bigsOrdered,bigProg:bigProg,
   vno:vno,vlabel:vlabel,vlab:vlab,VLAB:VLAB,VNOC:VNOC,vshort:vshort,vrowHtml:vrowHtml,
   nextVidOf:nextVidOf,nextCardHtml:nextCardHtml,vlistHtml:vlistHtml,cumItems:cumItems,VCHN:VCHN,
+  nextVidAll:nextVidAll,vidsLeft:vidsLeft,flowVids:flowVids,openBigs:openBigs,openBigsNow:openBigsNow,
+  contChap:contChap,chapsOf2:chapsOf2,nextChap:nextChap,flowHtml:flowHtml,
+  bigOfVid:bigOfVid,severeItem:severeItem,dayOfStamp:dayOfStamp,restCount:restCount,srcRank:srcRank,
   vidMs:vidMs,vpOf:vpOf,tlogSum:tlogSum,tlogDay:tlogDay,addStudyMs:addStudyMs,
   watchStart:watchStart,watchEnd:watchEnd,vminReal:vminReal,vminUsed:vminUsed,TKINDS:TKINDS,
   setResultBtns:setResultBtns,vDone:vDone,VLEN:VLEN,closeRunClock:closeRunClock,
@@ -4090,7 +4445,7 @@ function srcSheet(id){
    +(why.length?'<div class="mini" style="margin-top:6px">根拠 '+esc(why.join('・'))+'</div>':'')
    +(chs.length?'<div class="hr"></div>'+chs.map(function(ch){
        return '<a class="link" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
-        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.play
+        +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.yt
         +'<span class="lbl">'+esc(ch.label)+(ch.src?'（'+esc(ch.src)+'）':'')+'</span>'
         +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
      }).join(''):'')
@@ -4340,6 +4695,7 @@ document.addEventListener('toggle',function(e){
 },true);
 
 /* ---------- 起動 ---------- */
+catqCheck();                                 /* 配点表の検算（合計50.00・単元名の一致）を console に出す */
 askPersist();                                /* 記録を消されないように永続化を要求（未対応環境では何もしない） */
 m3Init();                                    /* 3層の生成とスクロール視差 */
 M2.setSound(!!(ST.settings&&ST.settings.sound));

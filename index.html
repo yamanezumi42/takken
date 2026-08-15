@@ -258,6 +258,7 @@ a{color:var(--chipfg)}
 .dcount{font-size:34px;font-weight:600;line-height:1.1}
 .dcount span{font-size:13px;font-weight:400;margin-left:3px;color:var(--muted)}
 .dcount.near{color:var(--ng)}
+.hcard .hnum.near{color:var(--ng)}   /* 30日前から色を変える（定義が無く効いていなかった） */
 /* ---- 今日の3枠 ---- */
 .q3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .q3c{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 2px;border:1px solid var(--line);
@@ -331,6 +332,15 @@ a{color:var(--chipfg)}
 .dayx div{flex:1;text-align:center;overflow:hidden}
 
 /* ---- タブ ---- */
+/* 解説中だけ出る「次の問題」。タブの上に浮かせる（タブは隠さない＝z-index はタブより下）。
+   地は下から page の地色へ抜けるぼかしにして、濃い帯が居座って見えないようにする。
+   これが無いと、回答のたびに400〜650pxスクロールしてボタンを押しに行くことになる
+   （2026-08-15 批評の実測：ボタン y1241／y1463・回答直後の scrollY は0）。 */
+#nextbar{position:fixed;left:0;right:0;bottom:calc(53px + env(safe-area-inset-bottom));z-index:19;
+  padding:10px 14px 12px;pointer-events:none;
+  background:linear-gradient(to top,var(--bg) 58%,rgba(255,255,255,0))}
+#nextbar[hidden]{display:none}
+#nextbar .btn{pointer-events:auto;max-width:520px;margin:0 auto}
 #tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--panel);
   border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 #tabs button{flex:1;background:none;border:0;padding:9px 0 8px;min-height:52px;color:var(--muted);
@@ -344,7 +354,10 @@ a{color:var(--chipfg)}
 /* ---- モーダル ---- */
 #modal{position:fixed;inset:0;z-index:40;background:rgba(29,33,31,.45);display:flex;align-items:flex-end;justify-content:center}
 #modal[hidden]{display:none}
-.sheet{background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-width:520px;max-height:88dvh;overflow:auto;padding:16px 14px 24px}
+/* 設定シート。最下部が「進行状況を全消去」＝取り返しのつかない操作なので、
+   ホームインジケータのスワイプ領域に重ねない（下の余白に34pxぶんを足す）。 */
+.sheet{background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-width:520px;max-height:88dvh;overflow:auto;
+  padding:16px 14px calc(24px + env(safe-area-inset-bottom))}
 textarea{width:100%;min-height:150px;font-family:var(--num);font-size:11px;border:1px solid var(--line);
   border-radius:var(--radius);padding:10px;background:var(--panel);color:var(--fg);line-height:1.5}
 input[type=date],input[type=number]{font-family:var(--num);font-size:14px;min-height:40px;padding:0 10px;
@@ -457,7 +470,10 @@ input[type=date],input[type=number]{font-family:var(--num);font-size:14px;min-he
 :root{--paper:var(--bg);--ok:var(--acc);--okdeep:var(--chipfg);--oktint:var(--chipbg);--line2:var(--line)}
 /* app.html はページ全体がスクロールするので fixed で画面を覆う（デモは端末枠内なので absolute）。
    z-index：#fx 30 / #m1fx 35 / #modal 40 より上、タブ(20)も覆って区切りを強く出す */
-.m5-ov{position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center}
+/* 完走のオーバーレイ。唯一の出口「ホームへ戻る」が下端に来るので、
+   ホームインジケータのスワイプ領域（iPhone15で34px）に入らないよう底を上げる。 */
+.m5-ov{position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;
+  padding-bottom:env(safe-area-inset-bottom)}
 .m5-ov[hidden]{display:none}
 #m5-intro{background:var(--paper);flex-direction:column}
 #m5-intro .line{width:132px;height:1px;background:var(--fg);opacity:.85;transform-origin:50% 50%}
@@ -471,7 +487,11 @@ input[type=date],input[type=number]{font-family:var(--num);font-size:14px;min-he
 #m5-start .n{margin-top:9px;font-size:19px;font-weight:600;letter-spacing:.08em}
 #m5-start .q{margin-top:9px;padding-top:9px;border-top:1px solid var(--line2);font-size:12px;color:var(--muted);letter-spacing:.06em}
 #m5-start .q b{font-size:17px;font-weight:600;color:var(--fg);margin-right:2px}
-#m5-result{background:var(--paper);align-items:stretch;flex-direction:column;padding:26px 20px 18px;overflow:auto}
+/* padding のショートハンドは .m5-ov の padding-bottom（セーフエリア）を上書きする。
+   ID の方が詳細度も高く後ろにあるので、ここで明示的に足す（2026-08-15 実測で判明）。
+   この画面の下端には唯一の出口「ホームへ戻る」があるので、潰すとホームスワイプと重なる。 */
+#m5-result{background:var(--paper);align-items:stretch;flex-direction:column;
+  padding:26px 20px calc(18px + env(safe-area-inset-bottom));overflow:auto}
 #m5-result .rh{text-align:center}
 #m5-result .rh .k{font-size:11px;letter-spacing:.28em;color:var(--muted)}
 #m5-result .rh .t{margin-top:8px;font-size:17px;font-weight:600;letter-spacing:.12em}
@@ -785,6 +805,33 @@ details.m6-det>summary .nm{flex:1;font-size:13px;line-height:1.5;min-width:0;ove
   transition:transform var(--d-tab) var(--eio)}
 details.m6-det[open]>summary .m6-mk{transform:rotate(90deg)}
 .m6-dtxt{padding:2px 0 10px 4px}
+/* 章の行（chrow）。章名を1段目に丸ごと置き、2段目にバッジ・動画・「残り／全」・開閉記号を並べる。
+   ボタンが2つ並ぶと章名の列が痩せて縦に折れていた（2026-08-15 検証）。章名は省略しない。 */
+details.m6-det.chrow>summary{flex-wrap:wrap;row-gap:6px;padding:8px 0}
+details.m6-det.chrow>summary .nm{flex:0 0 100%}
+.chbt{flex:1 1 auto;display:flex;gap:8px;min-width:0}
+.chbt .btn{flex:1 1 0;width:auto;margin:0;min-width:0}
+/* 単元で進む（小分類の一覧）。骨格は章の一覧（m6-det）と同じで、装飾は足していない。
+   単元名が長い（「所有権・共有・占有権・用益物権」など）ので、行を2段に折り返す
+   ＝1段目が名前と数字、2段目が「残り／全」のボタン。iPhone 15（393px）で潰れないため。
+   小見出しを持たない単元は <details> にしない（開いても中身が無い）ので、
+   同じ見た目を .ur-flat（div）にも当てる。 */
+details.ur,.ur-flat{border-bottom:1px solid var(--line)}
+details.ur:last-child,.ur-flat:last-child{border-bottom:0}
+details.ur>summary,.ur-flat>.urh{flex-wrap:wrap;padding:8px 0;min-height:0}
+.ur-flat>.urh{display:flex;align-items:center;gap:9px}
+.urh .nm{flex:1;font-size:13px;line-height:1.5;min-width:0;overflow-wrap:anywhere}
+.urh .qn{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11px;
+  color:var(--muted);font-weight:400;margin-left:6px}
+.urh .bt{flex:0 0 100%;display:flex;gap:8px}
+.urh .bt .btn{flex:1;width:auto;margin:0}
+details.ur[open]>summary .m6-mk{transform:rotate(90deg)}
+/* 単元の中の小見出し（字幕で割った区切り）。親より一段小さく、左の線でぶら下がりを示す */
+.usub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  padding:6px 0 8px 10px;margin:0 0 6px;border-left:2px solid var(--line)}
+.usub .nm{flex:0 0 100%;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.usub .bt{flex:0 0 100%;display:flex;gap:8px}
+.usub .bt .btn{flex:1;width:auto;margin:0}
 @supports selector(::details-content){
   details.m6-det::details-content{opacity:0;transform:translate3d(0,-4px,0);content-visibility:hidden;
     transition:opacity var(--d-in) var(--eo),transform var(--d-in) var(--eo),
@@ -839,8 +886,11 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .flw{display:inline-block;vertical-align:middle;line-height:0}
 
 /* ---- ホーム H3-b ---- */
-.hpair{display:flex;gap:11px;margin-bottom:13px}
-.hcard{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+/* 2×2。4枚とも同じ大きさ・同じ余白・同じ字の大きさにする（本人指示 2026-08-15
+   「今日45問といま0.6/50点も、試験まで・1日あたりと同じ四角で並べてほしい」）。
+   grid にすると同じ列の幅がそろい、行の高さも自動でそろう。 */
+.hpair{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:13px}
+.hcard{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:15px 14px;position:relative;overflow:hidden}
 .hcard .flw{position:absolute;top:11px;right:11px}
 .hcard .hlab{font-size:11px;color:var(--muted);letter-spacing:.06em}
@@ -865,15 +915,24 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qhead .qname{font-size:13.5px;letter-spacing:.06em;color:var(--accd);font-weight:600}
 .qhead .qcnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .qhead .qrule{height:1px;background:var(--accd);opacity:.35}
-.qwrap{padding:16px 13px 0;gap:11px;justify-content:flex-start;
+/* 下の余白＝タブの高さ（実測53px）＋ホームインジケータ（iPhone15で34px）＋12px。
+   ○×は margin-top:auto で面の下端に置いているので、この余白ぶんだけ上に上がる。
+   入れる前は 393x852 で○ボタン 755〜827／タブ上端 799 ＝ 下3分の1が固定タブに隠れ、
+   押すと「動画学習」へ飛んでいた（2026-08-15 批評・実測）。 */
+.qwrap{padding:16px 13px calc(53px + env(safe-area-inset-bottom) + 12px);gap:11px;justify-content:flex-start;
   min-height:calc(100dvh - 188px)}           /* 上のヘッダーと下のタブを引いた高さ */
 /* B1：面（問題文）は文章の高さにぴったり合わせ、上に寄せる。引き伸ばさない。
    左右の余白は詰める＝1行に入る字数を増やして、行末の空きを減らすため。 */
 .qwrap .stem{flex:0 0 auto;font-family:var(--mincho);font-size:15.5px;line-height:1.95;
   border-radius:var(--radius);padding:15px 14px}
 .qwrap .stem .stemtx{font-family:var(--mincho)}
-/* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない */
-.qwrap .qctl{margin-top:auto}
+/* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない。
+   さらに sticky で「タブの上」に貼り付ける。面が短いときは元の位置のまま動かない（sticky なので）。
+   下の余白（padding-bottom）だけでは、面が画面より高い問題では○×の位置が変わらず、
+   393x852・safe-area 34px で ○ボタン 757〜827／タブ上端 765 ＝ 下3分の2がタブに隠れ、
+   押すと「動画学習」へ飛んでいた（2026-08-15 実測。1,048問を調べて4問＝全体で約20問）。
+   z-index はタブ(20)より小さくする＝タブを隠さない（出題中の唯一の出口なので隠してはいけない）。 */
+.qwrap .qctl{margin-top:auto;position:sticky;bottom:calc(53px + env(safe-area-inset-bottom) + 12px);z-index:5}
 
 /* 横に引っ張れる余地を作らない。
    原因＝画面遷移で #view が一瞬 scale(1.03) になり、その3%（390pxなら約11px）が
@@ -950,6 +1009,9 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   </div>
 </div>
 <div class="m3-fg" id="m3fg" aria-hidden="true"><span class="glare"></span></div>
+<!-- 解説の間だけ出す「次の問題」。#view の外に置く＝#view は入場で transform（scale）するので、
+     中に置くと position:fixed が効かなくなる。タブ（z-index 20）より下の層に置いてタブを隠さない。 -->
+<div id="nextbar" hidden><button class="btn pri" data-act="next">次の問題</button></div>
 <nav id="tabs"></nav>
 <!-- 演出オーバーレイ。#view の外に置く（＝彩度変化のフィルタ対象外・レイアウトに影響しない） -->
 <div id="fx" hidden></div>
@@ -1042,7 +1104,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='5a213096';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='c3a3e646';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
