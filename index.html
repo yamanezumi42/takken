@@ -991,12 +991,14 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     <div class="v"><b class="num" id="r-grad">0</b><s>問（通常出題から外れました）</s></div></div>
   <!-- 全問正解のときは「もう一度この範囲を解く」を出さない（2026-08-14 本人指摘）。
        間違いが残っていれば「間違えた N問を解く」が主役で、0になるまで周回する。
-       「ホームへ戻る」は下部タブがあるので置かない。 -->
+       完走オーバーレイは下部タブ（z-index 20）を覆うので、ここが唯一の出口になる。
+       だから「ホームへ戻る」を置く（2026-08-15 本人指示・検証で到達不能だったのを修正）。 -->
   <div class="rbtns" id="r-btns">
     <button class="pri" type="button" data-act="round" id="r-round" hidden>間違えた問題を解く</button>
+    <button class="acc" type="button" data-act="nextchap" id="r-nextchap" hidden>次の章へ</button>
     <button class="acc" type="button" data-act="nextvid" id="r-next" hidden>次の動画へ</button>
     <button class="pri" type="button" data-act="again" id="r-again" hidden>もう一度この範囲を解く</button>
-    <button type="button" data-act="tab" data-v="fields">別の分野を選ぶ</button>
+    <button type="button" data-act="tab" data-v="home">ホームへ戻る</button>
   </div>
 </div>
 <div class="m5-ov" id="m5-closed" hidden>
@@ -1040,7 +1042,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='496f93d7';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='5a213096';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){

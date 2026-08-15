@@ -279,6 +279,7 @@ function inRange(it,cap){
   if(ST.settings&&ST.settings.ahead)return true;
   var ob=openBigs();
   if(S.baseVid){var b=bigOfVid(S.baseVid);if(b)ob[b]=1}
+  if(S.baseBig)ob[S.baseBig]=1;      /* 小分類から解くときはその科目を基準にする */
   return !!ob[it.big];
 }
 /* その動画の問題のうち「その動画までの知識で解けるもの」＝動画学習の画面で数える単位 */
@@ -348,7 +349,25 @@ var LSOK=true;
 var ST=loadST();
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
 setTimeout(function(){try{ghAuto('boot')}catch(e){}},4000);    /* 起動のたび（中身が変わっていれば） */
-function loadST(){var o={};try{o=JSON.parse(localStorage.getItem(LSK)||'{}')||{}}catch(e){o={};LSOK=false}return normST(o)}
+/* 記録が壊れて読めなかったら、**元の文字列を退避してから**空で始める。
+   退避しないと直後の saveST() が原本を上書きして、部分的に救えたはずの記録まで消える
+   （2026-08-15 批評で判明。本人は一度、記録を全部失っている）。 */
+function loadST(){
+  var raw=null,o={};
+  try{raw=localStorage.getItem(LSK)}catch(e){LSOK=false}
+  try{o=JSON.parse(raw||'{}')||{}}
+  catch(e){
+    o={};LSOK=false;
+    try{
+      if(raw){
+        localStorage.setItem(LSK+'_broken_'+String(nowStamp()).replace(/[^0-9]/g,''),raw);
+        STBROKEN=true;
+      }
+    }catch(e2){}
+  }
+  return normST(o);
+}
+var STBROKEN=false;
 function normST(o){
   if(!o||typeof o!=='object')o={};
   if(!o.items||typeof o.items!=='object')o.items={};
@@ -767,10 +786,29 @@ function bigProg(big){
   });
   return {n:n,ok:ok,pct:n?Math.round(ok/n*100):0};
 }
+/* 「次の動画へ」＝カリキュラムの次の科目の動画。
+   公開日順で追ってはいけない（2026-08-15 批評で判明）。こざりえ2026年版の公開日は
+   権利03-13→業法03-23→法令04-19→税06-05 なので、公開日で追うと業法の次が法令になり、
+   権利関係（本試験14点）を丸ごと飛ばしていた。カリキュラムは 業法→権利→法令→税。 */
 function nextVid(vid){
   var a=vidOrder(),i=-1;
   for(var k=0;k<a.length;k++)if(a[k].vid===vid){i=k;break}
   if(i<0)return null;
+  var order=bigsOrdered(),cb=bigOfVid(vid),ci=cb?order.indexOf(cb):-1;
+  if(ci>=0){
+    for(var bi=ci+1;bi<order.length;bi++){
+      var best=null;
+      for(var m=0;m<a.length;m++){
+        var v=a[m];
+        if(v.src!==a[i].src)continue;
+        if(bigOfVid(v.vid)!==order[bi])continue;
+        if(!videoItems(v.vid).length)continue;
+        if(!best||v.up>best.up)best=v;        /* 同じ科目に複数あれば新しい版 */
+      }
+      if(best)return best;
+    }
+    return null;
+  }
   for(var j=i+1;j<a.length;j++)if(a[j].src===a[i].src&&videoItems(a[j].vid).length)return a[j];
   return null;
 }
@@ -1071,6 +1109,37 @@ function sortQ(arr){
   });
   return a;
 }
+/* 「残り」と「全部」を両方出す（2026-08-15 本人指摘）。
+   未着手だけを強制すると、37/54 の章で解いた37問を復習したいときに手が無くなる。
+   残りが0（全部やった）／残りが全部（未着手）のときは1つでよい。 */
+function twoBtns(act,attrs,rest,tot,cls,st){
+  var c='btn'+(cls?' '+cls:''),y=st?' style="'+st+'"':'';
+  if(rest>0&&rest<tot)
+    return '<button class="'+c+'"'+y+' data-act="'+act+'"'+attrs+'>残り '+n3(rest)+'問</button>'
+          +'<button class="'+c+'"'+y+' data-act="'+act+'" data-all="1"'+attrs+'>全 '+n3(tot)+'問</button>';
+  return '<button class="'+c+'"'+y+' data-act="'+act+'" data-all="1"'+attrs+'>'
+        +(rest===0?'もう一度解く（'+n3(tot)+'問）':'解く（'+n3(tot)+'問）')+'</button>';
+}
+/* data-all があれば全部、無ければ未着手だけ */
+function pickRest(list,t){return t.getAttribute('data-all')?list:restOnly(list)}
+function restCount(list){return list.filter(function(it){return att(R(it.id))===0}).length}
+/* いま解き終えた章の「次の章」＝同じ動画で、秒数が後ろにあり、まだ未着手が残っている章。
+   こざりえは1本＝1科目（最大1,524問）なので、動画を全問正解しないと次へ進めない作りでは
+   「動画→問題→間違い直し→次」の流れが成立しない（2026-08-15 批評で判明）。章単位で進める。 */
+function nextChap(vid,sec){
+  if(!vid||sec===null||sec===undefined)return null;
+  var list=null;
+  Object.keys(CHAP).forEach(function(c){(CHAP[c]||[]).forEach(function(v){
+    if(v.vid===vid&&!list)list=(v.chapters||[]).filter(function(x){return !x.skip});
+  })});
+  if(!list)return null;
+  var a=list.slice().sort(function(x,y){return x.sec-y.sec}),out=null;
+  a.forEach(function(ch){
+    if(out||ch.sec<=sec)return;
+    if(restCount(chapItemsUp(vid,ch.sec))>0)out=ch;
+  });
+  return out;
+}
 /* まだ解いていない問題だけに絞る。1問も残っていなければ全部返す（＝復習として解き直せる）。 */
 function restOnly(list){
   var rest=list.filter(function(it){return att(R(it.id))===0});
@@ -1122,6 +1191,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
 
 function startQueue(list,label,withSneak,baseVid,keepGrad){
   S.baseVid=baseVid||null;                 /* 基準の動画（指定が無ければ既定のチャンネル基準） */
+  if(baseVid)S.baseBig=null;               /* 動画・章から解くときは科目基準を持ち越さない */
   /* 卒業した問題は通常出題から外す。ただし抜き打ち（keepGrad）と周回は別 */
   var arr=list.filter(function(it){return !isGrad(R(it.id))||S.round>0||keepGrad});
   /* 未習の範囲を出さない（既定）。need_seq が「見た動画の最大の通し番号」を超える問題は、
@@ -1733,15 +1803,18 @@ function vStudy(){
       +(vlater?'<div class="mini" style="margin-bottom:8px">後の動画の知識が必要な '+n3(vlater)+'問は入れていません</div>':'')
       +'<a class="btn" href="'+vurl(v.vid,0)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(wkey)+'">'
       +IC.play+'動画を見る</a>'
-      +'<button class="btn" style="margin-top:8px" data-act="startVid" data-v="'+esc(v.vid)+'"'+(vn?'':' disabled')
-      +'>この動画の問題を解く（'+vn+'問）</button>';
+      +(vn?twoBtns('startVid',' data-v="'+esc(v.vid)+'"',restCount(videoItemsUp(v.vid)),vn,'','margin-top:8px')
+          :'<button class="btn" style="margin-top:8px" disabled>この動画の問題を解く（0問）</button>');
     var empty=0;
     list.forEach(function(ch){
       var its=chapItemsUp(v.vid,ch.sec),n=its.length;
-      if(!n){empty++;return}                               /* 0問の章は最初から出さない */
-      shown++;
+      /* 0問の章も出す（2026-08-15 本人指摘「省いてない？」）。
+         動画の目次と画面の章が一致していないと、どこまで見たか突き合わせられない。 */
+      /* 一覧には出すが、「視聴 ◯/◯」の分母は問題のある章だけで数える。
+         こざりえは登録166章のうち124章が0問なので、入れると分母が数倍に膨らむ。 */
+      if(!n){empty++}else{shown++}
       var key=v.vid+'#'+ch.sec,w=ST.watched[key];
-      if(w)seen++;
+      if(w&&n)seen++;
       var ck=v.vid+'|'+ch.sec,op=!!S.openChap[ck];
       /* まだ解いていない数を出す。「37/54」だと残りが何問か分からない（2026-08-15 本人指摘） */
       var rest=chapItemsUp(v.vid,ch.sec).filter(function(it){return att(R(it.id))===0}).length;
@@ -1754,7 +1827,7 @@ function vStudy(){
         +(w?' <span class="mini num">視聴 '+esc(String(w).slice(5))+'</span>':'')+'</span>'
         +'<span class="badge">'+(rest>0&&rest<n?('残り '+rest):(n+'問'))+'</span>'
         +'<a class="btn sm" href="'+vurl(v.vid,ch.sec)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(key)+'">'+IC.play+'</a>'
-        +'<button class="btn sm" data-act="startChap" data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'">'+(rest>0&&rest<n?'残りを解く':'この章だけ解く')+'</button>'
+        +(n?twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'"',rest,n,'sm',''):'')
         +'<span class="m6-mk">'+IC.chev+'</span></summary>';
       /* 紐づけの根拠を見せる（本人の指摘「どういう基準でその問題を選んでいるか分からない」） */
       h+='<div class="m6-dtxt">';
@@ -1766,7 +1839,7 @@ function vStudy(){
       if(its.length>12)h+='<div class="mini">ほか '+(its.length-12)+'問</div>';
       h+='</div></details>';
     });
-    if(empty)h+='<div class="mini" style="margin-top:8px">対応する問題がない章 '+empty+'件（この動画では出しません）</div>';
+    if(empty)h+='<div class="mini" style="margin-top:8px">まだ問題が紐づいていない章 '+empty+'件（この章からは出題しません）</div>';
     /* 動画には問題が紐づいているのに章が1つも出ない＝データの秒がずれている合図（黙って畳まない） */
     if(vn&&empty===list.length&&list.length)
       h+='<div class="warn" style="margin-top:8px">'+IC.warn+' この動画は '+vn+'問 紐づいていますが、'
@@ -1776,8 +1849,7 @@ function vStudy(){
   /* 学習の単位は動画1本なので、動画1本を開いているときは小分類まとめのボタンを出さない */
   if(!S.studyVid)
     h+='<div class="panel"><div class="mini" style="margin-bottom:8px">視聴 '+seen+'/'+shown+'</div>'
-      +'<button class="btn '+(shown&&seen===shown?'acc':'pri')+'" data-act="startCat" data-c="'+esc(c)+'">'
-        +(s.n-s.att>0&&s.att>0?'残りを解く（'+n3(s.n-s.att)+'問）':'この小分類の問題を解く（'+n3(s.n)+'問）')+'</button>'
+      +twoBtns('startCat',' data-c="'+esc(c)+'"',s.n-s.att,s.n,(shown&&seen===shown?'acc':'pri'),'')
       +'</div>';
   h+='</div>';
   return h;
@@ -1824,9 +1896,14 @@ function vQuiz(){
         var cs=CINFO[S.label]?catStat(S.label):null;
         /* 成績は「この1回（周回ならその周）」の集計を出す＝通算（ST.session）と混ぜない */
         var sT=S.sT||0,sR=S.sR||0,wn=S.wrongs.length;
-        var vs=S.roundVid?videoStat(S.roundVid):null,nx=(vs&&vs.done)?nextVid(S.roundVid):null;
+        var vs=S.roundVid?videoStat(S.roundVid):null;
+        var nc=nextChap(S.roundVid,S.roundSec);
+        /* 「次の動画へ」は全問正解ではなく**一周した**（未着手が0）で出す。
+           全問正解を条件にすると1,524問なので事実上出ない（2026-08-15 批評）。 */
+        var vdone=!!(vs&&(vs.done||(S.roundVid&&restCount(videoItemsUp(S.roundVid))===0)));
+        var nx=vdone?nextVid(S.roundVid):null;
         var perfect=(wn===0&&sT>0&&sR===sT);
-        setResultBtns(wn,nx,perfect);
+        setResultBtns(wn,nx,perfect,nc);
         M5.showResult({
           right:sR,total:tot,
           rate:sT?(sR/sT*100):0,
@@ -2046,11 +2123,13 @@ function expBlock(it,id){
    ・間違いが残っている＝「間違えた N問を解く」が最上段（主役）。0になるまで周回する
    ・0になったときだけ「次の動画へ」を主役にする（この動画を仕上げた合図）
    ・「ホームへ戻る」は置かない（下部タブがある） */
-function setResultBtns(wn,nx,perfect){
+function setResultBtns(wn,nx,perfect,nc){
   var rb=document.getElementById('r-round'),nb=document.getElementById('r-next'),
-      ag=document.getElementById('r-again');
+      ag=document.getElementById('r-again'),cb=document.getElementById('r-nextchap');
   if(rb){rb.hidden=!wn;if(wn)rb.textContent='間違えた '+n3(wn)+'問を解く'}
-  if(nb){nb.hidden=!nx;if(nx){nb.setAttribute('data-v',nx.vid);nb.className=wn?'pri':'acc'}}
+  /* 章を解き終えたら次の章へ。動画の続きを1回分ずつ進める導線（2026-08-15） */
+  if(cb){cb.hidden=!nc;if(nc){cb.setAttribute('data-s',nc.sec);cb.textContent='次の章へ（'+nc.label+'）';cb.className=wn?'pri':'acc'}}
+  if(nb){nb.hidden=!nx;if(nx){nb.setAttribute('data-v',nx.vid);nb.className=(wn||nc)?'pri':'acc'}}
   /* パスで解き残しがあるときだけ「もう一度この範囲を解く」を残す
      （全問正解なら不要、間違いがあるなら上の「間違えた…」がその役目） */
   if(ag)ag.hidden=(wn>0||perfect);
@@ -2058,7 +2137,9 @@ function setResultBtns(wn,nx,perfect){
 function vDone(){
   var tot=S.queue.length,nw=S.wrongs.length,sT=S.sT||0,sR=S.sR||0;
   var vs=S.roundVid?videoStat(S.roundVid):null;
-  var nx=(vs&&vs.done)?nextVid(S.roundVid):null;
+  var nc=nextChap(S.roundVid,S.roundSec);
+  var vdone=!!(vs&&(vs.done||(S.roundVid&&restCount(videoItemsUp(S.roundVid))===0)));
+  var nx=vdone?nextVid(S.roundVid):null;
   var perfect=(nw===0&&sT>0&&sR===sT);
   /* 完走画面のヘッダーは「この1回（周回ならその周）」の成績。通算（ST.session）と混ぜない */
   /* 連続正解のチップだけは通算（ST.session.streak）＝アプリを通した連続数という1つの意味に揃える */
@@ -2074,11 +2155,13 @@ function vDone(){
   }else{
     h+='<div class="h">'+(perfect?'全問正解':n3(tot)+'問 終了')+'</div>';
   }
-  if(nx)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextvid" data-v="'+esc(nx.vid)+'">次の動画へ</button>';
+  if(nc)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextchap" data-s="'+nc.sec+'">次の章へ（'+esc(nc.label)+'）</button>';
+  if(nx)h+='<button class="btn '+((nw||nc)?'':'acc')+'" style="margin-top:10px" data-act="nextvid" data-v="'+esc(nx.vid)+'">次の動画へ</button>';
   h+='<div class="hr"></div>';
-  /* 全問正解なら「もう一度」は出さない。ホームへ戻るボタンは下部タブで代用するので置かない。 */
+  /* 全問正解なら「もう一度」は出さない。 */
   if(!nw&&!perfect)h+='<button class="btn" data-act="again">もう一度この範囲を解く</button>';
-  h+='<button class="btn" style="margin-top:8px" data-act="tab" data-v="fields">別の分野を選ぶ</button>'
+  /* 終わったらホームへ（2026-08-15 本人指示。分野選択に置き去りにしない） */
+  h+='<button class="btn" style="margin-top:8px" data-act="tab" data-v="home">ホームへ戻る</button>'
    +'</div></div>';
   return h;
 }
@@ -2423,7 +2506,7 @@ function bars(rows){
 /* ---------- データ書き出し／読み込み ---------- */
 function dataSheet(){
   var m=document.getElementById('modal');
-  var json=JSON.stringify(ST);
+  var json=stOut();
   var lv=fxLevel();
   var lvs=[['auto','デフォルト（3段階）'],['strong','強'],['weak','弱'],['off','なし']];
   m.innerHTML='<div class="sheet">'
@@ -2564,7 +2647,7 @@ function ghPush(quiet){
   return fetch(url,{headers:ghHeaders(),cache:'no-store'})
     .then(function(res){return res.status===200?res.json():null})
     .then(function(cur){
-      var body={message:'宅建の記録 '+nowStamp(),content:b64(JSON.stringify(ST))};
+      var body={message:'宅建の記録 '+nowStamp(),content:b64(stOut())};
       if(cur&&cur.sha)body.sha=cur.sha;
       return fetch(url,{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)});
     })
@@ -2596,8 +2679,18 @@ function ghPull(){
     .catch(function(st){msg(typeof st==='number'?ghErr(st):'読み込めませんでした')});
 }
 /* 記録の中身の指紋。前回上げた時から変わっていなければ上げない（無駄なコミットを作らない）。 */
+/* 外に出す記録からは接続の設定（トークン）を必ず落とす。
+   これを忘れると PAT が GitHub のコミットと共有ファイルに平文で載る（2026-08-15 批評）。 */
+function stOut(){
+  var c=JSON.parse(JSON.stringify(ST));
+  if(c.settings&&c.settings.gh)delete c.settings.gh;
+  return JSON.stringify(c);
+}
 function ghFP(){
-  var s2=JSON.stringify(ST.items||{}),h=5381;
+  /* 問題の記録だけでなく、視聴の印・動画ごとの進捗・学習時間・日ごとの記録も見る。
+     items だけだと「今日は動画を見ただけ」の日が丸ごと上がらない（2026-08-15 批評）。
+     settings.gh は入れない（at が毎回変わって無限に上げてしまう）。 */
+  var s2=JSON.stringify([ST.items||{},ST.watched||{},ST.vp||{},ST.tlog||{},ST.days||{},ST.closedSeen||{}]),h=5381;
   for(var i=0;i<s2.length;i++){h=((h*33)^s2.charCodeAt(i))>>>0}
   return s2.length+'-'+h.toString(36);
 }
@@ -2614,7 +2707,7 @@ function ghAuto(reason){
   ghPush(true).then(function(ok){if(ok)ghSet({fp:fp})});
 }
 function shareBackup(){
-  var json=JSON.stringify(ST),name='takken_'+today()+'.json';
+  var json=stOut(),name='takken_'+today()+'.json';
   try{
     var f=new File([json],name,{type:'application/json'});
     if(navigator.share&&navigator.canShare&&navigator.canShare({files:[f]})){
@@ -2973,7 +3066,19 @@ document.addEventListener('click',function(e){
   if(a==='startCat'){
     var cc=t.getAttribute('data-c');
     /* 章・動画と揃えて未着手だけ（2026-08-15 の見直しで漏れていた） */
-    S.kind='new';m1ToQuiz(t,function(){startQueue(restOnly(itemsOfCat(cc)),cc)});return;
+    /* 小分類から解くときも基準の動画を渡す（渡さないと解禁判定で全部落ちて0問になる。
+       章・動画は渡していたのにここだけ抜けていた＝2026-08-15 批評で判明）。 */
+    /* 基準の動画は「先頭」ではなく主教材の新しいものを選ぶ。先頭だと法改正まとめ等の
+       外れ動画が来て解禁が効かず0問になる。動画が無い小分類もあるので、
+       科目そのものを基準にする S.baseBig を併用する（2026-08-15 実機検証で判明）。 */
+    var cbv=null,cbu='';
+    (CHAP[cc]||[]).forEach(function(v){
+      var pr=(v.source===DEFSRC)?2:1, cur=(cbv?((VSRC[cbv]===DEFSRC)?2:1):0);
+      if(pr>cur||(pr===cur&&(v.upload||'')>cbu)){cbv=v.vid;cbu=v.upload||''}
+    });
+    var cbb=null;
+    for(var ci=0;ci<ITEMS.length;ci++)if(ITEMS[ci].cat===cc){cbb=ITEMS[ci].big;break}
+    S.kind='new';m1ToQuiz(t,function(){S.baseBig=cbb;startQueue(pickRest(itemsOfCat(cc),t),cc,false,cbv)});return;
   }
   if(a==='startTopic'){
     var c3=t.getAttribute('data-c'),t3=t.getAttribute('data-t');
@@ -2984,7 +3089,8 @@ document.addEventListener('click',function(e){
     var vv=t.getAttribute('data-v');
     m1ToQuiz(t,function(){
       S.sort='timeline';S.round=0;S.kind='new';S.roundVid=vv;
-      startQueue(restOnly(videoItemsUp(vv)),VTIT[vv]||vv,true,vv);   /* 未着手だけ */
+      startQueue(pickRest(videoItemsUp(vv),t),VTIT[vv]||vv,true,vv);   /* 既定は未着手だけ・data-all で全部 */
+      S.roundSec=null;                     /* 動画まるごとなので章の続きではない */
     });return;
   }
   /* 間違い直しの周回（間隔なし・当日中・全問正解するまで） */
@@ -2994,6 +3100,18 @@ document.addEventListener('click',function(e){
     S.round=(S.round||0)+1;
     if(S.roundVid){var vp=vpOf(S.roundVid);vp.round=S.round;saveST()}
     startQueue(S.wrongs.map(function(i){return BY[i]}).filter(Boolean),'間違い直し '+S.round+'周目',false,S.baseVid);
+    return;
+  }
+  if(a==='nextchap'){
+    var ns=+t.getAttribute('data-s'),nvid=S.roundVid;
+    var nch=nextChap(nvid,S.roundSec);
+    if(!nch||isNaN(ns)){go('home');return}
+    var nlab=nch.label;
+    S.round=0;S.kind='new';S.sort='timeline';
+    m1ToQuiz(t,function(){
+      startQueue(restOnly(chapItemsUp(nvid,ns)),nlab||'章',true,nvid);
+      S.roundSec=ns;
+    });
     return;
   }
   if(a==='nextvid'){
@@ -3006,14 +3124,16 @@ document.addEventListener('click',function(e){
     var cat2=null;
     Object.keys(CHAP).forEach(function(c){if(cat2)return;if((CHAP[c]||[]).some(function(v){return v.vid===nv}))cat2=c});
     if(cat2)S.cat=cat2;
-    startQueue(videoItemsUp(nv),VTIT[nv]||nv,true,nv);
+    startQueue(restOnly(videoItemsUp(nv)),VTIT[nv]||nv,true,nv);   /* 解き済みを頭から出さない */
     return;
   }
   if(a==='startChap'){
     var cv=t.getAttribute('data-v'),cs2=+t.getAttribute('data-s'),cl=t.getAttribute('data-l');
-    /* 未着手だけを出す。37/54 の章で「もう一度37問」から始まるのは無駄
-       （2026-08-15 本人指摘）。全部やり直したいときは復習の絞り込みから。 */
-    S.kind='new';m1ToQuiz(t,function(){startQueue(restOnly(chapItemsUp(cv,cs2)),cl||'章',true,cv)});return;
+    /* 既定は未着手だけ。「全 N問」を押したときは解いた分も含めて全部（2026-08-15 本人指摘）。 */
+    S.kind='new';m1ToQuiz(t,function(){
+      startQueue(pickRest(chapItemsUp(cv,cs2),t),cl||'章',true,cv);
+      S.roundSec=cs2;                      /* 完走時に「次の章へ」を出すため */
+    });return;
   }
   if(a==='again'){S.qi=0;S.phase='q';S.res=null;saveRun(true);S.anim='card';S.enter=true;render();return}
   if(a==='data'){dataSheet();return}
@@ -3030,7 +3150,9 @@ document.addEventListener('click',function(e){
     var o;try{o=JSON.parse(s)}catch(err){msg('JSONとして読めません：'+err.message);return}
     if(!o||typeof o!=='object'||!o.items){msg('items が無いため読み込みません。');return}
     if(!confirm('現在の進行状況を上書きします。よろしいですか。'))return;
-    ST=normST(o);saveST();msg('読み込みました（'+Object.keys(ST.items).length+'問）。');render();return;
+    var keepgh=ST.settings&&ST.settings.gh;    /* 接続の設定は残す（ghPull と同じ扱い） */
+    ST=normST(o);if(keepgh)ST.settings.gh=keepgh;
+    saveST();msg('読み込みました（'+Object.keys(ST.items).length+'問）。');render();return;
   }
   if(a==='wipe'){
     if(!confirm('進行状況（takken_v1）を全消去します。取り消せません。'))return;
@@ -4227,5 +4349,7 @@ M2.delegate('[data-act],.cell,.b,.tog,.cb,.tapline,#tabs button');
 render();
 /* 起動の区切り。初回だけ長め（0.77秒）、2回目以降は0.39秒（毎回長い演出を強制しない） */
 var m5first=!(ST.settings&&ST.settings.launched);
-if(ST.settings){ST.settings.launched=true;saveST()}
+/* 起動のたびに ST 全体を書き戻さない（壊れた記録を確定的に潰すため。2026-08-15 批評）。
+   launched は「初回だけ演出を長くする」ためだけの印なので、他の保存のついでで足りる。 */
+if(ST.settings&&!ST.settings.launched){ST.settings.launched=true;if(!STBROKEN)saveST()}
 M5.playIntro(m5first);
