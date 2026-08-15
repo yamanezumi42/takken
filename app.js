@@ -470,8 +470,13 @@ function normST(o){
   if(o.settings.hint!==undefined)delete o.settings.hint;
   if(typeof o.settings.ahead!=='boolean')o.settings.ahead=false;  /* 未習の範囲も出す（既定＝オフ） */
   /* 学習タブのどちらで進んでいたか（video＝動画で進む／cat＝単元で進む）。
-     次に開いたときも同じ側を出す（2026-08-15 本人の注文「動画学習か単元学習で分けて」）。 */
-  if(o.settings.fmode!=='cat')o.settings.fmode='video';
+     次に開いたときも同じ側を出す（2026-08-15 本人の注文「動画学習か単元学習で分けて」）。
+     2026-08-15 本人指示「単元学習をメインにしたい」＝**未設定のときの既定を単元側にする**。
+     すでに保存されている選択（cat/video）はここでは触らない＝本人の選択を尊重する。 */
+  if(o.settings.fmode!=='cat'&&o.settings.fmode!=='video')o.settings.fmode='cat';
+  /* 「単元で進む」の大分類パネルの開閉（{大分類:true/false}）。null＝まだ一度も触っていない
+     ＝そのときは既定（残りがある最初の大分類だけ開く）を使う＝ubOpenMap() 参照。 */
+  if(!o.settings.ubOpen||typeof o.settings.ubOpen!=='object')o.settings.ubOpen=null;
   /* 記録を失わないための3つ。lastExport＝最後に書き出した日／a2hs＝ホーム画面の案内を閉じたか
      ／persist＝navigator.storage.persist() の結果（記録用・null＝未対応か未応答） */
   if(typeof o.settings.lastExport!=='string')o.settings.lastExport=null;
@@ -1251,9 +1256,15 @@ function nextChap(vid,sec){
     if(v.vid===vid&&!list)list=(v.chapters||[]).filter(function(x){return !x.skip});
   })});
   if(!list)return null;
+  /* その動画で**まだ解いていない問題が残っている、いちばん前の章**を返す。
+     以前は「いま解いた章より後ろ」だけを見ていたので、後ろの章から先に解くと
+     前の章に穴が残ったまま次の動画へ進んでしまった（2026-08-15 本人指摘
+     「タイムスタンプごとに 動画を見る→問題を解く→次のタイムスタンプ、じゃダメなの？」）。
+     いちばん前から拾えば、順番どおりに進み、飛ばした章も自然に埋まる。
+     sec は「いま解き終えた章」で、そこが残っていれば同じ章を出さないよう除く。 */
   var a=list.slice().sort(function(x,y){return x.sec-y.sec}),out=null;
   a.forEach(function(ch){
-    if(out||ch.sec<=sec)return;
+    if(out||ch.sec===sec)return;
     if(restCount(chapItemsUp(vid,ch.sec))>0)out=ch;
   });
   return out;
@@ -1306,8 +1317,10 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         wrongs:[],round:0,roundVid:null,srcOpen:false,lockedOut:0,kind:'new',studyVid:null,
         pickExplicit:false,   /* 本人が範囲を選んだ入口＝未習フィルタを通さない印（startQueue で降りる） */
         pendBig:null,         /* 次の1回だけ効く科目基準（startQueue の冒頭で baseBig に移す） */
-        /* 学習タブの入口（video＝動画で進む／cat＝単元で進む）。記録から復元する */
-        fmode:((ST.settings&&ST.settings.fmode==='cat')?'cat':'video'),
+        /* 学習タブの入口（video＝動画で進む／cat＝単元で進む）。記録から復元する。
+           既定は単元側（2026-08-15 本人指示「単元学習をメインにしたい」＝loadST の正規化で決まる） */
+        fmode:((ST.settings&&ST.settings.fmode==='video')?'video':'cat'),
+        ubOpen:null,          /* 単元一覧で開いている大分類（ubOpenMap() が作る／記録にも残す） */
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
         enter:true,dir:null,tier:null,ev:null,broke:false};
 
@@ -1525,13 +1538,17 @@ function render(){
 var LASTVIEW=null,ANIMON=false;
 /* 段差クラス（入場時だけ付ける） */
 function stag(){return ANIMON?' stag':''}
-var TABS=[['home','ホーム',IC.home],['fields','動画学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
+var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
+/* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
+   2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
+function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':'動画学習'):x[1]}
 function renderTabs(){
   var cur=(S.view==='study'||S.view==='fields')?'fields':(S.view==='quiz'?'':S.view);
   /* アイコンのみ（文字ラベルなし）。読み上げ用に aria-label と title を残す */
   document.getElementById('tabs').innerHTML=TABS.map(function(x){
+    var lb=tabLabel(x);
     return '<button data-act="tab" data-v="'+x[0]+'" class="'+(cur===x[0]?'on':'')+'"'
-      +' aria-label="'+x[1]+'" title="'+x[1]+'"'+(cur===x[0]?' aria-current="page"':'')+'>'+x[2]
+      +' aria-label="'+lb+'" title="'+lb+'"'+(cur===x[0]?' aria-current="page"':'')+'>'+x[2]
       +'<i class="m6-uline"></i></button>';
   }).join('');
   m6TabDraw();      /* 選択が変わったときだけ線を引く（同じタブの再描画では動かさない） */
@@ -1603,7 +1620,9 @@ function vHome(){
       +'<button class="btn" style="margin-top:10px" data-act="startNew">'
       +IC.book+'問題を解く</button>';
   }else{
-    h+='<button class="btn pri" data-act="tab" data-v="fields">'+IC.book+'動画学習</button>';
+    /* 呼び名は学習タブの中身に合わせる（単元学習／動画学習）＝押した先と文字を一致させる */
+    h+='<button class="btn pri" data-act="tab" data-v="fields">'+IC.book
+      +(S.fmode==='cat'?'単元学習':'動画学習')+'</button>';
   }
   h+='</div>';
   h+='</div>';
@@ -1823,27 +1842,94 @@ function urowHtml(c){
     +'<summary class="urh" data-act="openchap" data-k="'+esc(ck)+'">'+head+'</summary>'
     +'<div class="m6-dtxt">'+body+'</div></details>';
 }
-/* 単元の一覧。大分類ごとにまとめ、その中は本試験の出題頻度（CATQ）が高い順に並べる。
-   残り64日でどこから手を付けるかが一覧で分かることが目的なので、頻度順は動かさない。 */
+/* 単元を「習う順」に並べるための代表値（2026-08-15 本人指示
+   「小分類の順番が毎年何問出るか順になってるけど…習う順番にして欲しい」）。
+   主教材の講義順＝あこ課長の再生リストの通し番号（data/curriculum.json の seq_of_vid）。
+   あこ課長は1本＝1論点に近い粒度なので、これが「習う順」にいちばん近い。
+   ・代表値＝その単元の肢がいちばん多く紐づいている「通し番号を持つ動画」の番号
+     （通し番号を持つのはあこ課長だけ＝チャンネル名を書かずに済ませている）。
+   ・同じ番号なら、その動画の中の章の秒数（中央値）で。
+   ・通し番号を持つ動画に1本も紐づかない単元（その他の法令）は末尾へ。
+   ・出題頻度（CATQ）は並びから外すだけで、表示は残す（どこから手を付けるかの判断材料）。
+   全問なめるので1回だけ計算して覚える（描画のたびに数えない）。 */
+var CATSEQ=null;
+function catSeqMap(){
+  if(CATSEQ)return CATSEQ;
+  CATSEQ={};
+  CATS.forEach(function(c){
+    var cnt={},secs={};
+    itemsOfCat(c).forEach(function(it){
+      if(!it)return;
+      var seen={};
+      vidsOf(it).forEach(function(v){
+        var s=seqOfVid(v.vid);
+        if(s===null||seen[v.vid])return;
+        seen[v.vid]=1;                       /* 同じ肢が同じ動画に何度も出ても1回だけ数える */
+        cnt[s]=(cnt[s]||0)+1;
+        (secs[s]=secs[s]||[]).push(typeof v.csec==='number'?v.csec:(typeof v.sec==='number'?v.sec:0));
+      });
+    });
+    var best=null;
+    Object.keys(cnt).forEach(function(k){
+      var s=+k;
+      if(best===null||cnt[s]>cnt[best]||(cnt[s]===cnt[best]&&s<best))best=s;
+    });
+    if(best===null){CATSEQ[c]={seq:99999,sec:0};return}
+    var a=secs[best].slice().sort(function(x,y){return x-y});
+    CATSEQ[c]={seq:best,sec:a[Math.floor(a.length/2)]||0};
+  });
+  return CATSEQ;
+}
+/* 「単元で進む」で開いている大分類。記録（settings.ubOpen）に残して次に開いたときも同じ状態にする。
+   まだ一度も触っていないときの既定＝**残りがある最初の大分類だけ開く**。
+   理由：①全部開くと約5,200px（iPhone 15 で6画面ぶん）＝目的の単元まで指が届かない
+        ②全部閉じると毎回2タップ必要で「単元学習をメイン」に合わない
+        ③カリキュラムは業法から始まるので、最初の未完了＝いま手を付ける所になる。
+   一度でも開閉したらその状態を丸ごと保存するので、既定が効くのは最初の1回だけ。 */
+function ubOpenMap(){
+  if(S.ubOpen)return S.ubOpen;
+  var saved=ST.settings&&ST.settings.ubOpen;
+  if(saved&&typeof saved==='object'){S.ubOpen=saved;return saved}
+  var m={},hit=false;
+  bigsOrdered().forEach(function(b){
+    var r=0;
+    catsOfBig(b).forEach(function(c){r+=restCount(itemsOfCat(c))});
+    m[b]=(!hit&&r>0);
+    if(m[b])hit=true;
+  });
+  /* 残りが1問も無い（全部解き終えた）ときは上の条件で全部閉じてしまうので、先頭だけ開けておく
+     ＝一覧が丸ごと畳まれた状態で始まらないようにする */
+  if(!hit){var f=bigsOrdered()[0];if(f)m[f]=true}
+  S.ubOpen=m;
+  return m;
+}
+/* 単元の一覧。大分類ごとにまとめ、その中は講義で習う順（catSeqMap）に並べる。
+   大分類のパネルは <details> で畳める（開閉はJSでやらない＝章・単元と同じ骨格）。 */
 function vFieldsCat(){
-  var h='';
+  var h='',sq=catSeqMap(),om=ubOpenMap();
   bigsOrdered().forEach(function(b){
     var cs=catsOfBig(b);
     if(!cs.length)return;
     cs=cs.slice().sort(function(x,y){
-      return (CATQ[y]||0)-(CATQ[x]||0)                       /* ①毎年の出題数が多い順 */
-        ||CINFO[y].ids.length-CINFO[x].ids.length            /* ②同点なら肢が多い順 */
+      var a=sq[x]||{seq:99999,sec:0},d=sq[y]||{seq:99999,sec:0};
+      return a.seq-d.seq                                     /* ①講義で習う順（通し番号） */
+        ||a.sec-d.sec                                        /* ②同じ動画なら章の秒が早い順 */
+        ||(CATQ[y]||0)-(CATQ[x]||0)                          /* ③それでも同じなら出題数が多い順 */
         ||(x<y?-1:1);
     });
     var bq=0,br=0;
     cs.forEach(function(c){bq+=CATQ[c]||0;br+=restCount(itemsOfCat(c))});
-    h+='<div class="panel"><div class="spread" style="margin-bottom:2px">'
-      +'<span style="font-size:13px;font-weight:600">'+esc(b)+'</span>'
-      +'<span class="mini num">毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'</span></div>';
+    var bk='B:'+b,bo=!!om[b];             /* 開閉の記録（無ければ ubOpenMap() の既定） */
+    h+='<details class="panel ub m6-det" data-k="'+esc(bk)+'"'+(bo?' open':'')+'>'
+      +'<summary><span class="nm">'+esc(b)+'</span>'
+      +'<span class="m6-mk">'+IC.chev+'</span>'
+      +'<span class="sm">単元 '+cs.length+' ／ 毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'問</span>'
+      +'</summary><div>';
     cs.forEach(function(c){h+=urowHtml(c)});
-    h+='</div>';
+    h+='</div></details>';
   });
-  h+='<div class="panel"><div class="mini">「毎年N問」は過去問10年（2016〜2025）の出典から数えた'
+  h+='<div class="panel"><div class="mini">並びは講義で習う順（あこ課長の再生リストの順）です。'
+    +'「毎年N問」は過去問10年（2016〜2025）の出典から数えた'
     +'1年あたりの出題数です。統計だけは過去問集にほぼ載らないため実測を使わず1問としています。</div></div>';
   return h;
 }
@@ -3370,7 +3456,10 @@ document.addEventListener('click',function(e){
   if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
     applyTheme();dataSheet();}return}
   if(a==='srcf'){var sv=t.getAttribute('data-v');S.srcF=sv||null;render();return}
-  if(a==='gobig'){var gb=t.getAttribute('data-b');S.openBig={};S.openBig[gb]=true;go('fields');return}
+  /* 分析の「動画」ボタン＝その大分類の動画の一覧へ。単元側を開いていると行き先が無いので
+     このときだけ動画側に切り替える。記録（settings.fmode）は書き換えない
+     ＝寄り道であって「動画で進む」に変えた訳ではない（次に開いたときは本人の設定に戻る）。 */
+  if(a==='gobig'){var gb=t.getAttribute('data-b');S.fmode='video';S.openBig={};S.openBig[gb]=true;go('fields');return}
   /* 新規は「デフォルト」の出題順（need_seq 昇順→章の秒数→難易度）で解く。
      need_seq が無い古いデータのときだけ従来の「章のタイムライン順」に落とす。 */
   if(a==='startNew'){S.round=0;S.kind='new';S.sort=NEEDOK?'std':'timeline';startQueue(newQueue(plan().newN),'新規',false);return}
@@ -4318,6 +4407,8 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   watchedMaxSeq:watchedMaxSeq,seqCap:seqCap,inRange:inRange,newAvail:newAvail,
   videoItemsUp:videoItemsUp,chapItemsUp:chapItemsUp,
   /* 一覧（大分類→動画の再生リスト順）と実測時間（検証用） */
+  /* 単元の並び（習う順）と大分類の開閉（検証用） */
+  catSeqMap:catSeqMap,ubOpenMap:ubOpenMap,vFieldsCat:vFieldsCat,catsOfBig:catsOfBig,
   BIGLEARN:BIGLEARN,BIGVIDS:BIGVIDS,VBIG:VBIG,bigsOrdered:bigsOrdered,bigProg:bigProg,
   vno:vno,vlabel:vlabel,vlab:vlab,VLAB:VLAB,VNOC:VNOC,vshort:vshort,vrowHtml:vrowHtml,
   nextVidOf:nextVidOf,nextCardHtml:nextCardHtml,vlistHtml:vlistHtml,cumItems:cumItems,VCHN:VCHN,
@@ -4686,12 +4777,21 @@ document.addEventListener('pointercancel',m6PressEnd,true);
 document.addEventListener('click',function(e){
   if(M6PR.fired){e.stopPropagation();e.preventDefault();M6PR.fired=false}
 },true);
-/* 章の開閉（<details>）＝JSで開閉しない。開いた状態だけ S.openChap に写して再描画に耐えさせる */
+/* 章の開閉（<details>）＝JSで開閉しない。開いた状態だけ S.openChap に写して再描画に耐えさせる。
+   大分類（data-k が "B:" で始まる）だけは記録（settings.ubOpen）にも残す
+   ＝アプリを開き直しても同じ状態にする（2026-08-15 本人指示「開閉の状態を覚える」）。 */
 document.addEventListener('toggle',function(e){
   var d=e.target;
   if(!d||!d.classList||!d.classList.contains('m6-det'))return;
   var k=d.getAttribute('data-k');
-  if(k)S.openChap[k]=d.open;
+  if(!k)return;
+  if(k.slice(0,2)==='B:'){
+    var m=ubOpenMap();
+    m[k.slice(2)]=d.open;
+    ST.settings.ubOpen=m;saveST();
+    return;
+  }
+  S.openChap[k]=d.open;
 },true);
 
 /* ---------- 起動 ---------- */
@@ -4702,6 +4802,16 @@ M2.setSound(!!(ST.settings&&ST.settings.sound));
 /* 押した感は委譲で当てる（innerHTML で作り直しても消えない）。
    問題のカードは押すものではないので入れない（触ったときの動きは M3 の傾きだけ） */
 M2.delegate('[data-act],.cell,.b,.tog,.cb,.tapline,#tabs button');
+/* 【一度きり】単元学習を既定に寄せる（2026-08-15 本人指示「単元学習をメインにしたい」）。
+   既定値を変えるだけでは本人の画面は変わらない：旧版は起動のたびに settings.fmode='video' を
+   書き込んでいたので、記録の 'video' が「本人が動画を選んだ」のか「まだ選んでいない」のかを
+   区別できない。区別できない以上、注文どおりにするにはこの版で1回だけ寄せるしかない。
+   印（fmode1）を立てて二度とやらない。切り替えボタンで「動画で進む」に戻せば、
+   そのとき saveST() で fmode='video' と fmode1=true が一緒に残るので、以後は本人の選択が勝つ。 */
+if(ST.settings&&ST.settings.fmode1!==true){
+  ST.settings.fmode1=true;ST.settings.fmode='cat';S.fmode='cat';
+  if(!STBROKEN)saveST();
+}
 render();
 /* 起動の区切り。初回だけ長め（0.77秒）、2回目以降は0.39秒（毎回長い演出を強制しない） */
 var m5first=!(ST.settings&&ST.settings.launched);

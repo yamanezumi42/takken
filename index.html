@@ -151,12 +151,21 @@ a{color:var(--chipfg)}
 .qlabel{font-size:11px;font-weight:600;color:var(--chipfg);letter-spacing:.08em}
 .star{margin-left:auto;color:var(--muted);width:22px;height:22px;background:none;border:0;padding:0;cursor:pointer}
 .star.on{color:#d9a422}
-.lead{font-size:12px;color:var(--muted);line-height:1.8;text-wrap:pretty}
+.lead{font-size:12px;color:var(--muted);line-height:1.8;text-wrap:pretty;text-align:justify}
 /* 本文（問題文）＝17px・行間1.9（Apple Typography に合わせて数値で固定）。
    text-wrap:pretty は日本語の折り返しを整える（iOS 26.0以降。未対応環境では無視されるだけ）。
    word-break:auto-phrase は iOS Safari 非対応なので使わない。 */
+/* text-align:justify＝両端揃え。2026-08-15 本人「左と右の余白が同じじゃない」の対処。
+   実測（393px・300問1,030行）：左の余白は全行 0px、右の余白は中央値 11.5px で一定だった。
+   ばらついた「行末の不揃い」ではなく、面の内側 337px が全角1文字 15.5px の整数倍でない
+   （337÷15.5＝21.7字）ために、どの行も 21字で折り返して端数 11.5px が必ず右に残っていた。
+   ＝見た目の余白が 左15px／右26.5px で固定的に非対称だった（padding自体は左右14pxで対称）。
+   日本語は全角が等幅なので、両端揃えの伸ばしは中央値 11.5px÷約20字＝1字あたり0.6px。
+   （英文の justify のように単語間が空いて読みにくくなる現象は起きない＝書籍と同じ組み方）
+   最終行は伸ばさない（ブラウザの既定）ので、段落の終わりは自然なまま。 */
 .stem{font-size:17px;line-height:1.9;background:var(--panel);border:1px solid var(--line);
-  border-radius:var(--radius);padding:16px;transition:border-color .12s var(--eo);text-wrap:pretty}
+  border-radius:var(--radius);padding:16px;transition:border-color .12s var(--eo);text-wrap:pretty;
+  text-align:justify}
 .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
 .dif{font-family:var(--num);padding:2px 7px;border-radius:4px;background:var(--soft);color:#6b736e}
 .prog{font-size:11px;color:var(--muted);text-align:right;font-family:var(--num)}
@@ -173,8 +182,10 @@ a{color:var(--chipfg)}
   border-radius:var(--radius);padding:11px 14px}
 .ansline em{font-style:normal;font-size:20px;margin-left:6px}
 /* 本文（解説文）＝17px・行間1.9 */
+/* 解説も問題文と同じ理由で両端揃え（.stem のコメント参照）。
+   white-space:pre-wrap との併用は実測済み＝強制改行で終わる行は伸ばされない（そこが段落の最終行）。 */
 .exp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;text-wrap:pretty;
-  font-size:17px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
+  font-size:17px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;text-align:justify}
 /* 図表：入れ物の幅を超えないこと（超えるものは横スクロール。縦横比は height:auto で保つ） */
 .figbox{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0 0}
 .fig{max-width:100%;height:auto;border:1px solid var(--line);border-radius:var(--radius);display:block}
@@ -826,6 +837,17 @@ details.ur>summary,.ur-flat>.urh{flex-wrap:wrap;padding:8px 0;min-height:0}
 .urh .bt{flex:0 0 100%;display:flex;gap:8px}
 .urh .bt .btn{flex:1;width:auto;margin:0}
 details.ur[open]>summary .m6-mk{transform:rotate(90deg)}
+/* 大分類のパネル（単元で進む の一覧）を畳めるようにする。2026-08-15 本人指示
+   「権利関係、法令上の制限、税に関する法令とか大分類はたためるようにして欲しいよね」。
+   骨格は章・単元と同じ <details>（m6-det）＝JSで開閉しない。
+   全部開くと一覧は約5,200px＝iPhone 15（852px）で6画面ぶんあり、目的の単元まで指が届かない。
+   畳んだ見出しには「単元数／毎年N問／残り」を出す＝閉じたままでもどこから手を付けるか分かる。 */
+details.ub.panel{padding:2px 14px 6px;border-bottom:1px solid var(--line)}
+details.ub>summary{min-height:44px;padding:7px 0;flex-wrap:wrap;row-gap:3px}
+details.ub>summary .nm{flex:1;font-size:13px;font-weight:600;line-height:1.5;min-width:0}
+details.ub>summary .sm{flex:0 0 100%;font-size:11px;color:var(--muted);
+  font-family:var(--num);font-variant-numeric:tabular-nums}
+details.ub[open]>summary .m6-mk{transform:rotate(90deg)}
 /* 単元の中の小見出し（字幕で割った区切り）。親より一段小さく、左の線でぶら下がりを示す */
 .usub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
   padding:6px 0 8px 10px;margin:0 0 6px;border-left:2px solid var(--line)}
@@ -1104,7 +1126,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='c3a3e646';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='79e2d2b0';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
