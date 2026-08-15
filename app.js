@@ -1557,10 +1557,8 @@ function vFields(){
   /* 章がない小分類（その他の法令など）と、章が付かなかった問題の件数は黙って消さずに出す */
   h+='<div class="panel"><div class="spread"><span class="mini">出題順</span></div>'
     +SORTS.map(function(s){return '<button class="tog'+(S.sort===s[0]?' on':'')+'" style="margin:0 6px 6px 0" data-act="sort" data-s="'+s[0]+'">'+s[1]+'</button>'}).join('');
-  /* 章のタイムライン順は「どの動画を基準にするか」で並びが変わる（既定＝あこ課長） */
-  h+='<div class="hr"></div><div>'
-    +SRCS.map(function(x){return '<button class="tog'+(!S.baseVid&&baseSrc()===x?' on':'')+'" style="margin:0 6px 6px 0" data-act="basesrc" data-v="'+esc(x)+'">'+esc(x)+(x===DEFSRC?'（既定）':'')+'</button>'}).join('')
-    +'</div>';
+  /* 下の「基準のチャンネル」は廃止（2026-08-15 本人指摘「意味ない」）。
+     チャンネルは一覧の先頭の絞り込み（S.srcF）で選ぶ。基準は主教材で固定。 */
   if(S.baseVid){
     h+='<div class="li"><div class="nm"><div class="mini">基準の動画</div>'+esc(VTIT[S.baseVid]||S.baseVid)+'</div>'
       +'<button class="btn sm" data-act="basesrc" data-v="'+esc(baseSrc())+'">解除</button></div>';
