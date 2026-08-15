@@ -2520,7 +2520,10 @@ function expBlock(it,id){
   var res=S.res||{},r=mk(id);
   /* 出すのは正解の1行だけ。当たり外れは演出で伝える。 */
   var h='<div class="ansline">正解：<em>'+(it.ox?'○':'×')+'</em></div>';
-  h+='<div class="exp">'+(it.exp?esc(it.exp):'<span class="mini">解説データがありません。</span>')+'</div>';
+  /* 文字は .exptx で包む＝枠（.exp の背景・罫線）は元の幅のまま、中の文字だけを
+     全角の整数倍の幅にして左右の余白を揃えるため（CSSの「本文の左右の余白」の節を参照）。 */
+  h+='<div class="exp"><div class="exptx">'
+    +(it.exp?esc(it.exp):'<span class="mini">解説データがありません。</span>')+'</div></div>';
   /* 図表は枠内に収める。表組みで細かいものは横スクロールできる入れ物に入れる（縦横比は保つ） */
   (it.figs||[]).forEach(function(f){
     h+='<div class="figbox"><img class="fig" src="'+esc(figSrc(f))+'" alt="図表" onerror="this.parentNode.style.display=\'none\'"></div>';

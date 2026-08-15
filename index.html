@@ -154,15 +154,8 @@ a{color:var(--chipfg)}
 .lead{font-size:12px;color:var(--muted);line-height:1.8;text-wrap:pretty}
 /* 本文（問題文）＝17px・行間1.9（Apple Typography に合わせて数値で固定）。
    text-wrap:pretty は日本語の折り返しを整える（iOS 26.0以降。未対応環境では無視されるだけ）。
-   word-break:auto-phrase は iOS Safari 非対応なので使わない。 */
-/* ＝両端揃え。2026-08-15 本人「左と右の余白が同じじゃない」の対処。
-   実測（393px・300問1,030行）：左の余白は全行 0px、右の余白は中央値 11.5px で一定だった。
-   ばらついた「行末の不揃い」ではなく、面の内側 337px が全角1文字 15.5px の整数倍でない
-   （337÷15.5＝21.7字）ために、どの行も 21字で折り返して端数 11.5px が必ず右に残っていた。
-   ＝見た目の余白が 左15px／右26.5px で固定的に非対称だった（padding自体は左右14pxで対称）。
-   日本語は全角が等幅なので、両端揃えの伸ばしは中央値 11.5px÷約20字＝1字あたり0.6px。
-   （英文の justify のように単語間が空いて読みにくくなる現象は起きない＝書籍と同じ組み方）
-   最終行は伸ばさない（ブラウザの既定）ので、段落の終わりは自然なまま。 */
+   word-break:auto-phrase は iOS Safari 非対応なので使わない。
+   左右の余白を揃える仕掛けはこの下の「本文の左右の余白」の節にまとめてある（.stem 自体は触らない）。 */
 .stem{font-size:17px;line-height:1.9;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius);padding:16px;transition:border-color .12s var(--eo);text-wrap:pretty}
 .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
@@ -180,11 +173,44 @@ a{color:var(--chipfg)}
 .ansline{font-size:15px;font-weight:500;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius);padding:11px 14px}
 .ansline em{font-style:normal;font-size:20px;margin-left:6px}
-/* 本文（解説文）＝17px・行間1.9 */
-/* 解説も問題文と同じ理由で両端揃え（.stem のコメント参照）。
-   white-space:pre-wrap との併用は実測済み＝強制改行で終わる行は伸ばされない（そこが段落の最終行）。 */
+/* 本文（解説文）＝17px・行間1.9。
+   左右の余白の揃えは下の「本文の左右の余白」の節（.exp の中の .exptx に当てる。枠は動かさない）。 */
 .exp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;text-wrap:pretty;
   font-size:17px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ---- 本文の左右の余白（2026-08-15） -----------------------------------------
+   注文：本人「問題文の左と右の余白が同じじゃないのやっぱり気になる」。
+
+   原因（実測）：面の内側は 337px、問題文の全角1文字は 15.5px。337÷15.5＝21.7字なので
+   どの行も 21字で折り返し、端数 337−15.5×21＝11.5px が必ず右だけに残る。
+   行ごとのばらつきではなく、全行が同じ値の固定的な非対称だった（左0px／右11.5px）。
+
+   ★一度やって失敗した手：text-align:justify（両端揃え）。
+     左右とも0pxになったことを1,030行で実測して「直った」と出したが、本人から
+     「最後の行の1文以外の一文字ずつの余白が広くなってて読みにくくなってる。これはひどい」。
+     左右の対称という数値だけを見て、読みやすさ（字間）を誰も見ていなかったのが原因。
+     ＝**本文に両端揃えは使わない。** 数値が揃っても字間が伸びたら不合格。
+
+   いまの手：字間には一切触れず、**文字を流す幅だけ**を全角1文字（1em）の整数倍に切り下げる。
+   21.7字ぶんの幅を21字ぶんに詰めれば行が右端でぴったり終わり、余った端数 11.5px を
+   margin-inline:auto で左右に半分ずつ配るので、左右の余白が同じになる。字送りは既定のまま。
+
+   ・枠（背景・罫線）は元の幅のまま。だから .stem/.exp 自体ではなく、中の文字を包む
+     .stemtx / .exptx に当てる（枠まで縮むと見た目が変わってしまう）。
+     .lead は枠を持たない素の文章なので、その要素自身に当てる。
+   ・1em＝その要素自身の文字の大きさ。だから 17px／15.5px／12px の3種類を1つの規則で書けるし、
+     文字サイズや画面幅が変わっても自動で追随する（固定の px や em 幅を書かない理由）。
+   ・max(1em,…) は極端に狭い幅で 0 に丸まらないための保険。
+   ・round() が無い環境では @supports ごと無効＝いままでの見た目のまま（壊れない）。 */
+@supports (width: round(down, 100%, 1em)){
+  .qwrap .stem .stemtx,
+  .qwrap .exp .exptx,
+  .qwrap .lead{
+    display:block;
+    width:max(1em, round(down, 100%, 1em));
+    margin-inline:auto;
+  }
+}
 /* 図表：入れ物の幅を超えないこと（超えるものは横スクロール。縦横比は height:auto で保つ） */
 .figbox{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0 0}
 .fig{max-width:100%;height:auto;border:1px solid var(--line);border-radius:var(--radius);display:block}
@@ -1125,7 +1151,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='22fd1f46';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='bab21cca';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
