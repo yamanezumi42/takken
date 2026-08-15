@@ -253,23 +253,84 @@ Object.keys(VSRC).forEach(function(v){
   var sc=VSRC[v];
   if(sc&&!SRCHIDE[sc]&&SRCS.indexOf(sc)<0)SRCS.push(sc);
 });
-var VIDIDS={},CHIDS={},SECOK={},NOVID=[];
-ITEMS.forEach(function(it){
+/* ---------- 章の区間（肢ごとの判定のリンクを章の行に載せるため） ----------
+   判定担当は字幕を読んで「章の開始秒ではなく**実際に話している秒**」を指す。章名は先頭1論点しか
+   表していないので、これは正しい意図。だが秒が章頭と違うと vid＋秒の完全一致では拾えず、
+   その肢は動画学習の章の行から消える（実測648肢）。そこで判定のリンクだけ区間で拾う。
+
+   ★区間の右端は「その動画の**全章**（＝全小分類の和）の次の章」で取る。
+   chapters.json は「小分類 → その小分類に関係する章だけ」という形なので、いま開いている
+   小分類に載っている章だけで区間を切ると、1章しか持たないエントリ（報酬関連×L8TDRKjZTEg 等）が
+   動画の残り全部を飲み込む（実測：誤って飲み込む配置が +6,124件）。
+   skip の章も境界に使う（データ側 tools/apply_retopic.py の load_chapters と同じ定義。
+   ここを変えると同スクリプトが入れる csec と食い違う）。 */
+var VSECS={};
+(function(){
+  var m={};
+  Object.keys(CHAP).forEach(function(cat){
+    (CHAP[cat]||[]).forEach(function(v){
+      var s=m[v.vid]=m[v.vid]||{};
+      (v.chapters||[]).forEach(function(c){if(typeof c.sec==='number')s[c.sec]=1});
+    });
+  });
+  Object.keys(m).forEach(function(vid){
+    VSECS[vid]=Object.keys(m[vid]).map(Number).sort(function(a,b){return a-b});
+  });
+})();
+/* 秒 → その秒が入る章の開始秒（区間 [章の秒, 次の章の秒)）。
+   先頭章より前／尺を超える秒は null＝当てない（推測で直さないのはデータ側と同じ扱い）。 */
+function csecOf(vid,sec){
+  var a=VSECS[vid];
+  if(!a||!a.length||typeof sec!=='number')return null;
+  if(sec<a[0])return null;
+  var len=VLEN[vid]||0;
+  if(len&&sec>len)return null;
+  var lo=0,hi=a.length-1,best=null;
+  while(lo<=hi){var mid=(lo+hi)>>1;if(a[mid]<=sec){best=a[mid];lo=mid+1}else hi=mid-1}
+  return best;
+}
+/* 区間で拾ってよいリンク＝肢ごとの判定で入れた1本だけ。
+   既存の「字幕で割当」等まで区間に広げると、秒が章頭でない古いリンク2,813本が一斉に載って
+   最大の章が 182問 → 504問 に膨らむ（データ担当の実測）。だから判定のリンクに限る。 */
+var JMARK='肢ごとの判定';
+function isJudged(v){
+  var w=v&&v.why;
+  return !!(w&&w.length===1&&w[0]===JMARK);
+}
+var VIDIDS={},CHIDS={},CHIDS2={},SECOK={},NOVID=[],IPOS={},JLINKN=0,JSPAN=0;
+ITEMS.forEach(function(it,ix){
+  IPOS[it.id]=ix;                         /* 章の中の並びを元の順に保つための位置 */
   var vs=vidsOf(it);
   if(!vs.length){NOVID.push(it.id);return}
   var seen={};
   vs.forEach(function(v){
     if(!seen[v.vid]){seen[v.vid]=1;(VIDIDS[v.vid]=VIDIDS[v.vid]||[]).push(it.id)}
-    if(typeof v.sec==='number'){var k=v.vid+'#'+v.sec;(CHIDS[k]=CHIDS[k]||[]).push(it.id);SECOK[v.vid]=true}
+    if(typeof v.sec==='number'){var k=v.vid+'#'+v.sec;(CHIDS[k]=CHIDS[k]||[]).push(it.id);SECOK[v.vid]=true;
+      if(isJudged(v)){
+        JLINKN++;
+        /* 親章の秒はデータ側が csec に入れてくれる（apply_retopic.py）。無い場合だけ自分で引く。
+           どちらも同じ定義（全小分類の和で区間を切る）なので、答えは一致する。 */
+        var cs=(typeof v.csec==='number')?v.csec:csecOf(v.vid,v.sec);
+        if(cs!==null&&cs!==v.sec){var k2=v.vid+'#'+cs;(CHIDS2[k2]=CHIDS2[k2]||[]).push(it.id);JSPAN++}
+      }
+    }
   });
 });
 function videoItems(vid){return (VIDIDS[vid]||[]).map(function(i){return BY[i]})}
-/* 章の問題＝「vid＋秒」だけで引く（実データは 8,074/8,074 が秒で一致する）。
-   章名も併用すると、同じ章名が2か所に出てくる動画（こうのすけ）で同じ問題が
-   2つの行に二重に出て、行の合計が動画の問題数を超える。だから秒に一本化する。
-   秒が合わないデータが来た場合は章が0問になるので、vStudy 側で警告を出して気づけるようにする。 */
+/* 章の問題＝「vid＋秒」で引く。章名も併用すると、同じ章名が2か所に出てくる動画（こうのすけ）で
+   同じ問題が2つの行に二重に出て、行の合計が動画の問題数を超える。だから秒に一本化する。
+   秒が合わないデータが来た場合は章が0問になるので、vStudy 側で警告を出して気づけるようにする。
+
+   これに加えて、**肢ごとの判定で入れたリンクだけ**は区間 [章の秒, 次の章の秒) でも拾う
+   （CHIDS2）。判定は「実際に話している秒」を指すので、完全一致だけだと章の行から消える。
+   判定のリンクが1本も無いデータでは CHIDS2 が空なので、戻り値は以前と1件も変わらない。 */
 function chapItems(vid,sec){
-  return (CHIDS[vid+'#'+sec]||[]).map(function(i){return BY[i]});
+  var k=vid+'#'+sec,a=CHIDS[k]||[],b=CHIDS2[k];
+  if(!b||!b.length)return a.map(function(i){return BY[i]});
+  var seen={},ids=[];
+  a.concat(b).forEach(function(i){if(seen[i])return;seen[i]=1;ids.push(i)});
+  ids.sort(function(x,y){return (IPOS[x]||0)-(IPOS[y]||0)});   /* 元の並びを保つ */
+  return ids.map(function(i){return BY[i]});
 }
 function secIn(it,vid){
   var vs=vidsOf(it);
@@ -1146,14 +1207,10 @@ function unseenItems(all){
     if(!ob[it.big])return false;      /* その科目の動画をまだ見ていない */
     return true;
   });
-  var _unused=function(it){
-    var n=needSeq(it);
-    /* 通し番号が無い問題は「新規」に含めない（順序が決められないものを混ぜると
-       「新規＝既習範囲の未着手」の定義が崩れる。2026-08-14 メイン担当の判断）。
-       出題順では末尾のまま／復習・抜き打ち・絞り込みからは外さない＝自分で選べば解ける。 */
-    if(n===null)return false;
-    return false;
-  };
+  /* 経緯：以前はここで通し番号（need_seq＝あこ課長の再生リスト順）でも絞っていた。
+     主教材がこざりえになった今それを使うとほぼ全部が落ちる（2026-08-14 実測：162問→1問）ので、
+     解禁の判定は上の inRange と同じ「大分類（科目）を見たか」に一本化した。
+     通し番号は出題順（nsRank）にだけ使う＝順番の指標であって、出す出さないの条件ではない。 */
   if(ST.settings.later){                              /* 「難」を後回しにする（本人が選んだときだけ・3段階） */
     a.sort(function(x,y){
       var lx=(d3(x)==='難')?1:0,ly=(d3(y)==='難')?1:0;
@@ -3012,7 +3069,9 @@ function vAnalysis(){
   h+='<div class="panel">'
     +'<div class="spread" style="align-items:flex-end;margin-bottom:8px">'
     +'<div><span class="score">'+sc.pts.toFixed(1)+'</span>'
-    +'<span class="mini num"> / '+tot+'</span></div>'
+    /* ホームのカードは「/ 49点」なので、ここだけ単位を落とすと表記が食い違う
+       （2026-08-16 実機検証で指摘）。 */
+    +'<span class="mini num"> / '+tot+'点</span></div>'
     +'<div class="mini">いま確実に取れる点数</div></div>'
     /* 目盛りは49点。手を付けた論点ぶんの配点（covered）まで薄く、その中の得点を濃く出す。
        まだ触っていない論点を「取れる」ように見せない（2026-08-14 本人指摘の修正）。 */
@@ -3885,7 +3944,17 @@ document.addEventListener('click',function(e){
     var cv=t.getAttribute('data-v'),cs2=+t.getAttribute('data-s'),cl=t.getAttribute('data-l');
     /* 既定は未着手だけ。「全 N問」を押したときは解いた分も含めて全部（2026-08-15 本人指摘）。 */
     ST.lastChap={vid:cv,sec:cs2,label:cl||'章'};saveST();      /* ホームの「続き」の起点にする */
+    /* 章から解くときも、その章が載っている小分類の科目を解禁する。
+       基準の動画（cv）の科目だけでは足りない。こざりえは1本＝1科目なので、
+       たとえば「税・価格」1本の中に 税に関する法令 と 不動産価格の評定 が同居しており、
+       固定資産税の章（肢は全部「税に関する法令」）を押しても
+       bigOfVid(cv)＝不動産価格の評定 しか解禁されず 0問になっていた。
+       2026-08-15 に startCat で塞いだのと同じ穴が、ここに残っていた
+       （2026-08-16 実測：いまのデータで49行、判定を当てると69行が0問になる）。
+       本人が章を選んで押している＝明示の選択なので、その科目は解禁してよい。 */
+    var chb=(S.cat&&CINFO[S.cat])?CINFO[S.cat].big:null;
     S.kind='new';m1ToQuiz(t,function(){
+      S.pendBig=chb;
       startQueue(pickRest(chapItemsUp(cv,cs2),t),cl||'章',true,cv);
       S.roundSec=cs2;                      /* 完走時に「次の章へ」を出すため */
     });return;
@@ -4722,6 +4791,8 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   /* 動画の紐づけ（検証用） */
   vidsOf:vidsOf,pickRank:pickRank,videoItems:videoItems,chapItems:chapItems,chapsOf:chapsOf,chapsFor:chapsFor,
   chapFor:chapFor,whyOf:whyOf,secIn:secIn,NOVID:NOVID,VIDIDS:VIDIDS,CHIDS:CHIDS,
+  CHIDS2:CHIDS2,VSECS:VSECS,csecOf:csecOf,isJudged:isJudged,JMARK:JMARK,
+  JLINKN:JLINKN,JSPAN:JSPAN,IPOS:IPOS,
   VSRC:VSRC,VTIT:VTIT,SRCS:SRCS,CHAP:CHAP,CINFO:CINFO,CATS:CATS,itemsOfCat:itemsOfCat,
   save:saveST,load:function(){ST=loadST();render()},BOXD:BOXD,addD:addD,today:today,
   /* 動画の通し番号・既習範囲（検証用） */
