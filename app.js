@@ -347,7 +347,7 @@ function addD(day,n){var d=new Date((dnum(day)+n)*86400000);return d.getUTCFullY
 var LSOK=true;
 var ST=loadST();
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
-setTimeout(function(){try{ghAuto('daily')}catch(e){}},4000);   /* 起動して落ち着いてから1日1回 */
+setTimeout(function(){try{ghAuto('boot')}catch(e){}},4000);    /* 起動のたび（中身が変わっていれば） */
 function loadST(){var o={};try{o=JSON.parse(localStorage.getItem(LSK)||'{}')||{}}catch(e){o={};LSOK=false}return normST(o)}
 function normST(o){
   if(!o||typeof o!=='object')o={};
@@ -2477,7 +2477,7 @@ function dataSheet(){
    +'<div class="mini" style="margin-top:6px">最後に上げた '+(GH().at?esc(GH().at):'—')
    +(GH().err?' ／ <span style="color:var(--ngdeep)">'+esc(GH().err)+'</span>':'')
    +'<br>トークンはこの端末の中だけに保存します（公開されるコードには入りません）。'
-   +'完走したときと1日1回、自動で上がります。</div>'
+   +'アプリを開いたときと完走したときに、記録が変わっていれば自動で上がります。</div>'
    +'<div class="hr"></div>'
    /* 配色は9つ。骨格（配置・余白・丸み・動き）は変わらず、色だけが入れ替わる。 */
    +'<div class="mini" style="margin-bottom:6px">配色</div><div class="throw">'
@@ -2523,7 +2523,8 @@ function msg(t){var e=document.getElementById('msg');if(e)e.textContent=t}
    置くのは学習記録だけ＝問題文・解説は含まない（著作権の対象にならない）。
    トークンは端末のlocalStorageのみ。公開しているコードには入れない。 */
 var GHFILE='takken_records.json';
-function GH(){var g=(ST.settings&&ST.settings.gh)||{};return {repo:g.repo||'',token:g.token||'',at:g.at||'',err:g.err||'',sha:g.sha||''}}
+function GH(){var g=(ST.settings&&ST.settings.gh)||{};
+  return {repo:g.repo||'',token:g.token||'',at:g.at||'',err:g.err||'',sha:g.sha||'',fp:g.fp||''}}
 function ghSet(o){ST.settings.gh=Object.assign(GH(),o);saveST()}
 function ghSave(){
   var r=document.getElementById('ghRepo'),t=document.getElementById('ghTok');
@@ -2594,12 +2595,23 @@ function ghPull(){
     })
     .catch(function(st){msg(typeof st==='number'?ghErr(st):'読み込めませんでした')});
 }
-/* 自動：完走したときと、1日1回（起動して最初の描画のとき） */
+/* 記録の中身の指紋。前回上げた時から変わっていなければ上げない（無駄なコミットを作らない）。 */
+function ghFP(){
+  var s2=JSON.stringify(ST.items||{}),h=5381;
+  for(var i=0;i<s2.length;i++){h=((h*33)^s2.charCodeAt(i))>>>0}
+  return s2.length+'-'+h.toString(36);
+}
+/* 自動で上げる場面：
+   ・起動したとき（タスクキル→開き直しでも上がる。2026-08-15 本人指定）
+   ・完走したとき
+   どちらも「前回から中身が変わっていれば」だけ実行する。 */
 function ghAuto(reason){
   var g=GH();
   if(!g.repo||!g.token)return;
-  if(reason==='daily'&&String(g.at).slice(0,10)===today())return;
-  ghPush(true);
+  if(!Object.keys(ST.items||{}).length)return;      /* 記録が無いなら何もしない */
+  var fp=ghFP();
+  if(g.fp===fp)return;                              /* 前回上げた時から変わっていない */
+  ghPush(true).then(function(ok){if(ok)ghSet({fp:fp})});
 }
 function shareBackup(){
   var json=JSON.stringify(ST),name='takken_'+today()+'.json';
