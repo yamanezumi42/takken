@@ -983,38 +983,18 @@ function plan(){
 /* 新規＝動画の番号順を崩さない（あこ課長の公開順→その動画の章の秒数順）。
    未習の範囲（need_seq が見た動画の最大の通し番号を超えるもの）は入れない。 */
 function newQueue(n){
-  var order=vidOrder(),out=[],seen={},late=[];
-  /* 解禁の判定は unseenItems と揃える＝「その科目の動画を見たか」。
-     主教材が「1本＝1科目」になったので、通し番号（あこ課長の再生リスト順）では判定しない。 */
-  var lim=!(ST.settings&&ST.settings.ahead),ob=lim?openBigs():null;
-  function okSeq(it){
-    if(!lim)return true;
-    return !!ob[it.big];
+  /* 選ぶ順＝並べる順（sortQ）と同じにする。
+     以前は「動画ごとに拾ってから並べ替え」だったため、先頭60問が
+     いきなり「重要事項説明書 82:24」から始まっていた（2026-08-15 実測）。
+     いまは 大分類 → 主教材の動画 → 章の秒数 の順に並べてから先頭を取る。 */
+  var a=sortQ(unseenItems());
+  if(ST.settings.later){                      /* 「難」は後回し（本人が選んだときだけ） */
+    var easy=[],hard=[];
+    a.forEach(function(it){(d3(it)==='難'?hard:easy).push(it)});
+    a=easy.concat(hard);
   }
-  function pushIt(it){
-    if(ST.settings.later&&d3(it)==='難'){late.push(it);return}
-    out.push(it);
-  }
-  for(var i=0;i<order.length&&out.length<n;i++){
-    var vid=order[i].vid;
-    var its=videoItems(vid).filter(function(it){return att(R(it.id))===0&&!seen[it.id]&&okSeq(it)});
-    its.sort(function(a,b){return nsRank(a)-nsRank(b)||(secIn(a,vid)||0)-(secIn(b,vid)||0)});
-    for(var j=0;j<its.length&&out.length<n;j++){seen[its[j].id]=1;pushIt(its[j])}
-  }
-  if(out.length<n){                                   /* 章なしの問題は最後に足す */
-    NOVID.forEach(function(id){
-      if(out.length>=n||seen[id])return;
-      if(att(R(id))===0&&okSeq(BY[id])){seen[id]=1;pushIt(BY[id])}
-    });
-  }
-  while(out.length<n&&late.length)out.push(late.shift());
-  return out.slice(0,n);
+  return a.slice(0,n);
 }
-/* 未実装の4機能（ひっかけワード訓練／同一章の連射／問題への自分メモ／週次講評）は
-   2026-08-14 本人の指示で廃止した。trapPool と「ひっかけ」の入口はここで削除している。 */
-
-/* ---------- 絞り込み ---------- */
-var F={wrong:false,ngMin:0,recent:0,star:false,unseen:false,rateMax:null,difs:[],cats:[],topics:[]};
 function matchF(it){
   var r=R(it.id),a=att(r);
   if(F.cats.length&&F.cats.indexOf(it.cat)<0)return false;
@@ -1056,14 +1036,46 @@ function sortQ(arr){
       var rx=rateOf(R(x.id)),ry=rateOf(R(y.id));
       var vx=rx===null?1.1:rx,vy=ry===null?1.1:ry;
       return vx-vy||(R(y.id)?R(y.id).ng||0:0)-(R(x.id)?R(x.id).ng||0:0)||secOf(x)-secOf(y)||cmpId(x,y)}
-    /* デフォルト＝①動画の通し番号（need_seq）②同じ番号内は章の秒数 ③難易度（易→難）④未出題を優先。
-       need_seq が無いデータでは①が全件同値になり、従来（章の秒数→難易度→未出題）に落ちる。 */
-    return nsRank(x)-nsRank(y)||secOf(x)-secOf(y)||d3Rank(x)-d3Rank(y)||unseenRank(x)-unseenRank(y)||cmpId(x,y);
+    /* デフォルト＝主教材（こざりえ）の動画を、章のタイムスタンプ順に進む。
+       ①大分類の学習順（宅建業法→権利関係→法令→税・その他）
+       ②その科目の主教材の動画の順（2026年版が先）
+       ③その動画の中は章の秒数順（＝動画を見た順に問題が出る）
+       ④同じ章の中は あこ課長の通し番号 → 難易度 → 未出題を優先
+       2026-08-15 本人指摘：①②③が無いと「宅地、建物の定義」の次に「重説」が来て飛ぶ。 */
+    return bigRank(x)-bigRank(y)||kvRank(x)-kvRank(y)||secOf(x)-secOf(y)
+      ||nsRank(x)-nsRank(y)||d3Rank(x)-d3Rank(y)||unseenRank(x)-unseenRank(y)||cmpId(x,y);
   });
   return a;
 }
 /* 通し番号（並べ替え用）。番号が無い問題は末尾へ */
 function nsRank(it){var n=needSeq(it);return n===null?99999:n}
+/* 大分類の学習順（宅建業法→権利関係→…）。表に無いものは末尾 */
+var BIGRANK=null;
+function bigRank(it){
+  if(!BIGRANK){BIGRANK={};bigsOrdered().forEach(function(b,i){BIGRANK[b]=i})}
+  var r=BIGRANK[it.big];return (r===undefined)?99:r;
+}
+/* その肢が属する主教材の動画の順番。同じ科目に複数あるので、公開が新しい順に0,1,2…。
+   主教材の動画に紐づいていない肢（あこ課長だけの17%）は、その科目の最後に回す。 */
+var KVRANK=null;
+function kvRankTable(){
+  if(KVRANK)return KVRANK;
+  KVRANK={};
+  Object.keys(BIGVIDS).forEach(function(b){
+    (BIGVIDS[b]||[]).filter(function(v){return VSRC[v]===DEFSRC})
+      .sort(function(x,y){return (VUP[y]||'').localeCompare(VUP[x]||'')})
+      .forEach(function(v,i){if(KVRANK[v]===undefined)KVRANK[v]=i});
+  });
+  return KVRANK;
+}
+function kvRank(it){
+  var t=kvRankTable(),vs=vidsOf(it),best=99;
+  for(var i=0;i<vs.length;i++){
+    var r=t[vs[i].vid];
+    if(r!==undefined&&r<best)best=r;
+  }
+  return best;
+}
 function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
 
 /* ---------- 画面状態 ---------- */
