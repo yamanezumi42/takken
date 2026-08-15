@@ -487,6 +487,9 @@ function dayCap(){
 function answer(id,userOx){
   var it=BY[id],r=mk(id),t=today(),ok=(userOx===it.ox);
   var pre=r.box||0,wasGrad=(r.state==='卒業'),gap=0;
+  /* この回答が「その問題を初めて解いた」ものか＝新規を消化した数の分子
+     （復習・抜き打ち・間違い直しは数えない。2026-08-15 本人指定） */
+  var isFirst=(att(r)===0);
   r.last=nowStamp();r._pre=pre;r._why=null;r._preStreak=r.streak||0;
   ST.session.total=(ST.session.total||0)+1;if(ok)ST.session.right=(ST.session.right||0)+1;
   /* この1回（周回なら「その周」）ぶんの成績。完走リザルトはこちらを出す＝通算と混ぜない */
@@ -503,7 +506,9 @@ function answer(id,userOx){
     ST.session.streak=0;
   }
   FXST.streak=ST.session.streak||0;
-  var d=ST.days[t]||{n:0,ok:0};d.n++;if(ok)d.ok++;ST.days[t]=d;
+  var d=ST.days[t]||{n:0,ok:0};d.n++;if(ok)d.ok++;
+  if(isFirst)d.newq=(d.newq||0)+1;                 /* 今日はじめて解いた問題の数 */
+  ST.days[t]=d;
   /* 連続正解が伸びるほど休ませる日数が伸びる（1→3→7→14日）。間違えたら翌日に戻る。 */
   if(ok){
     r.ok=(r.ok||0)+1;r.streak=(r.streak>0?r.streak:0)+1;
@@ -955,6 +960,8 @@ function newAvail(){
 }
 /* 1日の枠＝（学習時間−動画時間）÷30秒。抜き打ちは学習済み分類の数で自然に決まり、
    残りすべてを新規に配る。新規が余ったぶんは抜き打ちの上積みへ回す。 */
+/* 今日はじめて解いた問題の数（＝新規をどれだけ消化したか）。復習は含めない。 */
+function newToday(){return (ST.days[today()]||{}).newq||0}
 /* 今日の抜き打ちを済ませたか（1日1回） */
 function sneakDone(){return !!((ST.days[today()]||{}).sneak)}
 function plan(){
@@ -1337,8 +1344,14 @@ function vHome(){
     +'<div class="hcard">'+flw(17)+'<div class="hlab">試験まで</div>'
     +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">1日あたり</div>'
-    +'<div class="hnum">'+n3(perday)+'<span>問</span></div></div>'
-    +'</div>'+hdots();
+    +'<div class="hnum">'+n3(newToday())+'<span>/ '+n3(perday)+'問</span></div></div>'
+    +'</div>';
+  /* 今日の実績を1行だけ。カードは増やさない（引き算の原則）。
+     合計＝その日の回答数／新規＝はじめて解いた数／復習＝残り／正解＝その日の正答率。 */
+  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0;
+  if(dn)h+='<div class="mini" style="text-align:center;margin:-4px 0 10px">今日 '+n3(dn)+'問'
+    +'（新規 '+n3(dnew)+'・復習 '+n3(dn-dnew)+'）／正解 '+Math.round((dd.ok||0)/dn*100)+'%</div>';
+  h+=hdots();
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
      ホーム画面の案内は一度閉じたら二度出さない（settings.a2hs）。 */
@@ -1761,7 +1774,8 @@ function vStudy(){
   /* 学習の単位は動画1本なので、動画1本を開いているときは小分類まとめのボタンを出さない */
   if(!S.studyVid)
     h+='<div class="panel"><div class="mini" style="margin-bottom:8px">視聴 '+seen+'/'+shown+'</div>'
-      +'<button class="btn '+(shown&&seen===shown?'acc':'pri')+'" data-act="startCat" data-c="'+esc(c)+'">この小分類の問題を解く（'+s.n+'問）</button>'
+      +'<button class="btn '+(shown&&seen===shown?'acc':'pri')+'" data-act="startCat" data-c="'+esc(c)+'">'
+        +(s.n-s.att>0&&s.att>0?'残りを解く（'+n3(s.n-s.att)+'問）':'この小分類の問題を解く（'+n3(s.n)+'問）')+'</button>'
       +'</div>';
   h+='</div>';
   return h;
@@ -2073,7 +2087,9 @@ function vReview(){
   var wt=wrongToday();
   var h='<div class="pad'+stag()+'">';
   h+='<div class="panel">'
-    +rline('抜き打ち',pl.sneak.length,'startSneak',true)
+    +(sneakDone()
+       ?'<div class="li"><div class="nm">抜き打ち</div><span class="mini">今日は済</span></div>'
+       :rline('抜き打ち',pl.sneak.length,'startSneak',true))
     +rline('今日の間違い',wt.length,'startWrong',false)
     +rline('間違い',pl.wrong,'startWrongAll',false)
     +'</div>';
@@ -2942,7 +2958,8 @@ document.addEventListener('click',function(e){
   }
   if(a==='startCat'){
     var cc=t.getAttribute('data-c');
-    S.kind='new';m1ToQuiz(t,function(){startQueue(itemsOfCat(cc),cc)});return;
+    /* 章・動画と揃えて未着手だけ（2026-08-15 の見直しで漏れていた） */
+    S.kind='new';m1ToQuiz(t,function(){startQueue(restOnly(itemsOfCat(cc)),cc)});return;
   }
   if(a==='startTopic'){
     var c3=t.getAttribute('data-c'),t3=t.getAttribute('data-t');
