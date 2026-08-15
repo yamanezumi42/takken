@@ -37,51 +37,80 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 var SEC_PER_Q=30;                   /* 1問あたりの想定時間（秒）＝学習時間の換算に使う */
 var EXAM_DEFAULT='2026-10-18';      /* 試験日（10月第3日曜・受験票で確認） */
 var PASS_LINE=35;                   /* 合格ラインの目安 */
-/* 本試験の出題数（計50） */
-var BIGQ={'権利関係':14,'法令上の制限':8,'宅地建物取引業法等':20,'税に関する法令':2,
-          '不動産価格の評定':1,'土地・建物その他の需給':5};
-/* ---------- 本試験の実測配点（単元＝小分類ごとの1年あたりの出題数・合計 50.00） ----------
+/* 本試験の科目別の配点（＝確定した事実。合計50）。
+   ただし「不動産の需給」5問のうち1問は統計（問48）で、過去問では測れない（下の CATQ_OFF）。
+   得点予測が扱うのは統計を抜いた 49点ぶん＝需給は 5 − 1 = 4。 */
+var BIGQ_WANT={'権利関係':14,'法令上の制限':8,'宅地建物取引業法等':20,'税に関する法令':2,
+               '不動産価格の評定':1,'土地・建物その他の需給':4};
+/* 実際に画面で使う大分類の配点 BIGQ は、CATQ の合算から導出する（CINFO を作ったあとで定義）。
+   2026-08-15 批評指摘：BIGQ をベタ書きした二重帳簿になっていたため、
+   学習タブの大分類ヘッダ（CATQ の合算＝13.9）と分析③（BIGQ＝14）で数字が食い違っていた。 */
+var BIGQ={};
+/* ---------- 本試験の実測配点（単元＝小分類ごとの1年あたりの出題数・合計 49.00） ----------
    出どころ＝data/weights.json（配点担当が過去問の出典年・問番号から数え、検算済み）。
    直近10年（2016〜2025）ぶん。ファイルを読みに行かずJSの定数として持つ＝
    データを入れ直さなくても効くようにするため（問題文・解説は含まない数値表なので公開してよい）。
    使い道は2つだけ：①分析の得点予測 scoreNow() ②単元一覧の「毎年N問」。
    同じ表から出すので、2箇所で違う数字にならない。
 
-   ★1単元だけ実測を直している：「不動産の需給・統計」＝実測 0.09問 → 1.00問。
-     理由＝統計（本試験の問48）は毎年数字が変わるため過去問集にほぼ収録されておらず、
-     手元のデータでは直近12回のうち11回で欠落している。本試験では毎年必ず1問出るので、
-     0.09 のまま出すと「統計はやらなくていい」と読めてしまう＝データの都合を実力の判断に
-     持ち込むことになる。上げたぶん（0.91問）は残り48単元を 49.0/49.9148 倍して按分し、
-     合計は 50.00 のまま保っている（丸めの端数は残差の大きい単元で±0.01調整・検算済み）。 */
+   ★2026-08-15 の直し その1：大分類ごとに公式配点へ正規化した。
+     科目別の配点（権利14・法令8・業法20・税2・評定1・需給4）は確定した事実で、
+     実測が要るのは「科目の中でどの単元が何問か」だけ。実測の生の値をそのまま足すと
+     業法 20.07・権利 13.88 のようにズレが出て、学習タブの合算（13.9）と
+     分析の大分類の配点（14）が画面上で食い違っていた（本人は 14/20/8/2/1/5 を暗記している）。
+     そこで科目ごとに「目標÷実測」倍して小数2桁に丸め、丸めで出た端数は
+     剰余の大きい単元へ +0.01 ずつ配った（最大剰余法）。
+     各科目の合計は目標にちょうど一致する＝Python の Decimal で厳密に検算済み。
+     起動時にも catqCheck() が同じことを見る。
+
+   ★2026-08-15 の直し その2：「不動産の需給・統計」を得点予測から外した（CATQ に載せない）。
+     旧：実測 0.09問 を 1.00問 に持ち上げていた（統計は毎年必ず1問出るため）。
+     しかしこの単元の肢は4つしかなく（b6_3-001-1〜4＝2025年 問48）、
+     中身は「令和5年度の営業利益」「令和6年の新設住宅着工戸数」「令和7年の地価公示」＝
+     2026年の本試験では数字が全部入れ替わる。つまり過去問では測れない。
+     配点1.00を与えると 1肢 0.25点（他の単元の約28倍）になり、単元一覧で
+     「毎年1.00問／4問」＝最小の手間で最大の見返りに見える行になっていた（批評指摘）。
+     測れないものは測らない＝別枠にして注記だけ出す。得点予測の分母は 50 ではなく 49.00。 */
 var CATQ={
-  /* 宅地建物取引業法等 計 20.07問 */
-  '業務上の規制':3.60,'35条書面':2.84,'宅地建物取引業・免許':2.17,'8種制限':2.17,'37条書面':2.09,
-  '宅地建物取引士':1.42,'媒介契約':1.34,'報酬関連':1.09,'住宅瑕疵担保責任履行法':1.00,'営業保証金':0.92,
+  /* 宅地建物取引業法等 計 20.00問 */
+  '業務上の規制':3.59,'35条書面':2.83,'宅地建物取引業・免許':2.16,'8種制限':2.16,'37条書面':2.08,
+  '宅地建物取引士':1.41,'媒介契約':1.33,'報酬関連':1.09,'住宅瑕疵担保責任履行法':1.00,'営業保証金':0.92,
   '保証協会':0.84,'監督処分・罰則':0.59,
-  /* 権利関係 計 13.88問 */
-  '家族法（親族・相続）':1.34,'所有権・共有・占有権・用益物権':1.26,'債権総則（保証・連帯債務など）':1.25,
-  '売買契約':1.25,'借地借家法（土地）':1.00,'借地借家法（建物）':1.00,'区分所有法':1.00,'不動産登記法':1.00,
-  '賃貸借契約':0.92,'担保物権（抵当権など）':0.75,'条件・期間・時効':0.67,'その他の契約':0.59,
+  /* 権利関係 計 14.00問 */
+  '家族法（親族・相続）':1.35,'所有権・共有・占有権・用益物権':1.27,'債権総則（保証・連帯債務など）':1.26,
+  '売買契約':1.26,'借地借家法（土地）':1.01,'借地借家法（建物）':1.01,'区分所有法':1.01,'不動産登記法':1.01,
+  '賃貸借契約':0.93,'担保物権（抵当権など）':0.76,'条件・期間・時効':0.68,'その他の契約':0.60,
   '制限行為能力者':0.42,'意思表示':0.42,'代理':0.42,'不法行為・事務管理':0.42,'条文問題・その他':0.17,
-  /* 法令上の制限 計 8.02問 */
-  '都市計画法':2.01,'建築基準法':2.01,'農地法':1.00,'土地区画整理法':1.00,'盛土規制法':1.00,
+  /* 法令上の制限 計 8.00問 */
+  '都市計画法':2.00,'建築基準法':2.00,'農地法':1.00,'土地区画整理法':1.00,'盛土規制法':1.00,
   '国土利用計画法':0.92,'その他の法令':0.08,
-  /* 土地・建物その他の需給 計 5.00問（★統計を1.00に直してある） */
-  '住宅金融支援機構法':1.00,'不当景品類及び不当表示防止法':1.00,'不動産の需給・統計':1.00,
+  /* 土地・建物その他の需給 計 4.00問（統計は CATQ_OFF＝得点予測の対象外） */
+  '住宅金融支援機構法':1.00,'不当景品類及び不当表示防止法':1.00,
   '土地の形質・地積・地目及び種別':1.00,'建物の形質・構造及び種別':1.00,
-  /* 税に関する法令 計 2.02問 */
-  '不動産取得税':0.50,'固定資産税':0.50,'所得税':0.34,'印紙税':0.34,'登録免許税':0.34,'贈与税':0.00,
-  /* 不動産価格の評定 計 1.01問 */
-  '不動産鑑定評価基準':0.59,'地価公示法':0.42};
-/* 配点表の検算。合計が50.00でない／問題データに無い単元名がある、を起動時に console へ出す。
-   （数字が不自然なら検算する＝TEAM.md の決めごと。目で足し算しない） */
+  /* 税に関する法令 計 2.00問 */
+  '不動産取得税':0.49,'固定資産税':0.49,'所得税':0.34,'印紙税':0.34,'登録免許税':0.34,'贈与税':0.00,
+  /* 不動産価格の評定 計 1.00問 */
+  '不動産鑑定評価基準':0.58,'地価公示法':0.42};
+/* 得点予測の対象外にする単元と、その代わりに画面へ出す文言。
+   CATQ に載せない代わりにここへ置く＝①単元一覧で数字の代わりにこの文言を出す
+   ②catqCheck() が「配点の付け漏れ」と誤検知しない、の2つを同じ1か所で担保する。 */
+var CATQ_OFF={'不動産の需給・統計':'毎年1問・直前に対策'};
+/* 得点予測の分母。49 とベタ書きせず CATQ の合計から出す＝配点を直したときに分母がズレないため。 */
+var CATQ_TOTAL=(function(){var s=0;Object.keys(CATQ).forEach(function(k){s+=CATQ[k]});return Math.round(s*100)/100})();
+/* 配点表の検算。次の4つが崩れたら起動時に console へ警告を出す（目で足し算しない＝TEAM.md の決めごと）。
+   ①合計が 49.00 ②問題データにある単元で配点も CATQ_OFF も無いものが無い
+   ③CATQ にあって問題データに無い単元名が無い ④大分類ごとの合計が公式配点に一致する */
 function catqCheck(){
-  var s=0,ks=Object.keys(CATQ);ks.forEach(function(k){s+=CATQ[k]});
-  s=Math.round(s*100)/100;
-  var miss=CATS.filter(function(c){return CATQ[c]===undefined});
+  var s=CATQ_TOTAL,ks=Object.keys(CATQ);
+  var miss=CATS.filter(function(c){return CATQ[c]===undefined&&CATQ_OFF[c]===undefined});
   var extra=ks.filter(function(k){return CINFO[k]===undefined});
-  var o={sum:s,cats:ks.length,itemCats:CATS.length,missing:miss,unknown:extra};
-  if(s!==50||miss.length||extra.length)console.warn('CATQ 検算 NG',o);else console.log('CATQ 検算 OK',o);
+  var bad=[];
+  Object.keys(BIGQ_WANT).forEach(function(b){
+    var v=Math.round((BIGQ[b]||0)*100)/100;
+    if(v!==BIGQ_WANT[b])bad.push(b+' '+v+'≠'+BIGQ_WANT[b]);
+  });
+  var o={sum:s,cats:ks.length,itemCats:CATS.length,missing:miss,unknown:extra,bigs:bad,off:Object.keys(CATQ_OFF)};
+  if(s!==49||miss.length||extra.length||bad.length)console.warn('CATQ 検算 NG',o);else console.log('CATQ 検算 OK',o);
   return o;
 }
 
@@ -145,6 +174,13 @@ ITEMS.forEach(function(it){
   if(!CINFO[it.cat]){CINFO[it.cat]={big:it.big,ids:[],topics:[]};CATS.push(it.cat)}
   var c=CINFO[it.cat];c.ids.push(it.id);
   var t=it.topic||'未分類';if(c.topics.indexOf(t)<0)c.topics.push(t);
+});
+/* 大分類の配点＝その大分類に属する単元の配点（CATQ）の合計。
+   ベタ書きせず導出するので、学習タブの大分類ヘッダと分析③・抜き打ちの重みが必ず同じ数字になる。
+   丸め誤差（0.1+0.2 問題）が出ないよう小数2桁で丸めて持つ。統計は CATQ に無いので需給は 4.00。 */
+BIGS.forEach(function(b){
+  var v=0;CATS.forEach(function(c){if(CINFO[c].big===b)v+=CATQ[c]||0});
+  BIGQ[b]=Math.round(v*100)/100;
 });
 function catsOfBig(b){return CATS.filter(function(c){return CINFO[c].big===b})}
 function itemsOfCat(c){return CINFO[c]?CINFO[c].ids.map(function(i){return BY[i]}):[]}
@@ -1578,7 +1614,8 @@ function vHome(){
     +'<div class="hcard">'+flw(17)+'<div class="hlab">今日'+(drev?'・復習 '+n3(drev):'')+'</div>'
     +'<div class="hnum">'+n3(dn)+'<span>問</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">いま</div>'
-    +'<div class="hnum">'+sc0.pts.toFixed(1)+'<span>/ 50点</span></div></div>'
+    /* 分母は分析①と同じ CATQ_TOTAL（49点）。ここだけ 50 とベタ書きすると2画面で食い違う */
+    +'<div class="hnum">'+sc0.pts.toFixed(1)+'<span>/ '+sc0.total+'点</span></div></div>'
     +'</div>';
   /* 今日の実績を1行だけ。カードは増やさない（引き算の原則）。
      合計＝その日の回答数／新規＝はじめて解いた数／復習＝残り／正解＝その日の正答率。 */
@@ -1820,10 +1857,13 @@ function catSubs(cat){
 /* 単元の1行。小見出しが2つ以上あるときだけ <details> にする（1つなら開いても中身が同じ）。
    開閉はJSでやらない＝章の一覧と同じ <details>（m6-det）に乗せ、開いた状態だけ S.openChap に写す。 */
 function urowHtml(c){
-  var st=catStat(c),g=catSubs(c),subs=g.subs,rest=st.n-st.att,q=CATQ[c]||0;
+  var st=catStat(c),g=catSubs(c),subs=g.subs,rest=st.n-st.att,q=CATQ[c]||0,off=CATQ_OFF[c];
   var many=subs.length>=2,ck='u:'+c,op=many&&!!S.openChap[ck];
-  /* 数字の出し方は章の一覧と同じ規則（途中なら「残り N」・そうでなければ総数）にそろえる */
-  var head='<span class="nm">'+esc(c)+'<span class="qn">毎年 '+q.toFixed(2)+'問</span></span>'
+  /* 数字の出し方は章の一覧と同じ規則（途中なら「残り N」・そうでなければ総数）にそろえる。
+     得点予測の対象外の単元（統計）は配点の数字を出さず CATQ_OFF の文言を出す
+     ＝「毎年1.00問／4問」と並ぶと、4肢解くだけで1点取れる最短ルートに見えてしまうため。 */
+  var head='<span class="nm">'+esc(c)+'<span class="qn">'
+    +(off?esc(off):'毎年 '+q.toFixed(2)+'問')+'</span></span>'
     +'<span class="badge">'+(rest>0&&rest<st.n?('残り '+n3(rest)):(n3(st.n)+'問'))+'</span>'
     +(many?'<span class="m6-mk">'+IC.chev+'</span>':'')
     +'<span class="bt">'+twoBtns('startCat',' data-c="'+esc(c)+'"',rest,st.n,'','')+'</span>';
@@ -1929,8 +1969,9 @@ function vFieldsCat(){
     h+='</div></details>';
   });
   h+='<div class="panel"><div class="mini">並びは講義で習う順（あこ課長の再生リストの順）です。'
-    +'「毎年N問」は過去問10年（2016〜2025）の出典から数えた'
-    +'1年あたりの出題数です。統計だけは過去問集にほぼ載らないため実測を使わず1問としています。</div></div>';
+    +'「毎年N問」は過去問10年（2016〜2025）の出典から数えた1年あたりの出題数で、'
+    +'科目ごとの合計が本試験の配点（権利14・法令8・業法20・税2・評定1・需給4）に一致するようにしています。'
+    +'統計だけは毎年数字が入れ替わり過去問で測れないため、配点を出さず別枠にしています。</div></div>';
   return h;
 }
 
@@ -2675,45 +2716,106 @@ function bigStat(big){
           rate:(ok+ng)?ok/(ok+ng):null,
           nowRate:a?ready/a:null,q:BIGQ[big]||0};
 }
-/* ①今受けたら何点＝大分類の正解率 × 本試験の出題数
-   ・1問しか解いていない分野の正解率で点数を出すと誤解を招くので、
-     各大分類で MINQ 問（10問）解くまでは推定に入れない（「測定中 3/10問」と出す）。
-   ・1分野も10問に達していなければ点数そのものを出さない（pts=null＝画面は「—」）。 */
+/* MINQ＝分析③の失点ランキングに出すための下限（その大分類で10問以上解いていること）。
+   1問の誤答で「権利関係 −14.0」と出さないための足切り。
+   ★①の得点予測では MINQ は使っていない（2026-08-15 に論点ベースへ変えたときに外した）。
+     論点ごとに到達度を出すので「1問だけ解いた分野を丸ごと推定する」という問題が
+     そもそも起きない＝分野単位の足切りが要らなくなったため。 */
 var MINQ=10;
+/* ---------- 単元の到達度＝論点ごとの到達度の平均 ----------
+   論点の到達度＝その論点で解いた肢のうち「直近が正解」の割合（1肢も解いていない論点は 0）。
+   「直近が正解」の判定は nowRate と同じ定義（streak>0 または state==='卒業'）を使う
+   ＝ catStat()/bigStat() と揃える。ここで新しい定義を作らない。
+   論点の束ね方は CINFO[c].topics / severeTopics() と同じ（cat の中を it.topic で束ね、
+   topic が無い肢は「未分類」という1つの論点として扱う）。
+
+   ★この関数は it.topic に依存する。topic は全数調査で約16%が誤っていると分かっており
+     （2026-08-15 時点で付け直し作業中）、付け直しの結果を入れると点は動く。
+     論点の数が変われば単元ごとの分母（tn）が変わるため、上下どちらにも動きうる。 */
+function catReach(c){
+  var info=CINFO[c];
+  if(!info)return {reach:0,tn:0,tdone:0,aq:0,nq:0};
+  var ts=info.topics,tn=ts.length;
+  if(!tn)return {reach:0,tn:0,tdone:0,aq:0,nq:0};      /* 論点0の単元＝0で割らない */
+  var m={};ts.forEach(function(t){m[t]={a:0,ready:0,n:0}});
+  var aq=0,nq=0;
+  itemsOfCat(c).forEach(function(it){
+    if(!it)return;
+    var o=m[it.topic||'未分類'];if(!o)return;
+    nq++;o.n++;
+    var r=R(it.id);if(!r||att(r)===0)return;
+    o.a++;aq++;
+    if((r.streak||0)>0||r.state==='卒業')o.ready++;
+  });
+  /* 到達度＝その論点で「直近が正解」の肢の数 ÷ NEED。NEED は2本（肢が1本しかない
+     論点は1本）。1本正解しただけで満額にすると、26肢ある論点でも1肢で100%になり、
+     本人が読む「確実に取れる点数」として甘くなる（2026-08-15 実装担当の自己申告）。
+     2本正解を求めるのは、たまたま当たった1本を実力と数えないため。
+     式は「直近の正答率 × 手ごたえ（解いた肢数/NEED・上限1）」。正答率をそのまま残すので、
+     26肢を8割で正解した論点が満額になることはない（正解数だけで見るとそうなってしまう）。 */
+  var sum=0,tdone=0;
+  ts.forEach(function(t){
+    var o=m[t];if(!o.a)return;                        /* 肢0の論点は 0 扱い＝0で割らない */
+    var need=Math.min(2,o.n)||1;
+    sum+=(o.ready/o.a)*Math.min(1,o.a/need);tdone++;
+  });
+  return {reach:sum/tn,tn:tn,tdone:tdone,aq:aq,nq:nq};
+}
 /* 「いま確実に取れると言える点数」（2026-08-15 本人指摘で作り直し）。
-   旧：その分野を10問解いたら、配点20点ぶんを正答率で丸ごと推定していた。
-       宅建業法を37問（2,016肢中1.8%）解いただけで「20点満点ぶん」を見積もるのは無理がある。
-   新：**配点 × その分野の消化率 × 直近の正答率**。未着手のぶんは0点として数える。
-       だから進めば増える。分母は本試験と同じ50点で固定する。
-   2026-08-15 さらに単元（小分類）単位に変えた。本人の問い「章ごとの問題の配分や点を見て
-   正確に出しているんだよね？」に対して、見ていなかった＝大分類6つの配点しか使わず、
-   科目の中は肢数の比でしかなかった。肢数の比は本試験の配点と一致しない
-   （例：宅建業法の「業務上の規制」は毎年3.60問だが、肢は353で科目の17%しかない）。
-   いまは CATQ（実測配点）で単元ごとに計算し、画面の内訳だけ大分類へ足し戻している。 */
+   旧①：その分野を10問解いたら、配点20点ぶんを正答率で丸ごと推定していた（甘すぎた）。
+   旧②：配点 × 肢の消化率(att/n) × 直近の正答率。未着手のぶんは0点。
+   新 ：配点 × 論点ごとの到達度の平均。
+
+   なぜ変えたか（2026-08-15 批評指摘・実測の裏付けあり）：
+   旧②は復習を回すと nowRate が 0.95 前後に張り付くので、点が実質「50 × 肢の消化率」になる。
+   実測で 消化率61%・正答率95% → 28.9点／消化率61%・正答率100% → 30.4点。
+   つまり全問正解でも 35点（合格ライン）に届かせるには 5,237肢の70%を解くしかなく、
+   残り64日で1日60肢。実力があってもプールを終えるまで「届かない」と言い続ける道具になっていた。
+
+   根本の原因は、過去問26年分なので同じ論点の肢が何本もあること。
+   実測：5,237肢に対して論点は674個・平均7.8肢/論点。偏りが大きい。
+     37条書面   155肢/6論点  ＝25.8肢/論点
+     8種制限    288肢/11論点 ＝26.2肢/論点
+     建築基準法 224肢/60論点 ＝3.7肢/論点
+   37条書面は6論点を155肢で問うているだけなので、論点を押さえれば点は取れる。
+   肢を全部潰すまで数字が上がらないのは、測っているものが間違っている。
+
+   本人の言葉：「確実に取れる点数が分かった方がいいよね。実質その単元を復習したらそこの点は
+   取れるでしょ？」＝1本の数字のまま出す。楽観的な外挿（未着手の論点を「たぶん取れる」と
+   見積もる等）は足さない＝1肢も解いていない論点は 0 のまま。
+
+   分母は CATQ_TOTAL＝49.00（統計の1問は過去問で測れないので別枠。CATQ のコメント参照）。 */
 function scoreNow(){
   var pts=0,covered=0,agg={};
   CATS.forEach(function(c){
     var q=CATQ[c];
-    if(!q)return;                                       /* 配点0の単元（贈与税）は寄与しない */
-    var s=catStat(c);
-    if(!s.n)return;
-    var cov=s.att/s.n;                                  /* その単元をどれだけ解いたか */
-    var rate=(s.nowRate===null)?0:s.nowRate;            /* 直近が正解の割合 */
-    var b=CINFO[c].big,g=agg[b]||(agg[b]={big:b,q:0,att:0,n:0,pts:0,cov:0});
-    g.q+=q;g.att+=s.att;g.n+=s.n;g.pts+=q*cov*rate;g.cov+=q*cov;
-    pts+=q*cov*rate;covered+=q*cov;
+    if(!q)return;                                       /* 配点0（贈与税）と別枠（統計）は寄与しない */
+    var s=catReach(c);
+    if(!s.tn)return;
+    var b=CINFO[c].big,g=agg[b]||(agg[b]={big:b,q:0,pts:0,tn:0,tdone:0,aq:0,nq:0});
+    g.q+=q;g.pts+=q*s.reach;g.tn+=s.tn;g.tdone+=s.tdone;g.aq+=s.aq;g.nq+=s.nq;
+    pts+=q*s.reach;
+    covered+=q*(s.tdone/s.tn);                          /* 手を付けた論点ぶんの配点＝測定できた範囲 */
   });
-  /* 内訳は今までどおり大分類で出す（画面は変えない）。単元で出した点を大分類へ足し、
-     表示の式「配点 × 解いた割合 × 正答率」が成り立つように cov・rate を配点で重み付けした
-     平均に直す（q*cov*rate が単元ごとの合計と一致する＝画面と計算がずれない）。 */
+  /* 内訳は大分類で出す。単元で出した点を大分類へ足すだけなので、
+     内訳の合計は必ず見出しの数字に一致する（2026-08-15 批評指摘：4行までで税と価格が永久に出ず、
+     内訳の合計46.97 対 見出し50.00 とズレていた。上位N件で切るのをやめて6行すべて出す）。 */
   var done=[];
   Object.keys(agg).forEach(function(b){
     var g=agg[b];
-    if(!g.att)return;
-    done.push({big:b,q:g.q,att:g.att,n:g.n,cov:g.q?g.cov/g.q:0,rate:g.cov?g.pts/g.cov:0});
+    done.push({big:b,q:g.q,pts:g.pts,tn:g.tn,tdone:g.tdone,att:g.aq,n:g.nq});
   });
-  done.sort(function(x,y){return y.q*y.cov*y.rate-x.q*x.cov*x.rate});
-  return {pts:pts,covered:covered,done:done,total:50};
+  done.sort(function(x,y){return y.pts-x.pts||y.q-x.q});
+  /* 画面に出す1桁の数字（show）は、各行を別々に四捨五入すると合計が見出しとズレる
+     （0.05×6行で最大0.3）。行ごとに切り捨ててから、端数の大きい行へ 0.1 ずつ配り直す
+     ＝最大剰余法。これで「内訳を足したら見出しの数字になる」が必ず成り立つ。 */
+  var want=Math.round(pts*10),fl=[],sum=0;
+  done.forEach(function(d,i){var v=Math.floor(d.pts*10);fl[i]=v;sum+=v});
+  var idx=done.map(function(d,i){return i}).sort(function(a,b){
+    return (done[b].pts*10-fl[b])-(done[a].pts*10-fl[a])||(done[b].pts-done[a].pts)});
+  for(var k=0;k<want-sum;k++)fl[idx[k%idx.length]]++;
+  done.forEach(function(d,i){d.show=fl[i]/10});
+  return {pts:pts,covered:covered,done:done,total:CATQ_TOTAL};
 }
 function pace7(){
   var n=0;
@@ -2725,30 +2827,31 @@ function vAnalysis(){
   M4ANA=null;
 
   /* ① 今受けたら何点（合格ラインの線が入ったゲージ・数字は点数だけ大きく）
-     10問未満の分野は推定に入れない。どこも10問に達していなければ点数は「—」（1問で「14.0点」と出さない）。 */
-  var hasPts=true,diff=sc.pts-PASS_LINE;
+     式＝Σ（単元の配点 × その単元の論点ごとの到達度の平均）。理由は scoreNow() のコメント。
+     分母は 50 ではなく CATQ_TOTAL＝49（統計の1問は過去問で測れないので別枠）。 */
+  var tot=sc.total;
   h+='<div class="panel">'
     +'<div class="spread" style="align-items:flex-end;margin-bottom:8px">'
     +'<div><span class="score">'+sc.pts.toFixed(1)+'</span>'
-    +'<span class="mini num"> / 50</span></div>'
+    +'<span class="mini num"> / '+tot+'</span></div>'
     +'<div class="mini">いま確実に取れる点数</div></div>'
-    /* ゲージは50点の目盛りのまま。測定できた配点まで色を塗り、その中の得点を濃く出す。
-       未測定のぶんを「取れる」ように見せない（2026-08-14 本人指摘の修正）。 */
-    +'<div class="gauge"><i style="width:'+(sc.pts/50*100).toFixed(1)+'%"></i>'
-    +'<span class="gmeas" style="left:'+((sc.covered||0)/50*100).toFixed(1)+'%"></span>'
-    +'<span class="gline" style="left:'+(PASS_LINE/50*100).toFixed(1)+'%"></span></div>'
+    /* 目盛りは49点。手を付けた論点ぶんの配点（covered）まで薄く、その中の得点を濃く出す。
+       まだ触っていない論点を「取れる」ように見せない（2026-08-14 本人指摘の修正）。 */
+    +'<div class="gauge"><i style="width:'+(sc.pts/tot*100).toFixed(1)+'%"></i>'
+    +'<span class="gmeas" style="left:'+((sc.covered||0)/tot*100).toFixed(1)+'%"></span>'
+    +'<span class="gline" style="left:'+(PASS_LINE/tot*100).toFixed(1)+'%"></span></div>'
     +'<div class="spread" style="margin-top:4px"><span class="mini num">0</span>'
-    +'<span class="mini num">'+PASS_LINE+'</span><span class="mini num">50</span></div>'
-    +'<div class="mini" style="margin-top:6px">配点 × 解いた割合 × 直近の正答率。'
-    +'まだ解いていない問題は0点として数えます</div>'
+    +'<span class="mini num">'+PASS_LINE+'</span><span class="mini num">'+tot+'</span></div>'
+    +'<div class="mini" style="margin-top:6px">配点 × 論点ごとの到達度の平均。'
+    +'到達度＝その論点で解いた肢のうち直近が正解の割合。まだ1肢も解いていない論点は0点です</div>'
+    /* 内訳は上位N件で切らない＝6分野すべて出す。切ると税（2.00）と価格の評定（1.00）は
+       配点の上限が低いので永久に上位に入らず、内訳の合計と見出しの数字も一致しなくなる。 */
     +(sc.done.length?'<div class="mini" style="margin-top:4px">'
-      +sc.done.slice(0,4).map(function(d){
-        return esc(d.big)+' '+(d.q*d.cov*d.rate).toFixed(1)+'点（'+n3(d.att)+'/'+n3(d.n)+'問・'
-          +Math.round(d.rate*100)+'%）'}).join('<br>')+'</div>':'');
-  /* 「測定中 n/10問」は③（失点ランキングの下）に1行でまとめて出すので、ここには出さない
-     ＝同じ情報を同一画面に2回出さない（SPEC §5-1 引き算の原則）。ここは未測定の分野名だけ。 */
-  /* 未測定の分野名はここには出さない。上の「配点×解いた割合×正答率」の内訳で
-     どこがどれだけ進んでいるかが分かるため（2026-08-15 引き算）。 */
+      +sc.done.map(function(d){
+        return esc(d.big)+' '+d.show.toFixed(1)+' / '+d.q.toFixed(0)+'点（論点 '
+          +n3(d.tdone)+'/'+n3(d.tn)+'）'}).join('<br>')+'</div>':'')
+    /* 統計は得点予測に入っていないことを1行だけ断る（数字を出さない＝軽視も過大評価もさせない） */
+    +'<div class="mini" style="margin-top:4px">統計（毎年1問）は過去問で測れないため別枠</div>';
   h+='</div>';
 
   /* ② 間に合うか（必要ペースと実ペースの2本の線） */
@@ -2772,11 +2875,17 @@ function vAnalysis(){
   h+='</div>';
 
   /* ③ 失点が大きい分野 上位5（出題数×不正解率／棒の長さで示す） */
-  /* ①と同じ下限＝その大分類で MINQ（10問）以上解いていない分野はランキングに出さない。
-     1問の誤答で「権利関係 −14.0」と出るのは①の「1問で14.0点」と同じ誤解を招くため。
-     10問未満の分野は、ランキングの下に1行でまとめて「測定中 …4/10問」と出す。 */
+  /* 下限＝その大分類で MINQ（10問）以上解いていない分野はランキングに出さない。
+     1問の誤答で「権利関係 −14.0」と出るのを避けるため。
+     10問未満の分野は、ランキングの下に1行でまとめて「測定中 …4/10問」と出す。
+     ★①（得点予測）は 2026-08-15 に論点ベースへ変えて MINQ を使わなくなった。
+       下限が要るのはここだけ＝大分類まるごとの失点を1本の数字で言い切る場所だから。 */
+  /* 不正解率は「通算の正誤比 ng/(ok+ng)」ではなく「1 − nowRate」＝いま出されたら落とす割合を使う。
+     2026-08-15 批評指摘：①のコメントに「通算比は予測に向かない（本人指摘）」と書いてあるのに
+     ③だけ通算比のままだった。通算比は復習で正解を積むと勝手に下がるので、
+     ①の点が動いていないのに③の失点だけ減る＝同じ画面で矛盾した話をすることになる。 */
   var lossAll=BIGS.map(function(b){
-    var s=bigStat(b),a=s.ok+s.ng,wr=a?s.ng/a:null;
+    var s=bigStat(b),wr=(s.nowRate===null)?null:1-s.nowRate;
     return {big:b,att:s.att,q:s.q,wr:wr,loss:wr===null?null:s.q*wr,rate:s.rate};
   });
   var loss=lossAll.filter(function(x){return x.att>=MINQ&&x.loss!==null})
@@ -2808,7 +2917,6 @@ function vAnalysis(){
     its.forEach(function(it){var r=R(it.id);if(r){ok+=r.ok||0;ng+=r.ng||0}});
     if(ok+ng>=3)tp.push({c:c,t:t,ok:ok,ng:ng,wr:ng/(ok+ng),it:its[0]});
   })});
-  tp.sort(function(a,b){return b.wr-a.wr}).slice(0,10);
   h+='<div class="panel">';
   if(!tp.length)h+='<div class="mini">3問以上解いた章がまだありません</div>';
   tp.sort(function(a,b){return b.wr-a.wr}).slice(0,10).forEach(function(x){
@@ -4390,6 +4498,11 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   wrongPool:wrongPool,wrongByBigMap:wrongByBigMap,wrongToday:wrongToday,restDays:restDays,restReady:restReady,
   restLeft:restLeft,newQueue:newQueue,unseenItems:unseenItems,bigValue:bigValue,videoStat:videoStat,
   nextVid:nextVid,vidOrder:vidOrder,scoreNow:scoreNow,dayCap:dayCap,daysLeft:daysLeft,REST:REST,
+  /* 配点表と得点予測（検証用）。CATQ を直したときに検証担当が同じ検算を再現できるように出す */
+  CATQ:CATQ,CATQ_OFF:CATQ_OFF,CATQ_TOTAL:CATQ_TOTAL,BIGQ:BIGQ,BIGQ_WANT:BIGQ_WANT,
+  catqCheck:catqCheck,catReach:catReach,
+  /* 単元一覧の描画（検証用） */
+  catSubs:catSubs,CSUB:CSUB,urowHtml:urowHtml,
   /* 難易度3段階（検証用）と1本目の動画 */
   d3:d3,d3Rank:d3Rank,d3Hard:d3Hard,D3:D3,dotsHtml:dotsHtml,MINQ:MINQ,bigStat:bigStat,
   firstVid:firstVid,catOfVid:catOfVid,sneakSort:sneakSort,
