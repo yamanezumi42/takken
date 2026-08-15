@@ -1348,9 +1348,13 @@ function vHome(){
     +'</div>';
   /* 今日の実績を1行だけ。カードは増やさない（引き算の原則）。
      合計＝その日の回答数／新規＝はじめて解いた数／復習＝残り／正解＝その日の正答率。 */
-  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0;
-  if(dn)h+='<div class="mini" style="text-align:center;margin:-4px 0 10px">今日 '+n3(dn)+'問'
-    +'（新規 '+n3(dnew)+'・復習 '+n3(dn-dnew)+'）／正解 '+Math.round((dd.ok||0)/dn*100)+'%</div>';
+  /* 新規の数は上の「◯/83」に出ているので書かない。正解率は分析にある。
+     ここは「今日の合計と復習」＋「いま何点取れるか」だけ（2026-08-15 本人指摘）。 */
+  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0,sc0=scoreNow();
+  if(dn||sc0.pts>0)
+    h+='<div class="mini" style="text-align:center;margin:-4px 0 10px">'
+      +(dn?'今日 '+n3(dn)+'問（復習 '+n3(dn-dnew)+'）　':'')
+      +'いま '+sc0.pts.toFixed(1)+' / 50点</div>';
   h+=hdots();
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
