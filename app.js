@@ -1064,6 +1064,11 @@ function sortQ(arr){
   });
   return a;
 }
+/* まだ解いていない問題だけに絞る。1問も残っていなければ全部返す（＝復習として解き直せる）。 */
+function restOnly(list){
+  var rest=list.filter(function(it){return att(R(it.id))===0});
+  return rest.length?rest:list;
+}
 /* 通し番号（並べ替え用）。番号が無い問題は末尾へ */
 function nsRank(it){var n=needSeq(it);return n===null?99999:n}
 /* 大分類の学習順（宅建業法→権利関係→…）。表に無いものは末尾 */
@@ -1420,6 +1425,11 @@ function flowHtml(){
   h+='<button class="frow'+(pl.sneak.length?'':' yet')+'" data-act="startSneak">'
     +'<span>抜き打ち</span><span class="fst">'
     +(sneakDone()?'今日は済':(pl.sneak.length?n3(pl.sneak.length)+'問':'なし'))+'</span></button>';
+  /* 間違えた問題＝解いたことがあって、間違えて、まだ正解し直していないもの
+     （wrongPool＝ng>0 かつ 直近が正解でない）。2026-08-15 本人指定でホームに置いた。 */
+  var wp=wrongPool().length;
+  h+='<button class="frow'+(wp?'':' yet')+'" data-act="startWrongAll">'
+    +'<span>間違えた問題</span><span class="fst">'+(wp?n3(wp)+'問':'なし')+'</span></button>';
   return h+'</div>';
 }
 /* その動画の章（skipを除く） */
@@ -1718,6 +1728,8 @@ function vStudy(){
       var key=v.vid+'#'+ch.sec,w=ST.watched[key];
       if(w)seen++;
       var ck=v.vid+'|'+ch.sec,op=!!S.openChap[ck];
+      /* まだ解いていない数を出す。「37/54」だと残りが何問か分からない（2026-08-15 本人指摘） */
+      var rest=chapItemsUp(v.vid,ch.sec).filter(function(it){return att(R(it.id))===0}).length;
       /* 章の開閉は <details>＝JSで開閉しない（開くたびに render() を呼ばない）。
          入場は ::details-content ＋ @starting-style（iOS 18.4+／26.4+ で2回目以降も出る）。
          高さは動かさず、中身のフェード＋4pxだけ（高さを動かすと layout が起きる）。 */
@@ -1725,9 +1737,9 @@ function vStudy(){
         +'<summary data-act="openchap" data-k="'+esc(ck)+'">'
         +'<span class="nm">'+esc(ch.label)+' <span class="sec">'+mmss(ch.sec)+'</span>'
         +(w?' <span class="mini num">視聴 '+esc(String(w).slice(5))+'</span>':'')+'</span>'
-        +'<span class="badge">'+n+'問</span>'
+        +'<span class="badge">'+(rest>0&&rest<n?('残り '+rest):(n+'問'))+'</span>'
         +'<a class="btn sm" href="'+vurl(v.vid,ch.sec)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(key)+'">'+IC.play+'</a>'
-        +'<button class="btn sm" data-act="startChap" data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'">この章だけ解く</button>'
+        +'<button class="btn sm" data-act="startChap" data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'">'+(rest>0&&rest<n?'残りを解く':'この章だけ解く')+'</button>'
         +'<span class="m6-mk">'+IC.chev+'</span></summary>';
       /* 紐づけの根拠を見せる（本人の指摘「どういう基準でその問題を選んでいるか分からない」） */
       h+='<div class="m6-dtxt">';
@@ -2941,7 +2953,7 @@ document.addEventListener('click',function(e){
     var vv=t.getAttribute('data-v');
     m1ToQuiz(t,function(){
       S.sort='timeline';S.round=0;S.kind='new';S.roundVid=vv;
-      startQueue(videoItemsUp(vv),VTIT[vv]||vv,true,vv);
+      startQueue(restOnly(videoItemsUp(vv)),VTIT[vv]||vv,true,vv);   /* 未着手だけ */
     });return;
   }
   /* 間違い直しの周回（間隔なし・当日中・全問正解するまで） */
@@ -2968,7 +2980,9 @@ document.addEventListener('click',function(e){
   }
   if(a==='startChap'){
     var cv=t.getAttribute('data-v'),cs2=+t.getAttribute('data-s'),cl=t.getAttribute('data-l');
-    S.kind='new';m1ToQuiz(t,function(){startQueue(chapItemsUp(cv,cs2),cl||'章',true,cv)});return;
+    /* 未着手だけを出す。37/54 の章で「もう一度37問」から始まるのは無駄
+       （2026-08-15 本人指摘）。全部やり直したいときは復習の絞り込みから。 */
+    S.kind='new';m1ToQuiz(t,function(){startQueue(restOnly(chapItemsUp(cv,cs2)),cl||'章',true,cv)});return;
   }
   if(a==='again'){S.qi=0;S.phase='q';S.res=null;saveRun(true);S.anim='card';S.enter=true;render();return}
   if(a==='data'){dataSheet();return}
