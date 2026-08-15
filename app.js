@@ -672,10 +672,19 @@ function vshort(t){
 /* 一覧の行に出す見出し（curriculum の label を優先し、無ければ題名の【】から取る） */
 function vlab(vid){return VLAB[vid]||vlabel(VTIT[vid]||'')}
 /* 題名から見出しだけを取り出す（「宅建 2026 権利関係 #4【意思表示1】…」→「意思表示1」） */
+/* 一覧に出す短い名前。チャンネルごとに題名の付け方が違うので順に試す。
+   ・こうのすけ＝【超有料級の宅建講座】「制限行為能力者」の… → 鉤括弧の中を使う
+   ・こざりえ  ＝【宅建】『宅建業法』最短合格…            → 二重鉤括弧の中を使う
+   ・あこ課長  ＝宅建 2026 権利関係 #2【制限行為能力者1】  → 【】の中を使う
+   2026-08-15 本人指摘：どれも「超有料級の宅建講座」になって論点が分からなかった。 */
 function vlabel(t){
   t=String(t||'');
-  var m=t.match(/【([^】]*)】/);
+  var m=t.match(/「([^」]{2,24})」/);            /* こうのすけ */
   if(m)return m[1];
+  m=t.match(/『([^』]{2,24})』/);                /* こざりえ */
+  if(m)return m[1];
+  m=t.match(/【([^】]*)】/);                     /* あこ課長 */
+  if(m&&!/宅建$|^宅建$|講座|チャンネル/.test(m[1]))return m[1];
   m=t.match(/^宅建\s*\d{4}\s*(?:[^#]*#\d+)?\s*(.{0,18})/);
   return (m&&m[1])?m[1]:t.slice(0,18);
 }
@@ -946,6 +955,8 @@ function newAvail(){
 }
 /* 1日の枠＝（学習時間−動画時間）÷30秒。抜き打ちは学習済み分類の数で自然に決まり、
    残りすべてを新規に配る。新規が余ったぶんは抜き打ちの上積みへ回す。 */
+/* 今日の抜き打ちを済ませたか（1日1回） */
+function sneakDone(){return !!((ST.days[today()]||{}).sneak)}
 function plan(){
   var dl=daysLeft();
   var all=unseenItems(true);                  /* 全体の残り＝1周の進みと必要ペースはこちらで見る */
@@ -968,6 +979,7 @@ function plan(){
   var extra=sneakExtra(sneak,Math.max(0,cap-newN-sneak.length));
   sneak=sneak.concat(extra);
   var doneToday=(ST.days[today()]||{}).n||0;
+  if(sneakDone()){sneak=[];sneakCut=0;extra=[]}     /* 抜き打ちは1日1回（2026-08-15 本人指定） */
   /* 通し番号が無い未着手＝新規には入れないぶん（黙って消さないので件数を画面に出す） */
   var noseq=NEEDOK?ITEMS.filter(function(it){
     return att(R(it.id))===0&&needSeq(it)===null;
@@ -995,6 +1007,11 @@ function newQueue(n){
   }
   return a.slice(0,n);
 }
+/* 未実装の4機能（ひっかけワード訓練／同一章の連射／問題への自分メモ／週次講評）は
+   2026-08-14 本人の指示で廃止した。trapPool と「ひっかけ」の入口はここで削除している。 */
+
+/* ---------- 絞り込み ---------- */
+var F={wrong:false,ngMin:0,recent:0,star:false,unseen:false,rateMax:null,difs:[],cats:[],topics:[]};
 function matchF(it){
   var r=R(it.id),a=att(r);
   if(F.cats.length&&F.cats.indexOf(it.cat)<0)return false;
@@ -1085,7 +1102,7 @@ function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
    baseSrc＝基準のチャンネル（既定＝あこ課長）／openChap＝動画学習で開いている章
    wrongs＝このセッションで間違えた問題（完走後に周回する）／round＝周回の回数 */
 /* lockedOut＝未習で出さなかった件数／sT,sR,sStreak,sBest＝この1回（周回なら「その周」）の成績 */
-var S={view:'home',cat:null,sort:'std',queue:[],qi:0,phase:'q',res:null,label:'',sneak:{},
+var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:null,label:'',sneak:{},
         openBig:{},openCat:{},openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
         wrongs:[],round:0,roundVid:null,srcOpen:false,lockedOut:0,kind:'new',studyVid:null,
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
@@ -1401,7 +1418,8 @@ function flowHtml(){
       +(pl.newOk&&pl.newN?n3(pl.newN)+'問':'動画を見てから')+'</span></button>';
   }
   h+='<button class="frow'+(pl.sneak.length?'':' yet')+'" data-act="startSneak">'
-    +'<span>抜き打ち</span><span class="fst">'+(pl.sneak.length?n3(pl.sneak.length)+'問':'なし')+'</span></button>';
+    +'<span>抜き打ち</span><span class="fst">'
+    +(sneakDone()?'今日は済':(pl.sneak.length?n3(pl.sneak.length)+'問':'なし'))+'</span></button>';
   return h+'</div>';
 }
 /* その動画の章（skipを除く） */
@@ -1470,7 +1488,15 @@ function allStats(){
    行＝「#4｜見出し｜実測時間｜12/41｜›」。行の左から進捗ぶんを薄緑で塗る（バーは置かない）。
    時間は動画の尺ではなく、その動画に実際に費やした時間（視聴＋その動画の問題）＝vidMs()。 */
 function vFields(){
-  var h='<div class="pad'+stag()+'"><div class="h">動画学習</div><div class="m3-heat">';
+  var h='<div class="pad'+stag()+'"><div class="h">動画学習</div>';
+  /* 誰の動画かを先に選ぶ。ここで絞ると、下の一覧はそのチャンネルの動画だけになる。 */
+  h+='<div style="margin:0 0 12px">'
+    +'<button class="tog'+(S.srcF?'':' on')+'" style="margin:0 6px 6px 0" data-act="srcf" data-v="">すべて</button>'
+    +SRCS.map(function(x){
+      return '<button class="tog'+(S.srcF===x?' on':'')+'" style="margin:0 6px 6px 0" data-act="srcf" data-v="'
+        +esc(x)+'">'+esc(x)+(x===DEFSRC?'（主）':'')+'</button>';}).join('')
+    +'</div>';
+  h+='<div class="m3-heat">';
   bigsOrdered().forEach(function(b){
     var vids=(BIGVIDS[b]||[]),bp=bigProg(b),open=!!S.openBig[b];
     var mainN=vids.filter(function(v){return VSRC[v]===DEFSRC}).length;
@@ -1481,7 +1507,14 @@ function vFields(){
       +'<div class="bar3"><i data-m6v="'+(bp.pct/100).toFixed(4)+'" data-m6vk="big:'+esc(b)+'"></i></div></div>';
     if(!open)return;
     var main=[],other=[];
-    vids.forEach(function(v){(VSRC[v]===DEFSRC?main:other).push(v)});
+    /* チャンネルで絞る（S.srcF）。指定が無ければ主教材が本編・他は「他のチャンネル」。
+       2026-08-15 本人指摘：チャンネルで選べず、題名から誰の動画か察するしかなかった。 */
+    vids.forEach(function(v){
+      var sc2=VSRC[v];
+      if(SRCHIDE[sc2])return;
+      if(S.srcF){ (sc2===S.srcF?main:other).push(v); }
+      else { (sc2===DEFSRC?main:other).push(v); }
+    });
     h+=nextCardHtml(main);          /* 次にやる1本＝主役のカード（全部完了なら出さない） */
     h+=cumRowHtml(b);               /* ここまでで解ける N問（累積で解く入口） */
     h+='<div class="vlist">'+vlistHtml(b,main)+'</div>';
@@ -2139,20 +2172,24 @@ function bigStat(big){
      各大分類で MINQ 問（10問）解くまでは推定に入れない（「測定中 3/10問」と出す）。
    ・1分野も10問に達していなければ点数そのものを出さない（pts=null＝画面は「—」）。 */
 var MINQ=10;
+/* 「いま確実に取れると言える点数」（2026-08-15 本人指摘で作り直し）。
+   旧：その分野を10問解いたら、配点20点ぶんを正答率で丸ごと推定していた。
+       宅建業法を37問（2,016肢中1.8%）解いただけで「20点満点ぶん」を見積もるのは無理がある。
+   新：**配点 × その分野の消化率 × 直近の正答率**。未着手のぶんは0点として数える。
+       だから進めば増える。分母は本試験と同じ50点で固定する。 */
 function scoreNow(){
-  var pts=0,measured=0,unmeasured=[],measuring=[],done=[];
+  var pts=0,covered=0,done=[];
   BIGS.forEach(function(b){
     var s=bigStat(b);
-    if(s.att<MINQ){                                    /* 解いた問題数が10問未満＝推定に入れない */
-      if(s.att>0)measuring.push({big:b,att:s.att,q:s.q});
-      else unmeasured.push(b);
-      return;
-    }
-    pts+=s.q*s.nowRate;measured+=s.q;
-    done.push({big:b,q:s.q,rate:s.nowRate,att:s.att});
+    if(!s.n)return;
+    var cov=s.att/s.n;                                  /* その分野をどれだけ見たか */
+    var rate=(s.nowRate===null)?0:s.nowRate;
+    pts+=s.q*cov*rate;
+    covered+=s.q*cov;
+    if(s.att>0)done.push({big:b,q:s.q,att:s.att,n:s.n,cov:cov,rate:rate});
   });
-  return {pts:measured?pts:null,measured:measured,unmeasured:unmeasured,measuring:measuring,
-          done:done,minq:MINQ,total:50};
+  done.sort(function(x,y){return y.q*y.cov*y.rate-x.q*x.cov*x.rate});
+  return {pts:pts,covered:covered,done:done,total:50};
 }
 function pace7(){
   var n=0;
@@ -2165,29 +2202,29 @@ function vAnalysis(){
 
   /* ① 今受けたら何点（合格ラインの線が入ったゲージ・数字は点数だけ大きく）
      10問未満の分野は推定に入れない。どこも10問に達していなければ点数は「—」（1問で「14.0点」と出さない）。 */
-  var hasPts=sc.pts!==null,diff=hasPts?sc.pts-PASS_LINE:null;
+  var hasPts=true,diff=sc.pts-PASS_LINE;
   h+='<div class="panel">'
     +'<div class="spread" style="align-items:flex-end;margin-bottom:8px">'
-    +'<div><span class="score">'+(hasPts?sc.pts.toFixed(1):'—')+'</span>'
-    +'<span class="mini num"> / '+(hasPts?n3(sc.measured):'50')+'</span></div>'
-    +(hasPts?'<div class="mini">測定できた範囲</div>':'')+'</div>'
+    +'<div><span class="score">'+sc.pts.toFixed(1)+'</span>'
+    +'<span class="mini num"> / 50</span></div>'
+    +'<div class="mini">いま確実に取れる点数</div></div>'
     /* ゲージは50点の目盛りのまま。測定できた配点まで色を塗り、その中の得点を濃く出す。
        未測定のぶんを「取れる」ように見せない（2026-08-14 本人指摘の修正）。 */
-    +'<div class="gauge"><i style="width:'+(hasPts?(sc.pts/50*100).toFixed(1):'0.0')+'%"></i>'
-    +'<span class="gmeas" style="left:'+((sc.measured||0)/50*100).toFixed(1)+'%"></span>'
+    +'<div class="gauge"><i style="width:'+(sc.pts/50*100).toFixed(1)+'%"></i>'
+    +'<span class="gmeas" style="left:'+((sc.covered||0)/50*100).toFixed(1)+'%"></span>'
     +'<span class="gline" style="left:'+(PASS_LINE/50*100).toFixed(1)+'%"></span></div>'
     +'<div class="spread" style="margin-top:4px"><span class="mini num">0</span>'
     +'<span class="mini num">'+PASS_LINE+'</span><span class="mini num">50</span></div>'
-    +(hasPts?'<div class="mini" style="margin-top:6px">50点のうち <b>'+n3(sc.measured)
-      +'点ぶん</b>だけ測定（'+sc.done.map(function(d){return esc(d.big)+' '+Math.round(d.rate*100)+'%'}).join('・')
-      +'）／残り '+n3(50-sc.measured)+'点は未測定</div>':'');
+    +'<div class="mini" style="margin-top:6px">配点 × 解いた割合 × 直近の正答率。'
+    +'まだ解いていない問題は0点として数えます</div>'
+    +(sc.done.length?'<div class="mini" style="margin-top:4px">'
+      +sc.done.slice(0,4).map(function(d){
+        return esc(d.big)+' '+(d.q*d.cov*d.rate).toFixed(1)+'点（'+n3(d.att)+'/'+n3(d.n)+'問・'
+          +Math.round(d.rate*100)+'%）'}).join('<br>')+'</div>':'');
   /* 「測定中 n/10問」は③（失点ランキングの下）に1行でまとめて出すので、ここには出さない
      ＝同じ情報を同一画面に2回出さない（SPEC §5-1 引き算の原則）。ここは未測定の分野名だけ。 */
-  var notyet=sc.unmeasured.concat(sc.measuring.map(function(m){return m.big}));
-  if(notyet.length)
-    h+='<div class="mini" style="margin-top:6px">未測定 '+notyet.map(esc).join('・')+'</div>';
-  if(sc.measured<50)
-    h+='<div class="mini" style="margin-top:6px">（'+(50-sc.measured)+'点ぶんは推定に入れていません）</div>';
+  /* 未測定の分野名はここには出さない。上の「配点×解いた割合×正答率」の内訳で
+     どこがどれだけ進んでいるかが分かるため（2026-08-15 引き算）。 */
   h+='</div>';
 
   /* ② 間に合うか（必要ペースと実ペースの2本の線） */
@@ -2860,12 +2897,16 @@ document.addEventListener('click',function(e){
   /* 配色の切替。色だけを入れ替えるので、開いている画面はそのままでよい */
   if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
     applyTheme();dataSheet();}return}
+  if(a==='srcf'){var sv=t.getAttribute('data-v');S.srcF=sv||null;render();return}
   if(a==='gobig'){var gb=t.getAttribute('data-b');S.openBig={};S.openBig[gb]=true;go('fields');return}
   /* 新規は「デフォルト」の出題順（need_seq 昇順→章の秒数→難易度）で解く。
      need_seq が無い古いデータのときだけ従来の「章のタイムライン順」に落とす。 */
   if(a==='startNew'){S.round=0;S.kind='new';S.sort=NEEDOK?'std':'timeline';startQueue(newQueue(plan().newN),'新規',false);return}
   if(a==='startSneak'){
+    if(sneakDone()){msg&&msg('今日の抜き打ちは終わっています');return}
     S.round=0;S.kind='sneak';var sq=plan().sneak;
+    if(!sq.length)return;
+    var d=ST.days[today()]||{n:0,ok:0};d.sneak=1;ST.days[today()]=d;saveST();  /* 1日1回の印 */
     startQueue(sq,'抜き打ち',false,null,true);
     sq.forEach(function(it){S.sneak[it.id]=true});   /* 画面に「抜き打ち」の印を出す */
     render();return;
