@@ -205,6 +205,15 @@ function chapsOf(cat){
    同じチャンネル内では新しい動画を先に出す。表に出るのは先頭の1本で、残りは「＋N」に畳む。 */
 var SRCRANK={'こざりえ':0,'こうのすけ':1,'あこ課長':2};
 function srcRank(vid){var r=SRCRANK[VSRC[vid]];return (r===undefined)?9:r}
+/* 肢ごとに字幕を読んで付け直した「検証済み」のリンクには、データ側が pick:true を付ける。
+   それを**チャンネルの順より先**に見る（2026-08-15 本人の指示
+   「内容が合っていることが第1の関門、チャンネルは第2」）。
+   これが無いと、語の一致で機械的に付けた古いこざりえのリンクが srcRank で先頭に残り、
+   検証済みの新しいリンクを追い越して画面が変わらない（適用担当の実測：3,202肢のうち
+   2,455肢＝77%で表示が変わらなかった。勝っていたのは こざりえ2,450件＋こうのすけ5件）。
+   pick 同士・pick 無し同士では、これまでどおり チャンネルの順 → 公開が新しい順。
+   pick がまだ1件も無いデータでは全部 1 になるので、並びは今までと変わらない。 */
+function pickRank(v){return (v&&v.pick)?0:1}
 function vidsOf(it){
   if(it._vs)return it._vs;
   var a=[];
@@ -212,9 +221,11 @@ function vidsOf(it){
   else if(it.video&&it.video.vid)a=[it.video];
   a=a.filter(function(v){return v&&v.vid&&!SRCHIDE[VSRC[v.vid]]});
   a.sort(function(x,y){
-    var d=srcRank(x.vid)-srcRank(y.vid);
+    var q=pickRank(x)-pickRank(y);                           /* ①検証済みのリンクを先に */
+    if(q)return q;
+    var d=srcRank(x.vid)-srcRank(y.vid);                     /* ②チャンネルの順 */
     if(d)return d;
-    return (VUP[y.vid]||'').localeCompare(VUP[x.vid]||'');   /* 新しい動画を先に */
+    return (VUP[y.vid]||'').localeCompare(VUP[x.vid]||'');   /* ③新しい動画を先に */
   });
   it._vs=a;
   return it._vs;
@@ -421,14 +432,18 @@ function chapOf(v,it){
           src:VSRC[v.vid]||'',why:v.why||[]};
 }
 /* その問題を代表する章（基準の動画→既定チャンネル→先頭） */
+/* 代表の章＝①基準の動画（動画学習で選んでいる1本。本人が明示した範囲なので最優先）
+   ②検証済みのリンク（pick）③既定のチャンネル ④先頭。
+   ②を③より先にするのが 2026-08-15 の直し（内容が第1・チャンネルが第2）。
+   ①は据え置き＝「基準の動画」の切り替えは pick に上書きされない。 */
 function chapFor(it){
   var vs=vidsOf(it);if(!vs.length)return null;
-  var pick=null,bp=9;
+  var best=null,bp=9;
   vs.forEach(function(v){
-    var p=(S.baseVid&&v.vid===S.baseVid)?0:((VSRC[v.vid]===baseSrc())?1:2);
-    if(p<bp){bp=p;pick=v}
+    var p=(S.baseVid&&v.vid===S.baseVid)?0:(v.pick?1:((VSRC[v.vid]===baseSrc())?2:3));
+    if(p<bp){bp=p;best=v}
   });
-  return chapOf(pick||vs[0],it);
+  return chapOf(best||vs[0],it);
 }
 /* その問題が出てくる全部の章（同じ問題が複数の動画に現れるのが正しい状態） */
 function chapsFor(it){return vidsOf(it).map(function(v){return chapOf(v,it)})}
@@ -1350,7 +1365,11 @@ function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
 /* lockedOut＝未習で出さなかった件数／sT,sR,sStreak,sBest＝この1回（周回なら「その周」）の成績 */
 var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:null,label:'',sneak:{},
         openBig:{},openCat:{},openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
-        wrongs:[],round:0,roundVid:null,srcOpen:false,lockedOut:0,kind:'new',studyVid:null,
+        /* いま解いている「単位」の印。roundVid/roundSec＝動画・章から入ったとき、
+           roundCat/roundSub＝単元・小見出しから入ったとき。完走画面の「次へ」の行き先を決める。
+           全部 startQueue の冒頭で落とす（周回だけは持ち越す）。 */
+        wrongs:[],round:0,roundVid:null,roundSec:null,roundCat:null,roundSub:null,
+        srcOpen:false,lockedOut:0,kind:'new',studyVid:null,
         pickExplicit:false,   /* 本人が範囲を選んだ入口＝未習フィルタを通さない印（startQueue で降りる） */
         pendBig:null,         /* 次の1回だけ効く科目基準（startQueue の冒頭で baseBig に移す） */
         /* 学習タブの入口（video＝動画で進む／cat＝単元で進む）。記録から復元する。
@@ -1364,8 +1383,13 @@ function startQueue(list,label,withSneak,baseVid,keepGrad,keepRound){
   /* 周回（間違い直し）以外は、ここで必ず周回数を0に戻す。入口ごとに S.round=0 と書いていたため
      6か所（startFilter/startSel/startAll/startCat/startTopic/startChap）で書き漏れていて、
      前のセッションの間違いリストと基準の動画がそのまま持ち越されていた（2026-08-15 批評）。
-     周回を続けたい呼び出しだけが keepRound=true を渡す。 */
-  if(!keepRound)S.round=0;
+     周回を続けたい呼び出しだけが keepRound=true を渡す。
+     2026-08-15 批評：**roundSec だけがどこでも落ちていなかった**。設定するのは startChap と
+     nextchap、null に戻すのは startVid だけだったので、動画の章を1本解いた（roundSec=794）あと
+     単元タブで「宅地建物取引士」を解くと、完走画面が nextChap(こざりえ業法, 794) を返して
+     **宅建士と無関係の「次の章へ」**が点灯していた。ここで「いま解いている単位」の印を
+     まとめて落とす（roundCat/roundSub＝単元・小見出しから入った印も同じ扱い）。 */
+  if(!keepRound){S.round=0;S.roundSec=null;S.roundCat=null;S.roundSub=null}
   S.baseVid=baseVid||null;                 /* 基準の動画（指定が無ければ既定のチャンネル基準） */
   /* 科目基準（解禁の保険）は「次の1回だけ効く」受け渡しにする。
      2026-08-15 検証：startCat が S.baseBig を入れてから startQueue を呼んでいたのに、
@@ -1438,6 +1462,9 @@ function saveRun(fresh){
              （2026-08-14 本人報告のバグ。iPhoneのホーム画面アプリは他アプリに切り替えると
              再起動されやすいので、長いセッションではほぼ必ず踏む）。 */
           wrongs:(S.wrongs||[]).slice(),round:S.round||0,roundVid:S.roundVid||null,
+          /* 単元・小見出しから入った印も残す（再開したときに「次の単元へ」が消えないように） */
+          roundCat:S.roundCat||null,
+          roundSub:(typeof S.roundSub==='number'?S.roundSub:null),
           baseVid:S.baseVid||null,baseSrc:S.baseSrc||DEFSRC,
           filter:JSON.parse(JSON.stringify(F)),
           startedAt:(fresh||!prev||!prev.startedAt)?now:prev.startedAt,lastAt:now,
@@ -1476,6 +1503,9 @@ function resumeRun(fromStart){
   S.wrongs=fromStart?[]:(Array.isArray(r.wrongs)?r.wrongs.filter(function(id){return !!BY[id]}):[]);
   S.round=fromStart?0:(r.round||0);
   S.roundVid=(r.roundVid&&VTIT[r.roundVid])?r.roundVid:(r.baseVid||null);
+  /* 単元・小見出しから入った印（データが差し替わって単元が消えていたら捨てる） */
+  S.roundCat=(r.roundCat&&CINFO[r.roundCat])?r.roundCat:null;
+  S.roundSub=(S.roundCat&&typeof r.roundSub==='number')?r.roundSub:null;
   if(r.filter){for(var k in F){if(r.filter[k]!==undefined)F[k]=r.filter[k]}}
   /* 難易度の絞り込みは5段階（A〜E）から3段階（易・普・難）へ変わったので、古い値は落とす
      （残すと「どのチップも選ばれていないのに該当0問」になる） */
@@ -1830,6 +1860,49 @@ function allStats(){
    肢側の videos[].sub／videos[].csec を使う）。sub を持たない肢は「その他」等にまとめない
    ＝無理に分けず、親の行の「全 N問」でだけ解けるようにする（本人指示）。
    一覧を開くたびに5,237肢を走らないよう、単元ごとに1回だけ作って持っておく。 */
+/* 素の小見出しは粒度がばらばら（2026-08-15 批評の実測：最小1肢・最大116肢・中央値35肢）で、
+   1肢の行は押す意味がなく、116肢は1回では終わらない。ここで束ね直して均す。
+   ・USUB_MIN 未満 … 前の小見出しへ寄せる（先頭なら次へ）。畳んだ論点は「ほかN」に足して消さない
+   ・USUB_MAX 超  … 均等に分けて「（1/3）」を付ける
+   元データ（chapters.json の subs／videos[].sub）はデータ側の担当のものなので触らない。
+   30 という数字は実データで決めた：30 で切ると 全180区切り・最大30肢・中央値20肢・最小10肢
+   （40 だと 131区切り・最大40・中央値30 で、30超が63件残る）。 */
+var USUB_MIN=5,USUB_MAX=30;
+/* 見出しは「A／B／C　ほか3」の形。iPhone 15（393px）では38字が3行に折り返す。
+   先頭の1つだけ残して、残りは「ほかN」に畳む。**途中で「…」に切ると何の章か分からなくなる**ので、
+   区切り（／）の単位でしか落とさない。 */
+function subExtra(lab){
+  var s=String(lab||''),m=/　ほか(\d+)$/.exec(s),n=0;
+  if(m){n+=+m[1];s=s.slice(0,m.index)}
+  var p=s.split('／').filter(function(x){return x});
+  return n+Math.max(0,p.length-1);
+}
+function subHead(lab){
+  var s=String(lab||''),m=/　ほか(\d+)$/.exec(s);
+  if(m)s=s.slice(0,m.index);
+  var p=s.split('／').filter(function(x){return x});
+  return p.length?p[0]:String(lab||'');
+}
+function subLabel(lab,extra){
+  var n=subExtra(lab)+(extra||0);
+  return subHead(lab)+(n>0?'　ほか'+n:'');
+}
+/* 同じ見出しが複数の単元に出るもの（2026-08-15 批評：借地借家法の土地／建物で6ラベル重複ほか）。
+   こざりえの1つの章を2つの単元で分け合っているのが原因なので、行に「この単元ぶん」と添えて
+   「同じ行が2つある」ように見えるのを防ぐ。全問1回だけなめて作る。 */
+var SUBDUP=null;
+function subDupMap(){
+  if(SUBDUP)return SUBDUP;
+  var m={};SUBDUP={};
+  ITEMS.forEach(function(it){
+    var vs=vidsOf(it),g=null;
+    for(var i=0;i<vs.length;i++){if(vs[i]&&vs[i].sub){g=vs[i];break}}
+    if(!g)return;
+    (m[g.sub]=m[g.sub]||{})[it.cat]=1;
+  });
+  Object.keys(m).forEach(function(k){if(Object.keys(m[k]).length>1)SUBDUP[k]=1});
+  return SUBDUP;
+}
 var CSUB={};
 function catSubs(cat){
   if(CSUB[cat])return CSUB[cat];
@@ -1841,7 +1914,7 @@ function catSubs(cat){
     for(var i=0;i<vs.length;i++){if(vs[i]&&vs[i].sub){g=vs[i];break}}
     if(!g){none++;return}
     if(!map[g.sub]){
-      map[g.sub]={sub:g.sub,vid:g.vid,ids:[],
+      map[g.sub]={sub:g.sub,vid:g.vid,ids:[],extra:0,
                   sec:(typeof g.sec==='number'?g.sec:0),
                   csec:(typeof g.csec==='number'?g.csec:0)};
       order.push(g.sub);
@@ -1851,19 +1924,51 @@ function catSubs(cat){
   var a=order.map(function(k){return map[k]});
   /* 並びは動画を見る順（章の秒 → 小見出しの秒）＝解く順が動画の進行と一致する */
   a.sort(function(x,y){return x.csec-y.csec||x.sec-y.sec});
-  CSUB[cat]={subs:a,none:none};
+  /* ①小さすぎる区切りを前へ寄せる（畳んだぶんの論点数は「ほかN」に足す＝黙って消さない） */
+  var mg=[];
+  a.forEach(function(s){
+    if(s.ids.length<USUB_MIN&&mg.length){
+      var p=mg[mg.length-1];
+      p.ids=p.ids.concat(s.ids);
+      p.extra+=1+subExtra(s.sub);
+    }else mg.push(s);
+  });
+  if(mg.length>1&&mg[0].ids.length<USUB_MIN){        /* 先頭だけは前が無いので次へ寄せる */
+    mg[1].ids=mg[0].ids.concat(mg[1].ids);
+    mg[1].extra+=1+subExtra(mg[0].sub);
+    mg.shift();
+  }
+  /* ②大きすぎる区切りを均等に分ける。1つの小見出しの中は肢の秒が全部同じ（実測：103区切り
+     すべてで秒が1種類）ので秒では割れない。並び順（＝出題される順）で等分する。 */
+  var out=[],dup=subDupMap();
+  mg.forEach(function(s){
+    var n=s.ids.length,k=Math.max(1,Math.ceil(n/USUB_MAX)),base=subLabel(s.sub,s.extra),i=0;
+    for(var j=0;j<k;j++){
+      var sz=Math.ceil((n-i)/(k-j));
+      out.push({sub:base+(k>1?'（'+(j+1)+'/'+k+'）':''),full:s.sub,vid:s.vid,
+                sec:s.sec,csec:s.csec,dup:!!dup[s.sub],ids:s.ids.slice(i,i+sz)});
+      i+=sz;
+    }
+  });
+  CSUB[cat]={subs:out,none:none};
   return CSUB[cat];
 }
 /* 単元の1行。小見出しが2つ以上あるときだけ <details> にする（1つなら開いても中身が同じ）。
    開閉はJSでやらない＝章の一覧と同じ <details>（m6-det）に乗せ、開いた状態だけ S.openChap に写す。 */
 function urowHtml(c){
   var st=catStat(c),g=catSubs(c),subs=g.subs,rest=st.n-st.att,q=CATQ[c]||0,off=CATQ_OFF[c];
-  var many=subs.length>=2,ck='u:'+c,op=many&&!!S.openChap[ck];
+  /* 小見出しが1つも無い単元（実測：49単元のうち29単元・2,022問）は <details> にならないので、
+     「小見出しが付いていない N問」の説明が枝の中にあると**画面に何も出ない**。
+     2026-08-15 批評：説明されるのは宅地建物取引業・免許の123問だけで、残りは黙って消えていた。
+     ここでは行に「小見出しなし」の印を出し、理由は一覧の最後の説明に1回だけ書く。 */
+  var nosub=!subs.length;
+  var many=subs.length>=2||(subs.length===1&&!!g.none),ck='u:'+c,op=many&&!!S.openChap[ck];
   /* 数字の出し方は章の一覧と同じ規則（途中なら「残り N」・そうでなければ総数）にそろえる。
      得点予測の対象外の単元（統計）は配点の数字を出さず CATQ_OFF の文言を出す
      ＝「毎年1.00問／4問」と並ぶと、4肢解くだけで1点取れる最短ルートに見えてしまうため。 */
   var head='<span class="nm">'+esc(c)+'<span class="qn">'
     +(off?esc(off):'毎年 '+q.toFixed(2)+'問')+'</span></span>'
+    +(nosub?'<span class="unos">小見出しなし</span>':'')
     +'<span class="badge">'+(rest>0&&rest<st.n?('残り '+n3(rest)):(n3(st.n)+'問'))+'</span>'
     +(many?'<span class="m6-mk">'+IC.chev+'</span>':'')
     +'<span class="bt">'+twoBtns('startCat',' data-c="'+esc(c)+'"',rest,st.n,'','')+'</span>';
@@ -1871,7 +1976,9 @@ function urowHtml(c){
   var body='';
   subs.forEach(function(s,i){
     var list=s.ids.map(function(x){return BY[x]}).filter(Boolean);
-    body+='<div class="usub"><span class="nm">'+esc(s.sub)+'</span>'
+    /* 同じ見出しが別の単元にも出るときだけ「この単元ぶん」と添える（単元名は親に出ているので出さない） */
+    body+='<div class="usub"><span class="nm">'+esc(s.sub)
+      +(s.dup?'<span class="udup">この単元ぶん</span>':'')+'</span>'
       +'<span class="bt">'+twoBtns('startSub',' data-c="'+esc(c)+'" data-i="'+i+'"',
                                    restCount(list),list.length,'','')+'</span></div>';
   });
@@ -1920,6 +2027,46 @@ function catSeqMap(){
   });
   return CATSEQ;
 }
+/* 単元の並び（大分類の中を習う順に）。「次の単元へ」の行き先を、一覧に並んでいる順と合わせる。
+   ★同じ式が vFieldsCat() の中にもある（検査 L2 がそこの .sort を直接読むため）。**両方直すこと。** */
+function catsSorted(b){
+  var sq=catSeqMap();
+  return catsOfBig(b).slice().sort(function(x,y){
+    var a=sq[x]||{seq:99999,sec:0},d=sq[y]||{seq:99999,sec:0};
+    return a.seq-d.seq                                     /* ①講義で習う順（通し番号） */
+      ||a.sec-d.sec                                        /* ②同じ動画なら章の秒が早い順 */
+      ||(CATQ[y]||0)-(CATQ[x]||0)                          /* ③それでも同じなら出題数が多い順 */
+      ||(x<y?-1:1);
+  });
+}
+function catsOrdered(){
+  var out=[];bigsOrdered().forEach(function(b){out=out.concat(catsSorted(b))});return out;
+}
+/* 単元・小見出しを完走したときの「次」。単元学習をメインに据えたのに完走のたびに
+   動画モードへ引き戻されていた（2026-08-15 批評）ので、単元側にも導線を作る。
+   ①小見出しから入ったなら、まず同じ単元でまだ残りがある次の小見出し
+   ②無ければ、一覧と同じ並びで次の（残りがある）単元。最後まで行ったら先頭へ回る
+   動画・章から入ったとき（roundCat が無い）は null＝「次の章へ」に任せる。 */
+function nextUnit(){
+  if(!S.roundCat||!CINFO[S.roundCat])return null;
+  var c=S.roundCat;
+  if(typeof S.roundSub==='number'){
+    var subs=catSubs(c).subs;
+    for(var i=0;i<subs.length;i++){
+      if(i===S.roundSub)continue;
+      if(restCount(subs[i].ids.map(function(x){return BY[x]}).filter(Boolean))>0)
+        return {cat:c,i:i,label:subs[i].sub,sub:true};
+    }
+  }
+  var a=catsOrdered(),k=a.indexOf(c);
+  if(k<0)k=0;
+  for(var j=1;j<=a.length;j++){
+    var cc=a[(k+j)%a.length];
+    if(cc===c)continue;
+    if(restCount(itemsOfCat(cc))>0)return {cat:cc,i:null,label:cc,sub:false};
+  }
+  return null;
+}
 /* 「単元で進む」で開いている大分類。記録（settings.ubOpen）に残して次に開いたときも同じ状態にする。
    まだ一度も触っていないときの既定＝**残りがある最初の大分類だけ開く**。
    理由：①全部開くと約5,200px（iPhone 15 で6画面ぶん）＝目的の単元まで指が届かない
@@ -1950,6 +2097,9 @@ function vFieldsCat(){
   bigsOrdered().forEach(function(b){
     var cs=catsOfBig(b);
     if(!cs.length)return;
+    /* 並べ替えの式は catsSorted()（「次の単元へ」が使う）と**同じ**。
+       検査 L2 が vFieldsCat の中の .sort を直接読むので、ここに式を残している。
+       片方だけ変えると一覧の次の行と「次の単元へ」の行き先がずれる＝必ず両方直すこと。 */
     cs=cs.slice().sort(function(x,y){
       var a=sq[x]||{seq:99999,sec:0},d=sq[y]||{seq:99999,sec:0};
       return a.seq-d.seq                                     /* ①講義で習う順（通し番号） */
@@ -1968,7 +2118,13 @@ function vFieldsCat(){
     cs.forEach(function(c){h+=urowHtml(c)});
     h+='</div></details>';
   });
-  h+='<div class="panel"><div class="mini">並びは講義で習う順（あこ課長の再生リストの順）です。'
+  /* 「都市計画法には7つあるのに国土利用計画法には無い」理由を、行ごとに繰り返さず1回だけ書く
+     （29単元に同じ一文を並べると、行の半分以上が同じ灰色の説明で埋まる） */
+  h+='<div class="panel"><div class="mini" style="margin-bottom:8px">'
+    +'小見出しは、こざりえの動画の字幕から作った区切りです。'
+    +'字幕から区切れなかった単元は「小見出しなし」＝単元まるごとで解きます。'
+    +'区切りが '+USUB_MAX+'問を超えるものは分け、'+USUB_MIN+'問未満のものは前の区切りへ寄せています。'
+    +'</div><div class="mini">並びは講義で習う順（あこ課長の再生リストの順）です。'
     +'「毎年N問」は過去問10年（2016〜2025）の出典から数えた1年あたりの出題数で、'
     +'科目ごとの合計が本試験の配点（権利14・法令8・業法20・税2・評定1・需給4）に一致するようにしています。'
     +'統計だけは毎年数字が入れ替わり過去問で測れないため、配点を出さず別枠にしています。</div></div>';
@@ -2316,8 +2472,12 @@ function vQuiz(){
            全問正解を条件にすると1,524問なので事実上出ない（2026-08-15 批評）。 */
         var vdone=!!(vs&&(vs.done||(S.roundVid&&restCount(videoItemsUp(S.roundVid))===0)));
         var nx=vdone?nextVid(S.roundVid):null;
+        /* 単元・小見出しから入った回は、動画側の導線（次の章へ・次の動画へ）を出さない。
+           基準の動画（catBaseVid）はこざりえの科目1本なので、そこへ飛ばすと別の単元へ移ってしまう。 */
+        var nu=nextUnit();
+        if(S.roundCat){nc=null;nx=null}
         var perfect=(wn===0&&sT>0&&sR===sT);
-        setResultBtns(wn,nx,perfect,nc);
+        setResultBtns(wn,nx,perfect,nc,nu);
         M5.showResult({
           right:sR,total:tot,
           rate:sT?(sR/sT*100):0,
@@ -2562,12 +2722,23 @@ function expBlock(it,id){
    ・間違いが残っている＝「間違えた N問を解く」が最上段（主役）。0になるまで周回する
    ・0になったときだけ「次の動画へ」を主役にする（この動画を仕上げた合図）
    ・「ホームへ戻る」は置かない（下部タブがある） */
-function setResultBtns(wn,nx,perfect,nc){
+function setResultBtns(wn,nx,perfect,nc,nu){
   var rb=document.getElementById('r-round'),nb=document.getElementById('r-next'),
-      ag=document.getElementById('r-again'),cb=document.getElementById('r-nextchap');
+      ag=document.getElementById('r-again'),cb=document.getElementById('r-nextchap'),
+      ub=document.getElementById('r-nextcat');
   if(rb){rb.hidden=!wn;if(wn)rb.textContent='間違えた '+n3(wn)+'問を解く'}
   /* 章を解き終えたら次の章へ。動画の続きを1回分ずつ進める導線（2026-08-15） */
   if(cb){cb.hidden=!nc;if(nc){cb.setAttribute('data-s',nc.sec);cb.textContent='次の章へ（'+nc.label+'）';cb.className=wn?'pri':'acc'}}
+  /* 単元・小見出しを解き終えたら単元側の次へ（動画側の nc・nx とは排他＝両方は出ない） */
+  if(ub){
+    ub.hidden=!nu;
+    if(nu){
+      ub.setAttribute('data-c',nu.cat);
+      if(nu.i===null||nu.i===undefined)ub.removeAttribute('data-i');else ub.setAttribute('data-i',nu.i);
+      ub.textContent=(nu.sub?'次の小見出しへ（':'次の単元へ（')+nu.label+'）';
+      ub.className=wn?'pri':'acc';
+    }
+  }
   if(nb){nb.hidden=!nx;if(nx){nb.setAttribute('data-v',nx.vid);nb.className=(wn||nc)?'pri':'acc'}}
   /* パスで解き残しがあるときだけ「もう一度この範囲を解く」を残す
      （全問正解なら不要、間違いがあるなら上の「間違えた…」がその役目） */
@@ -2579,6 +2750,9 @@ function vDone(){
   var nc=nextChap(S.roundVid,S.roundSec);
   var vdone=!!(vs&&(vs.done||(S.roundVid&&restCount(videoItemsUp(S.roundVid))===0)));
   var nx=vdone?nextVid(S.roundVid):null;
+  /* 静的な #r-btns と同じ出し分けにする（片方だけ直すと本人には見えない＝検査 Z1） */
+  var nu=nextUnit();
+  if(S.roundCat){nc=null;nx=null}
   var perfect=(nw===0&&sT>0&&sR===sT);
   /* 完走画面のヘッダーは「この1回（周回ならその周）」の成績。通算（ST.session）と混ぜない */
   /* 連続正解のチップだけは通算（ST.session.streak）＝アプリを通した連続数という1つの意味に揃える */
@@ -2595,6 +2769,8 @@ function vDone(){
     h+='<div class="h">'+(perfect?'全問正解':n3(tot)+'問 終了')+'</div>';
   }
   if(nc)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextchap" data-s="'+nc.sec+'">次の章へ（'+esc(nc.label)+'）</button>';
+  if(nu)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextcat" data-c="'+esc(nu.cat)+'"'
+    +(nu.sub?' data-i="'+nu.i+'"':'')+'>'+(nu.sub?'次の小見出しへ（':'次の単元へ（')+esc(nu.label)+'）</button>';
   if(nx)h+='<button class="btn '+((nw||nc)?'':'acc')+'" style="margin-top:10px" data-act="nextvid" data-v="'+esc(nx.vid)+'">次の動画へ</button>';
   h+='<div class="hr"></div>';
   /* 全問正解なら「もう一度」は出さない。 */
@@ -3611,7 +3787,9 @@ document.addEventListener('click',function(e){
        基準の動画は catBaseVid() で選ぶ＝その小分類と同じ科目の動画に限る。
        動画が無い小分類もあるので、科目そのものを基準にする S.pendBig を併用する。 */
     var cbb=CINFO[cc]?CINFO[cc].big:null,cbv=catBaseVid(cc,cbb);
-    S.kind='new';m1ToQuiz(t,function(){S.pendBig=cbb;startQueue(pickRest(itemsOfCat(cc),t),cc,false,cbv)});return;
+    /* startQueue が冒頭で roundCat を落とすので、印は**呼んだ後**に付ける（startChap と同じ形） */
+    S.kind='new';m1ToQuiz(t,function(){S.pendBig=cbb;startQueue(pickRest(itemsOfCat(cc),t),cc,false,cbv);
+      S.roundCat=cc;S.roundSub=null;});return;
   }
   /* 単元の中の小見出し（字幕で割った区切り）から解く。本人が範囲を選んだ入口なので
      未習フィルタは通さない（pickExplicit）。基準の動画＝その小見出しが載っている動画。 */
@@ -3626,7 +3804,32 @@ document.addEventListener('click',function(e){
     var sb=CINFO[su]?CINFO[su].big:null;
     S.kind='new';m1ToQuiz(t,function(){
       S.pickExplicit=true;S.pendBig=sb;startQueue(pickRest(sl,t),sg.sub,false,sg.vid);
+      S.roundCat=su;S.roundSub=si;      /* 完走時に「次の小見出しへ／次の単元へ」を出すため */
     });return;
+  }
+  /* 単元・小見出しを完走したあとの「次」。動画側の nextchap と対になる、単元側の導線。
+     data-i があれば同じ単元の次の小見出し、無ければ次の単元。 */
+  if(a==='nextcat'){
+    var uc=t.getAttribute('data-c'),ui=t.getAttribute('data-i');
+    if(!uc||!CINFO[uc]){go('fields');return}
+    var ubg=CINFO[uc].big,uv=catBaseVid(uc,ubg);
+    S.round=0;S.kind='new';
+    if(ui===null||ui===''){
+      m1ToQuiz(t,function(){
+        S.pendBig=ubg;startQueue(restOnly(itemsOfCat(uc)),uc,false,uv);
+        S.roundCat=uc;S.roundSub=null;
+      });
+      return;
+    }
+    var ug=(catSubs(uc)||{subs:[]}).subs[+ui];
+    if(!ug){go('fields');return}
+    var ul=ug.ids.map(function(x){return BY[x]}).filter(Boolean);
+    if(!ul.length){go('fields');return}
+    m1ToQuiz(t,function(){
+      S.pickExplicit=true;S.pendBig=ubg;startQueue(restOnly(ul),ug.sub,false,ug.vid);
+      S.roundCat=uc;S.roundSub=+ui;
+    });
+    return;
   }
   if(a==='startTopic'){
     var c3=t.getAttribute('data-c'),t3=t.getAttribute('data-t');
@@ -4506,6 +4709,9 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   catqCheck:catqCheck,catReach:catReach,
   /* 単元一覧の描画（検証用） */
   catSubs:catSubs,CSUB:CSUB,urowHtml:urowHtml,
+  subDupMap:subDupMap,subLabel:subLabel,subExtra:subExtra,subHead:subHead,
+  USUB_MIN:USUB_MIN,USUB_MAX:USUB_MAX,
+  catsSorted:catsSorted,catsOrdered:catsOrdered,nextUnit:nextUnit,
   /* 難易度3段階（検証用）と1本目の動画 */
   d3:d3,d3Rank:d3Rank,d3Hard:d3Hard,D3:D3,dotsHtml:dotsHtml,MINQ:MINQ,bigStat:bigStat,
   firstVid:firstVid,catOfVid:catOfVid,sneakSort:sneakSort,
@@ -4514,7 +4720,7 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   saveRun:saveRun,dropRun:dropRun,hasRun:hasRun,resumeRun:resumeRun,
   secOf:secOf,sortQ:sortQ,SORTS:SORTS,TABS:TABS,
   /* 動画の紐づけ（検証用） */
-  vidsOf:vidsOf,videoItems:videoItems,chapItems:chapItems,chapsOf:chapsOf,chapsFor:chapsFor,
+  vidsOf:vidsOf,pickRank:pickRank,videoItems:videoItems,chapItems:chapItems,chapsOf:chapsOf,chapsFor:chapsFor,
   chapFor:chapFor,whyOf:whyOf,secIn:secIn,NOVID:NOVID,VIDIDS:VIDIDS,CHIDS:CHIDS,
   VSRC:VSRC,VTIT:VTIT,SRCS:SRCS,CHAP:CHAP,CINFO:CINFO,CATS:CATS,itemsOfCat:itemsOfCat,
   save:saveST,load:function(){ST=loadST();render()},BOXD:BOXD,addD:addD,today:today,

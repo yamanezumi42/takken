@@ -861,6 +861,9 @@ details.ur>summary,.ur-flat>.urh{flex-wrap:wrap;padding:8px 0;min-height:0}
   color:var(--muted);font-weight:400;margin-left:6px}
 .urh .bt{flex:0 0 100%;display:flex;gap:8px}
 .urh .bt .btn{flex:1;width:auto;margin:0}
+/* 小見出しが1つも無い単元の印。単元まるごとでしか解けないことを、行の上で分かるようにする */
+.urh .unos{flex:0 0 auto;font-size:10px;letter-spacing:.04em;color:var(--muted);
+  border:1px solid var(--line);border-radius:6px;padding:1px 5px;white-space:nowrap}
 details.ur[open]>summary .m6-mk{transform:rotate(90deg)}
 /* 大分類のパネル（単元で進む の一覧）を畳めるようにする。2026-08-15 本人指示
    「権利関係、法令上の制限、税に関する法令とか大分類はたためるようにして欲しいよね」。
@@ -877,6 +880,8 @@ details.ub[open]>summary .m6-mk{transform:rotate(90deg)}
 .usub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
   padding:6px 0 8px 10px;margin:0 0 6px;border-left:2px solid var(--line)}
 .usub .nm{flex:0 0 100%;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+/* 同じ見出しが別の単元にも出るときの断り書き（借地借家法の土地／建物など） */
+.usub .udup{font-size:10px;color:var(--muted);margin-left:6px;white-space:nowrap}
 .usub .bt{flex:0 0 100%;display:flex;gap:8px}
 .usub .bt .btn{flex:1;width:auto;margin:0}
 @supports selector(::details-content){
@@ -1105,6 +1110,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   <div class="rbtns" id="r-btns">
     <button class="pri" type="button" data-act="round" id="r-round" hidden>間違えた問題を解く</button>
     <button class="acc" type="button" data-act="nextchap" id="r-nextchap" hidden>次の章へ</button>
+    <!-- 単元・小見出しから入ったときの導線。動画側（次の章へ・次の動画へ）とは排他で出す -->
+    <button class="acc" type="button" data-act="nextcat" id="r-nextcat" hidden>次の単元へ</button>
     <button class="acc" type="button" data-act="nextvid" id="r-next" hidden>次の動画へ</button>
     <button class="pri" type="button" data-act="again" id="r-again" hidden>もう一度この範囲を解く</button>
     <button type="button" data-act="tab" data-v="home">ホームへ戻る</button>
@@ -1151,7 +1158,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='bab21cca';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='a8e13702';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
