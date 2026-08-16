@@ -246,7 +246,12 @@ var VSRC={},VTIT={},VLEN={},VMEM={},VCHN={},VUP={};   /* vid → チャンネル
 /* 主教材＝こざりえ（2026-08-14 本人指定）。分かりやすさで選んだ。
    1本が科目まるごとなので、一覧は「大分類 → 1本 → 章」の形になる。
    こざりえに無い所（17%）はあこ課長が受け持ち、「他のチャンネル」に畳んで置く。 */
-var DEFSRC='こざりえ';                    /* 出題順・一覧・ホームの基準 */
+var DEFSRC='こざりえ';                    /* 出題順・肢のリンクの並びの基準（＝分かりやすい順） */
+/* 動画学習（学習タブの一覧）で通しで見る教材＝あこ課長だけ（2026-08-17 本人指示）。
+   「こうのすけとこざりえは分かりやすいけど範囲がカバーできてない。
+     あくまで補足として問題から動画に飛べればいい」。
+   ＝一覧はあこ課長で通し、肢のリンクは今までどおり分かりやすい順のまま。 */
+var VIDSRC='あこ課長';
 var SRCHIDE={'れくお':1};                  /* 使わないチャンネル（本人指定・2026-08-14） */
 var SRCS=[DEFSRC];                        /* 基準に選べるチャンネル（既定を先頭に） */
 Object.keys(VSRC).forEach(function(v){
@@ -2272,49 +2277,36 @@ function vFields(){
 /* 動画で進む＝2026-08-15 までの学習タブそのもの（外枠と見出しだけ vFields() へ移した） */
 function vFieldsVideo(){
   var h='';
-  /* 誰の動画かを先に選ぶ。ここで絞ると、下の一覧はそのチャンネルの動画だけになる。 */
-  h+='<div style="margin:0 0 12px">'
-    +'<button class="tog'+(S.srcF?'':' on')+'" style="margin:0 6px 6px 0" data-act="srcf" data-v="">すべて</button>'
-    +SRCS.map(function(x){
-      return '<button class="tog'+(S.srcF===x?' on':'')+'" style="margin:0 6px 6px 0" data-act="srcf" data-v="'
-        +esc(x)+'">'+esc(x)+(x===DEFSRC?'（主）':'')+'</button>';}).join('')
-    +'</div>';
+  /* 動画学習はあこ課長だけ（2026-08-17 本人指示）。
+     こざりえ・こうのすけは分かりやすいが範囲を覆えていないので、通しで学ぶ教材にはしない。
+     この2人は**問題から飛ぶ補足のリンク**としてだけ残す（肢のリンクは今までどおり）。
+     チャンネルを選ぶボタンと「他のチャンネル」の畳みは、選ぶ相手がいないので外した。 */
   h+='<div class="m3-heat">';
   bigsOrdered().forEach(function(b){
     var vids=(BIGVIDS[b]||[]),bp=bigProg(b),open=!!S.openBig[b];
-    var mainN=vids.filter(function(v){return VSRC[v]===DEFSRC}).length;
+    var mainN=vids.filter(function(v){return VSRC[v]===VIDSRC}).length;
     h+='<div class="bigrow" data-m6k="big:'+esc(b)+'"><button class="t" data-act="big" data-b="'+esc(b)+'">'
       +'<span>'+esc(b)+'</span>'
       +'<span class="cnt">動画 '+mainN+' ／ '+n3(bp.n)+'問</span>'
       +'<span class="ar">'+(open?IC.up:IC.down)+'</span></button>'
       +'<div class="bar3"><i data-m6v="'+(bp.pct/100).toFixed(4)+'" data-m6vk="big:'+esc(b)+'"></i></div></div>';
     if(!open)return;
-    var main=[],other=[];
-    /* チャンネルで絞る（S.srcF）。指定が無ければ主教材が本編・他は「他のチャンネル」。
-       2026-08-15 本人指摘：チャンネルで選べず、題名から誰の動画か察するしかなかった。 */
+    var main=[];
+    /* あこ課長の動画だけを並べる（2026-08-17 本人指示）。他のチャンネルは一覧に出さない。 */
     vids.forEach(function(v){
-      var sc2=VSRC[v];
-      if(SRCHIDE[sc2])return;
-      if(S.srcF){ (sc2===S.srcF?main:other).push(v); }
-      else { (sc2===DEFSRC?main:other).push(v); }
+      if(SRCHIDE[VSRC[v]])return;
+      if(VSRC[v]===VIDSRC)main.push(v);
     });
     h+=nextCardHtml(main);          /* 次にやる1本＝主役のカード（全部完了なら出さない） */
     h+=cumRowHtml(b);               /* ここまでで解ける N問（累積で解く入口） */
     h+='<div class="vlist">'+vlistHtml(b,main)+'</div>';
-    if(other.length){
-      var ok=!!S.openOther[b];
-      h+='<div class="vlist"><button class="vrow" data-act="other" data-b="'+esc(b)+'">'
-        +'<span class="rc"><span class="no"></span><span class="nm">他のチャンネル</span>'
-        +'<span class="n2">'+other.length+'本</span><span class="ar">'+(ok?IC.up:IC.down)+'</span></span></button>'
-        +(ok?other.map(vrowHtml).join(''):'')+'</div>';
-    }
   });
   h+='</div>';
   /* 章がない小分類（その他の法令など）と、章が付かなかった問題の件数は黙って消さずに出す */
   h+='<div class="panel"><div class="spread"><span class="mini">出題順</span></div>'
     +SORTS.map(function(s){return '<button class="tog'+(S.sort===s[0]?' on':'')+'" style="margin:0 6px 6px 0" data-act="sort" data-s="'+s[0]+'">'+s[1]+'</button>'}).join('');
   /* 下の「基準のチャンネル」は廃止（2026-08-15 本人指摘「意味ない」）。
-     チャンネルは一覧の先頭の絞り込み（S.srcF）で選ぶ。基準は主教材で固定。 */
+     一覧はあこ課長で固定（2026-08-17）＝選ぶ相手がいないので絞り込みも置かない。 */
   if(S.baseVid){
     h+='<div class="li"><div class="nm"><div class="mini">基準の動画</div>'+esc(VTIT[S.baseVid]||S.baseVid)+'</div>'
       +'<button class="btn sm" data-act="basesrc" data-v="'+esc(baseSrc())+'">解除</button></div>';
