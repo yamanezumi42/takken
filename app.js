@@ -1830,13 +1830,8 @@ function vHome(){
       +'<button class="btn acc" style="width:auto" data-act="runResume">再開</button></div></div>';
   }
 
-  /* 「動画を見る」「問題を解く」の2つは置かない（2026-08-16 本人指示「なくしてほしい」）。
-     単元学習をメインに据えたので、ホームの入口は学習タブへの1つだけにする。
-     呼び名は学習タブの中身に合わせる（単元学習／動画学習）＝押した先と文字を一致させる。 */
-  h+='<div class="hbtns">'
-    +'<button class="btn pri" data-act="tab" data-v="fields">'+IC.book
-    +(S.fmode==='cat'?'単元学習':'動画学習')+'</button>';
-  h+='</div>';
+  /* ホームにボタンは置かない（2026-08-16 本人指示。「動画を見る」「問題を解く」に続いて
+     「単元学習」も不要）。入口は下のタブ＝学習タブに一本化する。 */
   h+='</div>';
   return h;
 }
