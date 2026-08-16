@@ -1830,19 +1830,12 @@ function vHome(){
       +'<button class="btn acc" style="width:auto" data-act="runResume">再開</button></div></div>';
   }
 
-  /* ボタンは2つだけ＝「動画を見る」「問題を解く」（2026-08-14 本人指定） */
-  var cv=nextVidAll();
-  h+='<div class="hbtns">';
-  if(cv){
-    h+='<a class="btn pri" href="'+vurl(cv,0)+'" target="_blank" rel="noreferrer"'
-      +' data-act="vwatch" data-k="'+esc(cv+'#0')+'">'+IC.yt+'動画を見る</a>'
-      +'<button class="btn" style="margin-top:10px" data-act="startNew">'
-      +IC.book+'問題を解く</button>';
-  }else{
-    /* 呼び名は学習タブの中身に合わせる（単元学習／動画学習）＝押した先と文字を一致させる */
-    h+='<button class="btn pri" data-act="tab" data-v="fields">'+IC.book
-      +(S.fmode==='cat'?'単元学習':'動画学習')+'</button>';
-  }
+  /* 「動画を見る」「問題を解く」の2つは置かない（2026-08-16 本人指示「なくしてほしい」）。
+     単元学習をメインに据えたので、ホームの入口は学習タブへの1つだけにする。
+     呼び名は学習タブの中身に合わせる（単元学習／動画学習）＝押した先と文字を一致させる。 */
+  h+='<div class="hbtns">'
+    +'<button class="btn pri" data-act="tab" data-v="fields">'+IC.book
+    +(S.fmode==='cat'?'単元学習':'動画学習')+'</button>';
   h+='</div>';
   h+='</div>';
   return h;
@@ -2672,7 +2665,9 @@ function vQuiz(){
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
     +'<span class="qcnt"><span class="m6-roll" style="--rh:16px;font-size:12px"'
     +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
-    +' / '+n3(tot)+'</span>'
+    /* 「/ 2」も桁ロールと同じ 16px の箱に入れる。素のテキストのままだと、行の高さを
+       まわりから受け継ぐので左右で行箱の高さが変わり、上下がずれる（2026-08-16 本人指摘・3度目）。 */
+    +'<span class="qtot"> / '+n3(tot)+'</span></span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
     +IC.down+'</button></div><div class="qrule"></div></div>';

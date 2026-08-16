@@ -990,6 +990,7 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
   /* 左は桁ロールの部品（高さを持つ）、右は素のテキスト。並べるとベースラインが合わず
      左が下・右が上にずれる（2026-08-16 本人指摘）。中央で揃える。 */
   display:inline-flex;align-items:center}
+.qhead .qcnt .qtot{display:inline-flex;align-items:center;height:16px;line-height:16px}
 .qhead .qrule{height:1px;background:var(--accd);opacity:.35}
 /* 下の余白＝タブの高さ（実測53px）＋ホームインジケータ（iPhone15で34px）＋12px。
    ○×は margin-top:auto で面の下端に置いているので、この余白ぶんだけ上に上がる。
@@ -1182,7 +1183,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='5e37320c';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='518465af';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
