@@ -125,6 +125,12 @@ a{color:var(--chipfg)}
   max-width:100%;overflow-wrap:anywhere}
 /* 章名は1行に省略、時刻は折り返さない（「16:」「20」と割れないように） */
 .link .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 肢ごとの判定の「論点名」から作ったラベルだけは、1行に押し込まず折り返す（.w）。
+   論点名は章名と違って文なので長い（実測：全5,237件で 中央値33字・最長75字。
+   条文の出典を落としたあとの数）。1行＋「…」に押し込むと
+   「委託を受けた保証人が期限前に弁済し…」で切れ、何の論点か分からなくなる。
+   章名から作ったラベル（＝いまのデータ）は .w が付かないので、今までどおり1行＋「…」。 */
+.link .lbl.w{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.5}
 .link .tm{flex:0 0 auto;white-space:nowrap;color:var(--muted)}
 .li .nm,.cell,.panel,.exp,.lead,.stem{min-width:0;overflow-wrap:anywhere}
 .qlabel{white-space:nowrap}
@@ -845,6 +851,10 @@ details.m6-det[open]>summary .m6-mk{transform:rotate(90deg)}
    ボタンが2つ並ぶと章名の列が痩せて縦に折れていた（2026-08-15 検証）。章名は省略しない。 */
 details.m6-det.chrow>summary{flex-wrap:wrap;row-gap:6px;padding:8px 0}
 details.m6-det.chrow>summary .nm{flex:0 0 100%}
+/* 章の行の2行目に出す「動画の章 ◯◯」。行の名前を中身（論点）に差し替えたときだけ出す。
+   動画の目次と画面の章を突き合わせられなくなると「どこまで見たか」が分からなくなるので、
+   動画側の章名は消さずに小さく残す（2026-08-16）。 */
+.chsrc{display:block;font-size:10.5px;color:var(--muted);margin-top:2px;letter-spacing:.02em}
 .chbt{flex:1 1 auto;display:flex;gap:8px;min-width:0}
 .chbt .btn{flex:1 1 0;width:auto;margin:0;min-width:0}
 /* 単元で進む（小分類の一覧）。骨格は章の一覧（m6-det）と同じで、装飾は足していない。
@@ -965,6 +975,13 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qhead{margin-bottom:14px}
 .qhead .qrow{display:flex;align-items:center;gap:9px;margin-bottom:8px}
 .qhead .qname{font-size:13.5px;letter-spacing:.06em;color:var(--accd);font-weight:600}
+/* 論点名から作ったチップだけ折り返しを許す（.j）。章名は短いので今までどおり1行。
+   名前を1段目に丸ごと置き、状態の点・何問目・★・∨は2段目にまわす（章の行 chrow と同じ考え）。
+   実測（393x852・いちばん長い55字のラベル）：横に並べると幅212pxで4行・行の高さ80px、
+   段を分けると幅337pxで2行・行の高さ73px。名前を「…」で切らずに済ませるには段を分ける方が短い。
+   .j が付かない（＝いまのデータの）章名では row も名前も今までどおり1段。 */
+.qhead .qrow.j{flex-wrap:wrap;row-gap:6px}
+.qhead .qname.j{flex:0 0 calc(100% - 25px);min-width:0;overflow-wrap:anywhere;line-height:1.5;letter-spacing:.02em}
 .qhead .qcnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .qhead .qrule{height:1px;background:var(--accd);opacity:.35}
 /* 下の余白＝タブの高さ（実測53px）＋ホームインジケータ（iPhone15で34px）＋12px。
@@ -1158,7 +1175,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='f4479c3d';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='a42f7335';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){

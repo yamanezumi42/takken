@@ -487,9 +487,102 @@ function secOf(it){
   }
   return bp===9?99999:bs;
 }
+/* ---------- 画面に出すラベルの選び方（2026-08-16） ----------
+   videos[].chapter は「その秒が入っている動画の章の名前」で、chapters.json の真実。
+   ★データはそのまま残す。変えるのは**表示のときにどれを見るか**だけ。
+
+   なぜ変えるか：肢ごとの判定は「章の開始秒ではなく**実際に話している秒**」を指す。
+   秒は正しいのでYouTubeは正しい位置に飛ぶが、章名はその秒が属する**親章**の名前なので、
+   肢の中身と食い違う。実例（判定担当が字幕を読んで確認したもの）：
+     ・採光1/7・換気1/20 の肢（-9K9ERXc7jI@648）→「必ず耐火にしないといけない規模」
+     ・特別用途地区の用途制限の緩和（2NVEZvCaRao@1163）→「処理施設等」
+     ・取消しと対抗関係（b1_2-004-1 ほか）→「【エンディング】」
+
+   優先順位 ①判定の論点名 videos[].jtopic ②小見出し videos[].sub ③章名 videos[].chapter
+   ・jtopic は tools/apply_retopic.py が入れる（まだ0件）。
+   ・sub を章名より先に見るのは**判定で入れたリンク（isJudged）だけ**。
+     判定以外の既存リンクは秒が章頭なので章名の方が正しく、ここを無条件にすると
+     sub を持つ既存の3,779本のラベルが今日いきなり変わる。だから条件を付ける。
+   ⇒ jtopic が0件・判定のリンクが0本の**いまのデータでは、戻り値は今までと1文字も変わらない**。 */
+function jtopOf(v){var s=v&&v.jtopic;return (typeof s==='string')?s.trim():''}
+/* 論点名の末尾に付く条文の出典（「（業法50条2項）」「（最判昭45.7.24）」）はラベルに要らない。
+   落とすのは**丸ごと1つの括弧**だけ。文の途中は削らない＝「…」で切って
+   何の論点か分からなくすることは絶対にしない。 */
+/* 末尾の括弧が「出典だけ」かどうかを、括弧の中身を読んで決める（全5,237件で目視した）。
+   ①数字が入っている ②条・項・号・判・規則 等の語が入っている
+   ③**ひらがなが「の」しか無い**（「の」は「64条の8」のような枝番でしか出ない）
+   3つとも満たすものだけ落とす。実測：落ちる 2,397件（「（業法50条2項）」「（大判昭17.9.30）」）。
+   説明が混ざった括弧は残る（「（名義書換えだけでは足りない・民法467条）」「（後払い・614条）」
+   「（5人に1人・2週間以内に補充）」「（貸借でも必要）」）＝中身を黙って削らない。 */
+var CITEP=/（([^（）]*)）$/;
+function isCite(s){
+  if(!/[0-9０-９〇一二三四五六七八九十]/.test(s))return false;
+  if(!/(条|項|号|判|規則|通達|準則|.法)/.test(s))return false;
+  /* 「の」（64条の8 の枝番）と「ただし書・かっこ書」は出典の一部なので、ひらがなに数えない */
+  if(/[ぁ-ん]/.test(s.replace(/ただし書|かっこ書|の/g,'')))return false;
+  return true;
+}
+function trimCite(s){
+  var t=String(s||'').trim(),n=0,m;
+  while(n<3&&(m=CITEP.exec(t))&&isCite(m[1])){t=t.slice(0,m.index).trim();n++}
+  return t||String(s||'').trim();
+}
+/* リンク1本ぶんの表示ラベル。無ければ空文字（呼び側が it.topic などへ落とす） */
+function vlabOf(v){
+  var j=jtopOf(v);
+  if(j)return trimCite(j);
+  if(v&&v.sub&&isJudged(v))return v.sub;
+  return (v&&v.chapter)||'';
+}
+/* 章の行（動画学習）に載っている肢の論点。1件も無ければ null＝動画の章名のまま。
+   「ほかN」の数え方は小見出しの行（subLabel）と同じ規約にそろえる。
+   全問なめるので (vid,sec) ごとに1回だけ作って持っておく。 */
+var CHLAB={};
+function chapTopicLab(vid,sec){
+  var k=vid+'#'+sec;
+  if(CHLAB[k]!==undefined)return CHLAB[k];
+  var seen={},a=[];
+  chapItems(vid,sec).forEach(function(it){
+    vidsOf(it).forEach(function(v){
+      if(v.vid!==vid)return;
+      var cs=(typeof v.csec==='number')?v.csec:v.sec;
+      if(cs!==sec&&v.sec!==sec)return;
+      var j=jtopOf(v);if(!j)return;
+      j=trimCite(j);
+      if(!seen[j]){seen[j]=1;a.push(j)}
+    });
+  });
+  CHLAB[k]=a.length?{head:a[0],extra:a.length-1}:null;
+  return CHLAB[k];
+}
+/* 章の行・「次の章へ」・ホームの「続き」で使う1つの文字列（3か所で同じ名前を出すため） */
+function chapRowLab(vid,sec,fb){
+  var t=chapTopicLab(vid,sec);
+  return t?(t.head+(t.extra?'　ほか'+t.extra:'')):(fb||'');
+}
+/* 単元学習の小見出しの行。区切り方（catSubs）は変えない＝粒度はそのまま。
+   その区切りに入っている肢が論点名を持っていれば、行の名前だけ論点に差し替える
+   （実例：専任宅建士・帳簿の肢の行に「契約締結誘引の禁止」と出ていた）。
+   分割の「（1/3）」は落とさずに付け直す。論点名が1件も無ければ今までの見出しのまま。 */
+function usubLab(s){
+  if(!s)return '';
+  var seen={},a=[];
+  (s.ids||[]).forEach(function(i){
+    var it=BY[i];if(!it)return;
+    vidsOf(it).forEach(function(v){
+      var j=jtopOf(v);if(!j)return;
+      j=trimCite(j);
+      if(!seen[j]){seen[j]=1;a.push(j)}
+    });
+  });
+  if(!a.length)return s.sub;
+  var m=/（[0-9]+\/[0-9]+）$/.exec(s.sub||'');
+  return a[0]+(a.length>1?'　ほか'+(a.length-1):'')+(m?m[0]:'');
+}
 function chapOf(v,it){
+  var lb=vlabOf(v);
   return {vid:v.vid,sec:(typeof v.sec==='number'?v.sec:0),title:v.title||VTIT[v.vid]||'',
-          label:v.chapter||it.topic||it.cat,member:!!(v.member||VMEM[v.vid]),
+          label:lb||it.topic||it.cat,jt:!!jtopOf(v),member:!!(v.member||VMEM[v.vid]),
           src:VSRC[v.vid]||'',why:v.why||[]};
 }
 /* その問題を代表する章（基準の動画→既定チャンネル→先頭） */
@@ -1830,16 +1923,17 @@ function contChap(){
   var lc=ST.lastChap;
   if(lc&&lc.vid&&VTIT[lc.vid]!==undefined){
     var rest=restCount(chapItemsUp(lc.vid,lc.sec));
-    if(rest>0)return {vid:lc.vid,sec:lc.sec,label:lc.label||'章',rest:rest};
+    /* 名前は章の行（動画学習）と同じ規則で出す＝ホームの「続き」と行の名前が食い違わない */
+    if(rest>0)return {vid:lc.vid,sec:lc.sec,label:chapRowLab(lc.vid,lc.sec,lc.label||'章'),rest:rest};
     var nx=nextChap(lc.vid,lc.sec);
-    if(nx)return {vid:lc.vid,sec:nx.sec,label:nx.label||'章',rest:restCount(chapItemsUp(lc.vid,nx.sec))};
+    if(nx)return {vid:lc.vid,sec:nx.sec,label:chapRowLab(lc.vid,nx.sec,nx.label||'章'),rest:restCount(chapItemsUp(lc.vid,nx.sec))};
   }
   var v=nextVidAll();
   if(!v)return null;
   var cs=chapsOf2(v);
   for(var i=0;i<cs.length;i++){
     var r2=restCount(chapItemsUp(v,cs[i].sec));
-    if(r2>0)return {vid:v,sec:cs[i].sec,label:cs[i].label||'章',rest:r2};
+    if(r2>0)return {vid:v,sec:cs[i].sec,label:chapRowLab(v,cs[i].sec,cs[i].label||'章'),rest:r2};
   }
   return null;
 }
@@ -2034,7 +2128,7 @@ function urowHtml(c){
   subs.forEach(function(s,i){
     var list=s.ids.map(function(x){return BY[x]}).filter(Boolean);
     /* 同じ見出しが別の単元にも出るときだけ「この単元ぶん」と添える（単元名は親に出ているので出さない） */
-    body+='<div class="usub"><span class="nm">'+esc(s.sub)
+    body+='<div class="usub"><span class="nm">'+esc(usubLab(s))
       +(s.dup?'<span class="udup">この単元ぶん</span>':'')+'</span>'
       +'<span class="bt">'+twoBtns('startSub',' data-c="'+esc(c)+'" data-i="'+i+'"',
                                    restCount(list),list.length,'','')+'</span></div>';
@@ -2112,7 +2206,7 @@ function nextUnit(){
     for(var i=0;i<subs.length;i++){
       if(i===S.roundSub)continue;
       if(restCount(subs[i].ids.map(function(x){return BY[x]}).filter(Boolean))>0)
-        return {cat:c,i:i,label:subs[i].sub,sub:true};
+        return {cat:c,i:i,label:usubLab(subs[i]),sub:true};
     }
   }
   var a=catsOrdered(),k=a.indexOf(c);
@@ -2448,13 +2542,20 @@ function vStudy(){
          2026-08-15 検証：「残り N問」「全 N問」の2つが並ぶと章名の列が 84px まで痩せ、
          「宅建業/の事務/所」と縦に折れていた。章名を「…」で切ると何の章か分からなくなるので、
          名前を優先して段を分ける（ボタンが1つの行も同じ形にして、行ごとに姿が変わらないようにする）。 */
+      /* 行の名前は「その行に入っている肢の論点」を先に見る（chapRowLab）。
+         判定担当が指した秒が章頭でないと、行に「物権変動 45:51」と出て中身は代理、
+         という食い違いが起きる（2026-08-16）。動画の章名は消さず2行目に小さく残す
+         ＝動画の目次と突き合わせて「どこまで見たか」を追えるようにするため。
+         論点名が1件も無い章（＝いまのデータの全章）は今までどおり章名だけを出す。 */
+      var rlab=chapRowLab(v.vid,ch.sec,ch.label);
       h+='<details class="m6-det chrow" data-k="'+esc(ck)+'"'+(op?' open':'')+'>'
         +'<summary data-act="openchap" data-k="'+esc(ck)+'">'
-        +'<span class="nm">'+esc(ch.label)+' <span class="sec">'+mmss(ch.sec)+'</span>'
-        +(w?' <span class="mini num">視聴 '+esc(String(w).slice(5))+'</span>':'')+'</span>'
+        +'<span class="nm">'+esc(rlab)+' <span class="sec">'+mmss(ch.sec)+'</span>'
+        +(w?' <span class="mini num">視聴 '+esc(String(w).slice(5))+'</span>':'')
+        +(rlab===ch.label?'':'<span class="chsrc">動画の章　'+esc(ch.label)+'</span>')+'</span>'
         +'<span class="badge">'+(rest>0&&rest<n?('残り '+rest):(n+'問'))+'</span>'
         +'<a class="btn sm" href="'+vurl(v.vid,ch.sec)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(key)+'">'+IC.yt+'</a>'
-        +(n?'<span class="chbt">'+twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(ch.label)+'"',rest,n,'sm','')+'</span>':'')
+        +(n?'<span class="chbt">'+twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(rlab)+'"',rest,n,'sm','')+'</span>':'')
         +'<span class="m6-mk">'+IC.chev+'</span></summary>';
       /* 紐づけの根拠を見せる（本人の指摘「どういう基準でその問題を選んでいるか分からない」） */
       h+='<div class="m6-dtxt">';
@@ -2572,8 +2673,10 @@ function vQuiz(){
   h+='<div class="qwrap m3-persp" id="m1quizcard">';
   /* 引き算：章のチップ＋状態の点＋★だけ。根拠・出典は畳んでタップで開く */
   /* A2：花＋章名、右に何問目、その下に細い線を1本（2026-08-14 確定） */
-  h+='<div class="qhead m5-qr'+ac()+'"'+ad(0)+'><div class="qrow">'+flw(16)
-    +'<span class="qname">'+esc((chs[0]&&chs[0].label)||it.topic||it.cat)+'</span>'
+  var qj=(chs[0]&&chs[0].jt)?' j':'';        /* 論点名から作った長いラベルのときだけ段を分ける */
+  h+='<div class="qhead m5-qr'+ac()+'"'+ad(0)+'><div class="qrow'+qj+'">'+flw(16)
+    +'<span class="qname'+qj+'">'
+    +esc((chs[0]&&chs[0].label)||it.topic||it.cat)+'</span>'
     +(S.sneak[id]?'<span class="chip">抜き打ち</span>':'')
     +'<span class="sdot s'+STG[stateOf(id)]+' m4-badge" id="stBadge" data-stage="'+STG[stateOf(id)]
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
@@ -2599,7 +2702,7 @@ function vQuiz(){
   showLinks.forEach(function(ch){
     h+='<a class="link'+ac()+'" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
       +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'"'+ad(4)+'>'+IC.yt
-      +'<span class="lbl">'+esc(ch.label)+'</span>'
+      +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+'</span>'
       +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
   });
   if(chs.length>1)
@@ -2764,7 +2867,7 @@ function expBlock(it,id){
     var ch2=chapFor(it);
     h+='<div class="warn" style="margin-top:10px">'+IC.warn+' この分野は怪しい'
       +(ch2?'<a class="link" style="margin-top:6px;color:#a33a2f" href="'+vurl(ch2.vid,ch2.sec)+'" target="_blank" rel="noreferrer"'
-        +' data-act="vwatch" data-k="'+esc(ch2.vid+'#'+ch2.sec)+'"><span class="lbl">'+esc(ch2.label)+'</span>'
+        +' data-act="vwatch" data-k="'+esc(ch2.vid+'#'+ch2.sec)+'"><span class="lbl'+(ch2.jt?' w':'')+'">'+esc(ch2.label)+'</span>'
         +'<span class="tm num">'+mmss(ch2.sec)+' から見る</span>'+IC.chev+'</a>':'')+'</div>';
   }
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
@@ -2785,7 +2888,8 @@ function setResultBtns(wn,nx,perfect,nc,nu){
       ub=document.getElementById('r-nextcat');
   if(rb){rb.hidden=!wn;if(wn)rb.textContent='間違えた '+n3(wn)+'問を解く'}
   /* 章を解き終えたら次の章へ。動画の続きを1回分ずつ進める導線（2026-08-15） */
-  if(cb){cb.hidden=!nc;if(nc){cb.setAttribute('data-s',nc.sec);cb.textContent='次の章へ（'+nc.label+'）';cb.className=wn?'pri':'acc'}}
+  if(cb){cb.hidden=!nc;if(nc){cb.setAttribute('data-s',nc.sec);
+    cb.textContent='次の章へ（'+chapRowLab(nc.vid||S.roundVid,nc.sec,nc.label)+'）';cb.className=wn?'pri':'acc'}}
   /* 単元・小見出しを解き終えたら単元側の次へ（動画側の nc・nx とは排他＝両方は出ない） */
   if(ub){
     ub.hidden=!nu;
@@ -2825,7 +2929,8 @@ function vDone(){
   }else{
     h+='<div class="h">'+(perfect?'全問正解':n3(tot)+'問 終了')+'</div>';
   }
-  if(nc)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextchap" data-s="'+nc.sec+'">次の章へ（'+esc(nc.label)+'）</button>';
+  if(nc)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextchap" data-s="'+nc.sec+'">次の章へ（'
+    +esc(chapRowLab(S.roundVid,nc.sec,nc.label))+'）</button>';
   if(nu)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextcat" data-c="'+esc(nu.cat)+'"'
     +(nu.sub?' data-i="'+nu.i+'"':'')+'>'+(nu.sub?'次の小見出しへ（':'次の単元へ（')+esc(nu.label)+'）</button>';
   if(nx)h+='<button class="btn '+((nw||nc)?'':'acc')+'" style="margin-top:10px" data-act="nextvid" data-v="'+esc(nx.vid)+'">次の動画へ</button>';
@@ -3862,7 +3967,7 @@ document.addEventListener('click',function(e){
        解禁は pickExplicit で外れるが、保険として科目基準も同じ1回だけ渡しておく。 */
     var sb=CINFO[su]?CINFO[su].big:null;
     S.kind='new';m1ToQuiz(t,function(){
-      S.pickExplicit=true;S.pendBig=sb;startQueue(pickRest(sl,t),sg.sub,false,sg.vid);
+      S.pickExplicit=true;S.pendBig=sb;startQueue(pickRest(sl,t),usubLab(sg),false,sg.vid);
       S.roundCat=su;S.roundSub=si;      /* 完走時に「次の小見出しへ／次の単元へ」を出すため */
     });return;
   }
@@ -3885,7 +3990,7 @@ document.addEventListener('click',function(e){
     var ul=ug.ids.map(function(x){return BY[x]}).filter(Boolean);
     if(!ul.length){go('fields');return}
     m1ToQuiz(t,function(){
-      S.pickExplicit=true;S.pendBig=ubg;startQueue(restOnly(ul),ug.sub,false,ug.vid);
+      S.pickExplicit=true;S.pendBig=ubg;startQueue(restOnly(ul),usubLab(ug),false,ug.vid);
       S.roundCat=uc;S.roundSub=+ui;
     });
     return;
@@ -3918,7 +4023,7 @@ document.addEventListener('click',function(e){
     var ns=+t.getAttribute('data-s'),nvid=S.roundVid;
     var nch=nextChap(nvid,S.roundSec);
     if(!nch||isNaN(ns)){go('home');return}
-    var nlab=nch.label;
+    var nlab=chapRowLab(nvid,nch.sec,nch.label);   /* 出題の見出しも章の行と同じ名前にそろえる */
     S.round=0;S.kind='new';S.sort='timeline';
     ST.lastChap={vid:nvid,sec:ns,label:nlab||'章'};saveST();   /* ホームの「続き」の起点を進める */
     m1ToQuiz(t,function(){
@@ -4778,7 +4883,10 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
   catqCheck:catqCheck,catReach:catReach,
   /* 単元一覧の描画（検証用） */
   catSubs:catSubs,CSUB:CSUB,urowHtml:urowHtml,
-  subDupMap:subDupMap,subLabel:subLabel,subExtra:subExtra,subHead:subHead,
+  subDupMap:subDupMap,subLabel:subLabel,subExtra:subExtra,subHead:subHead,usubLab:usubLab,
+  /* 表示ラベルの優先順位（論点名→小見出し→章名）。検証担当が同じ答えを再現できるように出す */
+  jtopOf:jtopOf,trimCite:trimCite,vlabOf:vlabOf,chapTopicLab:chapTopicLab,chapRowLab:chapRowLab,
+  CHLAB:CHLAB,          /* 章の行のラベルの覚え書き。データを差し替えて試すときは中を消す */
   USUB_MIN:USUB_MIN,USUB_MAX:USUB_MAX,
   catsSorted:catsSorted,catsOrdered:catsOrdered,nextUnit:nextUnit,
   /* 難易度3段階（検証用）と1本目の動画 */
@@ -4930,7 +5038,7 @@ function srcSheet(id){
    +(chs.length?'<div class="hr"></div>'+chs.map(function(ch){
        return '<a class="link" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
         +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.yt
-        +'<span class="lbl">'+esc(ch.label)+(ch.src?'（'+esc(ch.src)+'）':'')+'</span>'
+        +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+(ch.src?'（'+esc(ch.src)+'）':'')+'</span>'
         +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
      }).join(''):'')
    +'</div>';
