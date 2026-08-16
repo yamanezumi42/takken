@@ -1887,25 +1887,9 @@ function vidsLeft(){
    主教材が「1本＝1科目」になったので、動画は科目単位・問題は枠ぶんで出す。 */
 function flowHtml(){
   var cur=nextVidAll(),pl=plan(),h='<div class="flow">';
-  /* 動画の行は「まだ見ていないとき」だけ出す。科目を解禁する導線なので消してはいけないが、
-     見たあとも居座らせない（2026-08-15 本人指示）。 */
-  if(cur&&!ST.watched[cur+'#0']){
-    var big=bigOfVid(cur)||'';
-    h+='<a class="frow now" href="'+vurl(cur,0)+'" target="_blank" rel="noreferrer"'
-      +' data-act="vwatch" data-k="'+esc(cur+'#0')+'">'
-      +'<span>'+esc(big||vshort(vlab(cur)||cur))+' の動画</span>'
-      +'<span class="fst">いま</span></a>';
-  }
-  /* 「新規」は全範囲から取り直すので章の続きにならず、本人は結局 学習タブから章を選び直していた
-     （2026-08-15 本人指摘）。直前に解いた章の残りをそのまま出す＝押すと学習タブの
-     「残り N問」と同じ経路（startChap）に入る。 */
-  var cc=contChap();
-  if(cc){
-    h+='<button class="frow now" data-act="startChap" data-v="'+esc(cc.vid)+'"'
-      +' data-s="'+cc.sec+'" data-l="'+esc(cc.label)+'">'
-      +'<span>続き　'+esc(cc.label)+'</span>'
-      +'<span class="fst">残り '+n3(cc.rest)+'問</span></button>';
-  }
+  /* 動画の行と「続き」の行は出さない（2026-08-16 本人指示「なくしてほしい」）。
+     単元学習をメインに据えたので、ホームから動画・章へ入る導線は使っていない。
+     科目の解禁は、学習タブで動画を見るか、単元から解けば（S.pendBig）足りる。 */
   h+='<button class="frow'+(pl.sneak.length?'':' yet')+'" data-act="startSneak">'
     +'<span>抜き打ち</span><span class="fst">'
     +(sneakDone()?'今日は済':(pl.sneak.length?n3(pl.sneak.length)+'問':'なし'))+'</span></button>';
