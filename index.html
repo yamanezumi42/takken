@@ -982,7 +982,11 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
    .j が付かない（＝いまのデータの）章名では row も名前も今までどおり1段。 */
 .qhead .qrow.j{flex-wrap:wrap;row-gap:6px}
 .qhead .qname.j{flex:0 0 calc(100% - 25px);min-width:0;overflow-wrap:anywhere;line-height:1.5;letter-spacing:.02em}
-.qhead .qcnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+/* 左の数字は桁ロールの部品、右は素のテキスト。器にまとめて等幅を指定しないと
+   フォントが揃わず「1 / 90」の左右がずれる（2026-08-16 本人指摘。
+   ヘッダーの「1 / 1問」で直したのと同じ型が、ここに残っていた）。 */
+.qhead .qcnt{margin-left:auto;font-size:12px;color:var(--muted);
+  font-family:var(--num);font-variant-numeric:tabular-nums}
 .qhead .qrule{height:1px;background:var(--accd);opacity:.35}
 /* 下の余白＝タブの高さ（実測53px）＋ホームインジケータ（iPhone15で34px）＋12px。
    ○×は margin-top:auto で面の下端に置いているので、この余白ぶんだけ上に上がる。
@@ -1175,7 +1179,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='7c593afb';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='6cdbdc6a';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
