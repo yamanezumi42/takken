@@ -2810,9 +2810,14 @@ function qHead(ses,p){
     +'<span class="m4-num" id="hTotal">'+tot+'</span>問</b>　正解率 <b class="scr">'
     +'<span class="m4-num" id="hRate">'+(tot?rate.toFixed(1)+'%':'—')+'</span></b></div>'
     +'<div class="combow">'+cw+'</div>'
-    +'<button class="rst" data-act="rsess">リセット</button></div>'
+    +'<button class="rst" data-act="rsess">リセット</button>'
+    /* 進捗バーはヘッダーの中（下辺）に置く。外に出して position:sticky; top:50px で
+       浮かせていたが、50px はヘッダーの実際の高さと合っておらず、
+       開始の演出で親に transform が掛かると貼り付き先を失って本文の途中に落ちる
+       （2026-08-16 本人指摘「ここも線が変」）。中に入れれば常に下辺に付く。 */
     +'<div class="bar"><i id="hBar" style="transform:scaleX('+PROGPREV.toFixed(4)+')"></i>'
-    +'<span class="m4-tip" id="hTip" style="left:'+(PROGPREV*100).toFixed(1)+'%"></span></div>';
+    +'<span class="m4-tip" id="hTip" style="left:'+(PROGPREV*100).toFixed(1)+'%"></span></div>'
+    +'</div>';
 }
 var PROGPREV=0,PROGNEW=0;
 /* 連続正解の数字＝入れ替わる整数なので桁ロール（qHead と applyExpDom の2か所で同じものを使う） */

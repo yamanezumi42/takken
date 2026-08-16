@@ -139,6 +139,9 @@ a{color:var(--chipfg)}
 /* ---- ヘッダー（出題） ---- */
 .hd{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);
   display:flex;align-items:center;gap:8px;padding:9px 12px}
+/* 進捗バーはヘッダーの下辺に貼る（外で sticky; top:50px にすると本文へ落ちる。2026-08-16） */
+.hd{position:sticky}
+.hd .bar{position:absolute;left:0;right:0;bottom:-1px;top:auto;z-index:6}
 .hd .sc{font-size:11px;color:var(--muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hd .sc b{color:var(--fg)}
 .hd .scn{display:inline-block;min-width:9ch;text-align:left}
@@ -975,6 +978,13 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qhead{margin-bottom:14px}
 .qhead .qrow{display:flex;align-items:center;gap:9px;margin-bottom:8px}
 .qhead .qname{font-size:13.5px;letter-spacing:.06em;color:var(--accd);font-weight:600}
+/* 1段のとき（＝出題中）は絶対に2段にしない。名前だけ縮めて「…」で切り、
+   チップ・状態の点・何問目・★・∨は縮めない。入れないと「死亡・破産者等の届／出」と
+   割れてチップまで折り返す（2026-08-16 本人指摘）。 */
+.qhead .qrow:not(.j) .qname{flex:0 1 auto;min-width:0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.qhead .qrow:not(.j)>*{flex:0 0 auto}
+.qhead .qrow:not(.j) .chip{white-space:nowrap}
 /* 論点名から作ったチップだけ折り返しを許す（.j）。章名は短いので今までどおり1行。
    名前を1段目に丸ごと置き、状態の点・何問目・★・∨は2段目にまわす（章の行 chrow と同じ考え）。
    実測（393x852・いちばん長い55字のラベル）：横に並べると幅212pxで4行・行の高さ80px、
@@ -1183,7 +1193,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='518465af';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='8e351ba9';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
