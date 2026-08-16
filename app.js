@@ -529,7 +529,9 @@ function trimCite(s){
 }
 /* リンク1本ぶんの表示ラベル。無ければ空文字（呼び側が it.topic などへ落とす） */
 function vlabOf(v){
-  var j=jtopOf(v);
+  /* 回答前は論点名を出さない。論点名は「何を問い答えがどちらか」を書いた文なので、
+     出題中に見せると答えが読めてしまう（2026-08-16 本人指摘）。解説が出てから使う。 */
+  var j=(S&&S.view==='quiz'&&S.phase==='q')?'':jtopOf(v);
   if(j)return trimCite(j);
   if(v&&v.sub&&isJudged(v))return v.sub;
   return (v&&v.chapter)||'';
