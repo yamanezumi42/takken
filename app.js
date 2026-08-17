@@ -2777,8 +2777,6 @@ function vQuiz(){
     +(S.sneak[id]?'<span class="chip">抜き打ち</span>':'')
     +'<span class="sdot s'+STG[stateOf(id)]+' m4-badge" id="stBadge" data-stage="'+STG[stateOf(id)]
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
-    /* 前の問題へ＝「n / m」の左に ＜（2026-08-17 本人指定の位置）。行を増やさない。 */
-    +(S.qi>0?'<button class="qprev" data-act="prevq" aria-label="前の問題へ">'+IC.chevL+'</button>':'')
     +'<span class="qcnt"><span class="m6-roll" style="--rh:16px;font-size:12px"'
     +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
     /* 「/ 2」も桁ロールと同じ 16px の箱に入れる。素のテキストのままだと、行の高さを
@@ -2786,12 +2784,7 @@ function vQuiz(){
     +'<span class="qtot"> / '+n3(tot)+'</span></span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
-    +IC.down+'</button>'
-    /* おかしいところの報告＝ヘッダーのアイコン1つに畳む。押すとシートで選ぶ。
-       行として出すと出題中と解説の両方に並んで邪魔になる（2026-08-17 本人指摘）。 */
-    +'<button class="btn sm'+(repOf(id).tags.length?' repon':'')+'" style="min-height:28px;padding:0 8px"'
-    +' data-act="repsheet" data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button>'
-    +'</div><div class="qrule"></div></div>';
+    +IC.down+'</button></div><div class="qrule"></div></div>';
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
   h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+esc(it.lead)+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
@@ -2825,7 +2818,12 @@ function vQuiz(){
     h+='<div class="qctl m5-qr'+(CA?' qin':'')+'"'+(CA?' style="animation-delay:200ms"':'')+'>'
       +'<div class="ans"><button class="b" data-act="ans" data-o="1">○</button>'
       +'<button class="b x" data-act="ans" data-o="0">×</button></div>'
-      +'<div style="display:flex"><button class="pass" data-act="pass">パス</button></div></div>';
+      /* パスの右に「おかしいところ」。行は増やさない（2026-08-17 本人指定）。
+         パスは中央のまま、報告はその右に小さく置く＝左右の重さを揃える。 */
+      +'<div class="passrow"><span></span>'
+      +'<button class="pass" data-act="pass">パス</button>'
+      +'<button class="repbtn'+(repOf(id).tags.length?' repon':'')+'" data-act="repsheet"'
+      +' data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button></div></div>';
   }else{
     h+='<div class="expwrap'+(EA?' stagexp':'')+'">'+expBlock(it,id)+'</div>';
   }
@@ -2840,6 +2838,13 @@ function syncNextBar(){
   var b=document.getElementById('nextbar');
   if(!b)return;
   b.hidden=!(S.view==='quiz'&&S.phase==='exp'&&S.queue.length&&S.qi<S.queue.length);
+  /* 解説中の「おかしいところ」は、この行の右に置く（行を増やさない・2026-08-17 本人指定）。 */
+  var rb=document.getElementById('nb-rep'),id=S.queue[S.qi];
+  if(rb){
+    if(b.hidden||!id){rb.hidden=true}
+    else{rb.hidden=false;rb.setAttribute('data-id',id);
+      rb.innerHTML=IC.warn;rb.className='repbtn'+(repOf(id).tags.length?' repon':'')}
+  }
 }
 /* 回答したら、正誤の行が画面の上（固定ヘッダーのすぐ下）に来るまでスクロールする。
    これが無いと、長い問題では○×を押しても解説の頭が画面の外にあって読めない。
@@ -2926,7 +2931,10 @@ function qHead(ses,p){
   /* 未解答のときは「0.0%」ではなく「—」（ホーム・分析の表記と揃える） */
   /* 数字は等幅。桁が増えても右の「正解率」がずれないよう、入れ物の幅を最大桁で予約する
      （個々の数字に min-width を持たせると「0/ 0問」のように隙間が開くため入れ物側で持つ） */
-  return '<div class="hd"><div class="sc"><b class="scn">'
+  /* 前の問題へ＝**正解率の行の左端**（2026-08-17 本人指定）。出題中で2問目以降だけ出す。 */
+  var pv=(S.view==='quiz'&&S.qi>0)
+    ?'<button class="hprev" data-act="prevq" aria-label="前の問題へ">'+IC.chevL+'</button>':'';
+  return '<div class="hd">'+pv+'<div class="sc"><b class="scn">'
     +'<span class="m4-num" id="hRight">'+ri+'</span>/'
     +'<span class="m4-num" id="hTotal">'+tot+'</span>問</b>　正解率 <b class="scr">'
     +'<span class="m4-num" id="hRate">'+(tot?rate.toFixed(1)+'%':'—')+'</span></b></div>'

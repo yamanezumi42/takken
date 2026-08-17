@@ -1018,10 +1018,17 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
   display:inline-flex;align-items:center}
 .qhead .qcnt .qtot{display:inline-flex;align-items:center;height:16px;line-height:16px}
 /* 前の問題へ（＜）＝数字の左。報告済みはアイコンを色で示す（2026-08-17） */
-.qhead .qprev{background:none;border:0;color:var(--muted);padding:0 4px;margin-left:auto;
-  min-height:0;display:inline-flex;align-items:center;cursor:pointer}
-.qhead .qprev+.qcnt{margin-left:0}
-.qhead .repon{color:var(--accd);border-color:var(--accd)}
+.hd .hprev{background:none;border:0;color:var(--accd);padding:0 2px 0 0;min-height:0;
+  display:inline-flex;align-items:center;cursor:pointer;flex:none}
+/* パスの行＝左の余白・パス（中央）・報告（右）で、パスを真ん中に保つ */
+.passrow{display:flex;align-items:center;justify-content:center;gap:10px}
+.passrow>span,.passrow>.repbtn{flex:0 0 40px}
+.passrow>span{height:1px}
+.repbtn{background:none;border:0;color:var(--muted);padding:6px;min-height:0;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center}
+.repbtn.repon{color:var(--accd)}
+#nextbar{display:flex;align-items:center;gap:8px}
+#nextbar .repbtn{pointer-events:auto;flex:none}
 .qhead .qrule{height:1px;background:var(--accd);opacity:.35}
 /* 下の余白＝タブの高さ（実測53px）＋ホームインジケータ（iPhone15で34px）＋12px。
    ○×は margin-top:auto で面の下端に置いているので、この余白ぶんだけ上に上がる。
@@ -1119,7 +1126,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <div class="m3-fg" id="m3fg" aria-hidden="true"><span class="glare"></span></div>
 <!-- 解説の間だけ出す「次の問題」。#view の外に置く＝#view は入場で transform（scale）するので、
      中に置くと position:fixed が効かなくなる。タブ（z-index 20）より下の層に置いてタブを隠さない。 -->
-<div id="nextbar" hidden><button class="btn pri" data-act="next">次の問題</button></div>
+<div id="nextbar" hidden><button class="btn pri" data-act="next">次の問題</button><button class="repbtn" id="nb-rep" data-act="repsheet" aria-label="おかしいところを報告"></button></div>
 <nav id="tabs"></nav>
 <!-- 演出オーバーレイ。#view の外に置く（＝彩度変化のフィルタ対象外・レイアウトに影響しない） -->
 <div id="fx" hidden></div>
@@ -1216,7 +1223,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='4591c2ca';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='63a4f156';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
