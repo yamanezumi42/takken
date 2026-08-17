@@ -1504,12 +1504,26 @@ var AKOK={};
 function akoKey(it){
   var k=AKOK[it.id];
   if(k)return k;
-  var vs=vidsOf(it),bq=99999,bs=99999;
-  for(var i=0;i<vs.length;i++){
-    if(VSRC[vs[i].vid]!==VIDSRC)continue;
-    var no=vno(vs[i].vid);
+  var vs=vidsOf(it),bq=99999,bs=99999,i,no,sc;
+  /* ①まず「判定が論点に対応すると決めた1本」（jtopic を持つリンク）を使う。
+     これを使わず通し番号が最小のリンクで並べていたため、**本来より前に置かれる肢**が
+     1,061件（判定の1本があこである2,767肢の38%・10本以上ずれが85件・最大52本）あった。
+     ずれる向きが悪く、まだ習っていない位置に問題が出る＝
+     本人指摘「動画を見たのにわからない問題が配置されている」（2026-08-17 実測）。 */
+  for(i=0;i<vs.length;i++){
+    if(!vs[i].jtopic||VSRC[vs[i].vid]!==VIDSRC)continue;
+    no=vno(vs[i].vid);
     if(no===null)continue;
-    var sc=(typeof vs[i].sec==='number')?vs[i].sec:99999;
+    bq=no;bs=(typeof vs[i].sec==='number')?vs[i].sec:99999;
+    break;
+  }
+  /* ②判定の1本があこでない（こざりえ・こうのすけで判定した）ときだけ、
+     あこのリンクのうち通し番号が最小のものに落とす。 */
+  if(bq===99999)for(i=0;i<vs.length;i++){
+    if(VSRC[vs[i].vid]!==VIDSRC)continue;
+    no=vno(vs[i].vid);
+    if(no===null)continue;
+    sc=(typeof vs[i].sec==='number')?vs[i].sec:99999;
     if(no<bq||(no===bq&&sc<bs)){bq=no;bs=sc}
   }
   k=AKOK[it.id]=[bq,bs];
