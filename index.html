@@ -88,7 +88,9 @@ html,body{margin:0;padding:0}
      scrollTo(500,0) で scrollX=51 になった）。hidden も単独では効かなかったため、
      はみ出している要素そのものを .qwrap で切る形にした。 */
 html{overflow-x:hidden}
-body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.7;
+/* 地の色は html（根）だけが持つ。body にも色を置くと、body の箱が終わる所に**継ぎ目**ができて、
+   下まで送ったときに背景が切れて見える（2026-08-17 本人指摘・2回目）。 */
+body{background:transparent;color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.7;
   -webkit-text-size-adjust:100%}
 #view{padding:0 0 76px;max-width:520px;margin:0 auto;min-height:100dvh}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums}
@@ -865,19 +867,17 @@ details.m6-det.chrow>summary .nm{flex:0 0 100%}
    ＝1段目が名前と数字、2段目が「残り／全」のボタン。iPhone 15（393px）で潰れないため。
    小見出しを持たない単元は <details> にしない（開いても中身が無い）ので、
    同じ見た目を .ur-flat（div）にも当てる。 */
-details.ur,.ur-flat{border-bottom:1px solid var(--line)}
-details.ur:last-child,.ur-flat:last-child{border-bottom:0}
-details.ur>summary,.ur-flat>.urh{flex-wrap:wrap;padding:8px 0;min-height:0}
-.ur-flat>.urh{display:flex;align-items:center;gap:9px}
-.urh .nm{flex:1;font-size:13px;line-height:1.5;min-width:0;overflow-wrap:anywhere}
-.urh .qn{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11px;
-  color:var(--muted);font-weight:400;margin-left:6px}
-.urh .bt{flex:0 0 100%;display:flex;gap:8px}
-.urh .bt .btn{flex:1;width:auto;margin:0}
-/* 小見出しが1つも無い単元の印。単元まるごとでしか解けないことを、行の上で分かるようにする */
-.urh .unos{flex:0 0 auto;font-size:10px;letter-spacing:.04em;color:var(--muted);
-  border:1px solid var(--line);border-radius:6px;padding:1px 5px;white-space:nowrap}
-details.ur[open]>summary .m6-mk{transform:rotate(90deg)}
+/* 2026-08-17 作り直し：単元の行は動画学習の行（.vrow）と同じ 36px・1行にする。
+   2段目の「残り」「全」ボタンは行から外し、単元ページ（vStudy の単元版）へ移した。
+   本人「一個一個の枠が大きくて見づらい」。旧 .urh / .ur-flat / .usub は使わない。 */
+/* 入口の切替と絞り込みを1行に並べたときの区切り（2026-08-17） */
+/* ボタンと同じ高さの箱にしないと、区切りだけ7px下がる（2026-08-17 実測） */
+.togsep{display:inline-block;height:34px;line-height:34px;vertical-align:top;
+  margin:0 8px 6px 2px;color:var(--muted);font-size:12px}
+.ubrest{margin-left:auto;font-size:11px;color:var(--accd);text-decoration:underline;
+  background:none;border:0;padding:2px 0 2px 10px;font-family:var(--font);cursor:pointer;
+  min-height:0;white-space:nowrap}
+details.ub>summary .sm{display:flex;align-items:center;gap:0}
 /* 大分類のパネル（単元で進む の一覧）を畳めるようにする。2026-08-15 本人指示
    「権利関係、法令上の制限、税に関する法令とか大分類はたためるようにして欲しいよね」。
    骨格は章・単元と同じ <details>（m6-det）＝JSで開閉しない。
@@ -889,14 +889,19 @@ details.ub>summary .nm{flex:1;font-size:13px;font-weight:600;line-height:1.5;min
 details.ub>summary .sm{flex:0 0 100%;font-size:11px;color:var(--muted);
   font-family:var(--num);font-variant-numeric:tabular-nums}
 details.ub[open]>summary .m6-mk{transform:rotate(90deg)}
-/* 単元の中の小見出し（字幕で割った区切り）。親より一段小さく、左の線でぶら下がりを示す */
-.usub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
-  padding:6px 0 8px 10px;margin:0 0 6px;border-left:2px solid var(--line)}
-.usub .nm{flex:0 0 100%;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
-/* 同じ見出しが別の単元にも出るときの断り書き（借地借家法の土地／建物など） */
-.usub .udup{font-size:10px;color:var(--muted);margin-left:6px;white-space:nowrap}
-.usub .bt{flex:0 0 100%;display:flex;gap:8px}
-.usub .bt .btn{flex:1;width:auto;margin:0}
+/* 単元ページの小見出しの行。形は .vrow と同じだが、名前が長い（実データで最長55字）ので
+   1行36pxには収まらない。折り返して高さを可変にする（2026-08-17 モックで実測）。 */
+.usubrow{height:auto;min-height:36px;padding:7px 4px 7px 12px;align-items:flex-start}
+.usubrow .rc{align-items:flex-start}
+.usubrow .nm{white-space:normal;overflow:visible;text-overflow:clip;
+  font-size:11.5px;line-height:1.55;color:var(--fg)}
+.usubrow .ar,.usubrow .ck{margin-top:2px}
+.usubrow .udup{font-size:10px;color:var(--muted);margin-left:6px;white-space:nowrap}
+/* ホームの全体の進み具合（1行＋バー） */
+.hstat{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11.5px;color:var(--muted);font-family:var(--num);
+  font-variant-numeric:tabular-nums;margin:0 0 4px}
+.hstat b{color:var(--fg);font-weight:600}
 @supports selector(::details-content){
   details.m6-det::details-content{opacity:0;transform:translate3d(0,-4px,0);content-visibility:hidden;
     transition:opacity var(--d-in) var(--eo),transform var(--d-in) var(--eo),
@@ -937,8 +942,16 @@ details.ub[open]>summary .m6-mk{transform:rotate(90deg)}
 
 /* 地に薄い和紙。面の下に敷いて乗算で重ねる＝文字の上には絶対に来ない。
    明るさ243〜255／墨に対する contrast 12.0〜13.4:1（基準4.5:1の2.7倍） */
-body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:url("fonts/washi.png");background-size:128px 128px;mix-blend-mode:multiply}
+/* 和紙は「地（canvas）」にも敷く。position:fixed の層は画面のぶんしか無いので、
+   下まで送って跳ね返る（オーバースクロール）と、その帯だけ地の色が出て**切れて見える**
+   （2026-08-17 本人指摘）。根の要素の背景は画面の外まで塗られるので、そこで塞ぐ。 */
+html{background-color:var(--bg);background-image:url("fonts/washi.png");
+  background-size:128px 128px;background-blend-mode:multiply}
+/* 和紙の層は **html の1枚だけ**にする（2026-08-17 本人指摘・3回目）。
+   もともと position:fixed の層で敷いていたが、fixed は画面に貼り付いて動かないのに対し
+   ページ側（html）の柄は一緒に動くので、**2枚の柄の位相がずれて境目が見える**。
+   大分類を全部開いて下まで送ると、そこで「背景が切れている」ように見えていた。
+   1枚にすれば継ぎ目は原理的に出ない（html の背景は文書の全部を覆う）。 */
 body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:var(--tint)}
 #view,.tabs,.topbar,.m6sheet,.m6sheet-bg{position:relative;z-index:1}
 
@@ -1193,7 +1206,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='6322d804';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='4e65644f';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){

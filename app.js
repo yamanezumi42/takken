@@ -1435,6 +1435,17 @@ function sortQ(arr){
        ③その動画の中は章の秒数順（＝動画を見た順に問題が出る）
        ④同じ章の中は あこ課長の通し番号 → 難易度 → 未出題を優先
        2026-08-15 本人指摘：①②③が無いと「宅地、建物の定義」の次に「重説」が来て飛ぶ。 */
+    /* 2026-08-17：基準の動画が無いとき（単元から／全問から／絞り込みから）は
+       **あこ課長の習う順**で並べる。本人「大体順番に出てくればいい」「免許の基本 →
+       免許換え → 免許の取消し、という順番があるはずでしょ。その順で埋めていきたい」。
+       動画学習をあこ課長だけにした（6322d804）ので、学ぶ順＝あこの再生リスト順に一本化する。
+       いままでは主教材＝こざりえの1本（＝科目まるごと）の秒で並べていたため、
+       あこで習う順とは一致していなかった。
+       章・動画から入ったとき（S.baseVid あり）は、その動画の中の秒で並べる＝今までどおり。 */
+    if(!S.baseVid){
+      return bigRank(x)-bigRank(y)||akoSeq(x)-akoSeq(y)||akoSec(x)-akoSec(y)
+        ||d3Rank(x)-d3Rank(y)||unseenRank(x)-unseenRank(y)||cmpId(x,y);
+    }
     return bigRank(x)-bigRank(y)||kvRank(x)-kvRank(y)||secOf(x)-secOf(y)
       ||nsRank(x)-nsRank(y)||d3Rank(x)-d3Rank(y)||unseenRank(x)-unseenRank(y)||cmpId(x,y);
   });
@@ -1484,6 +1495,28 @@ function restOnly(list){
 }
 /* 通し番号（並べ替え用）。番号が無い問題は末尾へ */
 function nsRank(it){var n=needSeq(it);return n===null?99999:n}
+/* あこ課長の習う順（2026-08-17）。その肢が紐づく「あこ課長の動画」のうち、
+   再生リストの通し番号がいちばん小さいものを代表にして、[通し番号, その動画の中の秒] を返す。
+   通し番号は data/curriculum.json の seq_of_vid（vno がその値を返す）。
+   あこ課長の動画に1本も紐づかない肢（実測147件・2.8%）は、その大分類の最後に回す。
+   1肢につき毎回探すと遅いので、1回引いたら覚えておく。 */
+var AKOK={};
+function akoKey(it){
+  var k=AKOK[it.id];
+  if(k)return k;
+  var vs=vidsOf(it),bq=99999,bs=99999;
+  for(var i=0;i<vs.length;i++){
+    if(VSRC[vs[i].vid]!==VIDSRC)continue;
+    var no=vno(vs[i].vid);
+    if(no===null)continue;
+    var sc=(typeof vs[i].sec==='number')?vs[i].sec:99999;
+    if(no<bq||(no===bq&&sc<bs)){bq=no;bs=sc}
+  }
+  k=AKOK[it.id]=[bq,bs];
+  return k;
+}
+function akoSeq(it){return akoKey(it)[0]}
+function akoSec(it){return akoKey(it)[1]}
 /* 大分類の学習順（宅建業法→権利関係→…）。表に無いものは末尾 */
 var BIGRANK=null;
 function bigRank(it){
@@ -1521,6 +1554,7 @@ function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
    wrongs＝このセッションで間違えた問題（完走後に周回する）／round＝周回の回数 */
 /* lockedOut＝未習で出さなかった件数／sT,sR,sStreak,sBest＝この1回（周回なら「その周」）の成績 */
 var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:null,label:'',sneak:{},
+        urest:false,ucat:false,fieldsY:0,
         openBig:{},openCat:{},openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
         /* いま解いている「単位」の印。roundVid/roundSec＝動画・章から入ったとき、
            roundCat/roundSub＝単元・小見出しから入ったとき。完走画面の「次へ」の行き先を決める。
@@ -1671,7 +1705,15 @@ function resumeRun(fromStart){
   S.anim='card';
   go('quiz');
 }
-function go(v){S.view=v;S.enter=true;window.scrollTo(0,0);render()}
+function go(v){
+  S.view=v;S.enter=true;
+  /* 一覧へ戻るときだけ、出るときの位置に戻す（それ以外は今までどおり先頭）。
+     拾う作業は「一覧を下まで見る→単元に入る→戻る→次」の繰り返しなので、
+     毎回先頭に跳ぶと下の単元に指が届かない（2026-08-17）。 */
+  var y=(v==='fields'&&S.fieldsY)?S.fieldsY:0;
+  window.scrollTo(0,0);render();
+  if(y)requestAnimationFrame(function(){window.scrollTo(0,y)});
+}
 
 /* ---------- 汎用 ---------- */
 /* 属性セレクタに入れる文字のエスケープ（小分類名に " や \ が来ても壊れないように） */
@@ -1809,6 +1851,16 @@ function vHome(){
   /* 「今日 ◯問（復習 ◯）　いま ◯/50点」の1行は、上の4枚のカードに畳んだので置かない
      （2026-08-15 本人指示。同じ数字を2か所に出さない）。 */
   h+=hdots();
+  /* このアプリ全体でどこまで進んだか（2026-08-17 本人指示）。カードは増やさず1行＋バー。
+     ・学習 N/M問 … 一度でも答えた問題（実数）／このアプリで解ける問題数（ITEMS＝単元に入っている数）
+     ・解いた問題数 … のべ回数（同じ問題を2回答えれば2）
+     設定画面に出る「読み込み 5,924」は**読み込んだ肢の総数**で、ここの分母とは別のもの。 */
+  var apd=0,apn=0;
+  ITEMS.forEach(function(it){var r=R(it.id),a=att(r);if(a){apd++;apn+=a}});
+  h+='<div class="hstat"><span>学習 <b>'+n3(apd)+'</b>/'+n3(ITEMS.length)+'問</span>'
+    +'<span>解いた問題数 <b>'+n3(apn)+'</b>問</span></div>'
+    +'<div class="bar3" style="margin-bottom:14px"><i style="width:'
+    +(ITEMS.length?(apd/ITEMS.length*100).toFixed(1):'0')+'%"></i></div>';
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
      ホーム画面の案内は一度閉じたら二度出さない（settings.a2hs）。 */
@@ -2086,38 +2138,23 @@ function catSubs(cat){
 /* 単元の1行。小見出しが2つ以上あるときだけ <details> にする（1つなら開いても中身が同じ）。
    開閉はJSでやらない＝章の一覧と同じ <details>（m6-det）に乗せ、開いた状態だけ S.openChap に写す。 */
 function urowHtml(c){
-  var st=catStat(c),g=catSubs(c),subs=g.subs,rest=st.n-st.att,q=CATQ[c]||0,off=CATQ_OFF[c];
-  /* 小見出しが1つも無い単元（実測：49単元のうち29単元・2,022問）は <details> にならないので、
-     「小見出しが付いていない N問」の説明が枝の中にあると**画面に何も出ない**。
-     2026-08-15 批評：説明されるのは宅地建物取引業・免許の123問だけで、残りは黙って消えていた。
-     ここでは行に「小見出しなし」の印を出し、理由は一覧の最後の説明に1回だけ書く。 */
-  var nosub=!subs.length;
-  var many=subs.length>=2||(subs.length===1&&!!g.none),ck='u:'+c,op=many&&!!S.openChap[ck];
-  /* 数字の出し方は章の一覧と同じ規則（途中なら「残り N」・そうでなければ総数）にそろえる。
-     得点予測の対象外の単元（統計）は配点の数字を出さず CATQ_OFF の文言を出す
-     ＝「毎年1.00問／4問」と並ぶと、4肢解くだけで1点取れる最短ルートに見えてしまうため。 */
-  var head='<span class="nm">'+esc(c)+'<span class="qn">'
-    +(off?esc(off):'毎年 '+q.toFixed(2)+'問')+'</span></span>'
-    +(nosub?'<span class="unos">小見出しなし</span>':'')
-    +'<span class="badge">'+(rest>0&&rest<st.n?('残り '+n3(rest)):(n3(st.n)+'問'))+'</span>'
-    +(many?'<span class="m6-mk">'+IC.chev+'</span>':'')
-    +'<span class="bt">'+twoBtns('startCat',' data-c="'+esc(c)+'"',rest,st.n,'','')+'</span>';
-  if(!many)return '<div class="ur-flat"><div class="urh">'+head+'</div></div>';
-  var body='';
-  subs.forEach(function(s,i){
-    var list=s.ids.map(function(x){return BY[x]}).filter(Boolean);
-    /* 同じ見出しが別の単元にも出るときだけ「この単元ぶん」と添える（単元名は親に出ているので出さない） */
-    body+='<div class="usub"><span class="nm">'+esc(usubLab(s))
-      +(s.dup?'<span class="udup">この単元ぶん</span>':'')+'</span>'
-      +'<span class="bt">'+twoBtns('startSub',' data-c="'+esc(c)+'" data-i="'+i+'"',
-                                   restCount(list),list.length,'','')+'</span></div>';
-  });
-  /* 小見出しに入らなかった肢は黙って消さない（件数だけ出す。分けられないものを無理に分けない） */
-  if(g.none)body+='<div class="mini" style="padding:0 0 8px">小見出しが付いていない '+n3(g.none)
-    +'問（この単元の '+n3(st.n)+'問 に含まれています）</div>';
-  return '<details class="m6-det ur" data-k="'+esc(ck)+'"'+(op?' open':'')+'>'
-    +'<summary class="urh" data-act="openchap" data-k="'+esc(ck)+'">'+head+'</summary>'
-    +'<div class="m6-dtxt">'+body+'</div></details>';
+  /* 2026-08-17 作り直し：動画学習の行（vrowHtml）とまったく同じ形にする。
+     ・36px・1行・罫線なし・左から進捗を薄緑で塗る
+     ・「単元名｜毎年N問｜正解/全｜›」。番号は出さない（あこの #4 と数字がずれるため）
+     ・毎年N問は小数1桁（2桁目は判断に関係しない＝本人）
+     ・全部正解した単元は淡く＋✓
+     ・押すと単元ページへ遷移する。「残り」「全」の2ボタンはそのページへ移した。 */
+  var st=catStat(c),q=CATQ[c]||0,off=CATQ_OFF[c];
+  var done=(st.n>0&&st.okn>=st.n),pc=st.n?st.okn/st.n:0;
+  return '<button class="vrow'+(done?' done':'')+'" data-act="ucat" data-c="'+esc(c)+'"'
+    +' data-m6k="ucat:'+esc(c)+'">'
+    +((pc>0&&pc<1)?'<span class="fill" data-m6v="'+pc.toFixed(4)
+        +'" data-m6vk="ucat:'+esc(c)+'"></span>':'')
+    +'<span class="rc"><span class="nm">'+esc(c)+'</span>'
+    +'<span class="n2">'+(off?esc(off):'毎年 '+q.toFixed(1)+'問')+'</span>'
+    +'<span class="n2">'+st.okn+'/'+st.n+'</span>'
+    +(done?'<span class="ck">'+IC.check+'</span>':'<span class="ar">'+IC.chev+'</span>')
+    +'</span></button>';
 }
 /* 単元を「習う順」に並べるための代表値（2026-08-15 本人指示
    「小分類の順番が毎年何問出るか順になってるけど…習う順番にして欲しい」）。
@@ -2159,11 +2196,17 @@ function catSeqMap(){
 }
 /* 単元の並び（大分類の中を習う順に）。「次の単元へ」の行き先を、一覧に並んでいる順と合わせる。
    ★同じ式が vFieldsCat() の中にもある（検査 L2 がそこの .sort を直接読むため）。**両方直すこと。** */
+/* 知識の単元ではなく「問題の形式」でまとめた寄せ集めは、その大分類のいちばん後ろに回す。
+   2026-08-17 本人指摘：権利関係が「条文問題・その他」から始まっていた。
+   中身の16肢が あこ課長 #29【契約】用語まとめ に紐づくため代表値が最小になっていたが、
+   ここから学び始めることはない。並べ替えの第1キーとして落とす。 */
+function catTail(c){return /条文問題/.test(c)?1:0}
 function catsSorted(b){
   var sq=catSeqMap();
   return catsOfBig(b).slice().sort(function(x,y){
     var a=sq[x]||{seq:99999,sec:0},d=sq[y]||{seq:99999,sec:0};
-    return a.seq-d.seq                                     /* ①講義で習う順（通し番号） */
+    return catTail(x)-catTail(y)                             /* ⓪寄せ集めは末尾 */
+      ||a.seq-d.seq                                   /* ①講義で習う順（通し番号） */
       ||a.sec-d.sec                                        /* ②同じ動画なら章の秒が早い順 */
       ||(CATQ[y]||0)-(CATQ[x]||0)                          /* ③それでも同じなら出題数が多い順 */
       ||(x<y?-1:1);
@@ -2223,6 +2266,9 @@ function ubOpenMap(){
 /* 単元の一覧。大分類ごとにまとめ、その中は講義で習う順（catSeqMap）に並べる。
    大分類のパネルは <details> で畳める（開閉はJSでやらない＝章・単元と同じ骨格）。 */
 function vFieldsCat(){
+  /* 絞り込み（すべて／残り）のボタンは vFields() の1行にまとめてある（2026-08-17 本人指示）。
+     単元学習は『通しで学んだあとの取りこぼしを拾う』画面なので、終わった単元を消せないと
+     拾う先を探せない。「習った残り」は作らない＝本人の定義では 習った＝残り0 で常に空になる。 */
   var h='',sq=catSeqMap(),om=ubOpenMap();
   bigsOrdered().forEach(function(b){
     var cs=catsOfBig(b);
@@ -2232,32 +2278,35 @@ function vFieldsCat(){
        片方だけ変えると一覧の次の行と「次の単元へ」の行き先がずれる＝必ず両方直すこと。 */
     cs=cs.slice().sort(function(x,y){
       var a=sq[x]||{seq:99999,sec:0},d=sq[y]||{seq:99999,sec:0};
-      return a.seq-d.seq                                     /* ①講義で習う順（通し番号） */
+      return catTail(x)-catTail(y)                           /* ⓪寄せ集め（条文問題）は末尾 */
+        ||a.seq-d.seq                                        /* ①講義で習う順（通し番号） */
         ||a.sec-d.sec                                        /* ②同じ動画なら章の秒が早い順 */
         ||(CATQ[y]||0)-(CATQ[x]||0)                          /* ③それでも同じなら出題数が多い順 */
         ||(x<y?-1:1);
     });
     var bq=0,br=0;
     cs.forEach(function(c){bq+=CATQ[c]||0;br+=restCount(itemsOfCat(c))});
+    /* 「残り」を選んでいるときは、全部正解した単元を消す。
+       大分類ごと空になったら見出しも出さない（空の箱を並べない）。 */
+    if(S.urest){
+      cs=cs.filter(function(c){var t=catStat(c);return !(t.n>0&&t.okn>=t.n)});
+      if(!cs.length)return;
+    }
     var bk='B:'+b,bo=!!om[b];             /* 開閉の記録（無ければ ubOpenMap() の既定） */
     h+='<details class="panel ub m6-det" data-k="'+esc(bk)+'"'+(bo?' open':'')+'>'
       +'<summary><span class="nm">'+esc(b)+'</span>'
       +'<span class="m6-mk">'+IC.chev+'</span>'
-      +'<span class="sm">単元 '+cs.length+' ／ 毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'問</span>'
-      +'</summary><div>';
+      +'<span class="sm">単元 '+cs.length+' ／ 毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'問'
+      /* 大分類まるごとの残りを拾う入口。主役ではない（本人は基本、単元＝小分類で解く）ので
+         大きなボタンにせず、見出しの右端に控えめに置く。閉じたままでも押せる。 */
+      +(br?'<span class="ubrest" role="button" data-act="ubrest" data-b="'+esc(b)+'">残りを解く</span>':'')
+      +'</span>'
+      +'</summary><div class="vlist">';
     cs.forEach(function(c){h+=urowHtml(c)});
     h+='</div></details>';
   });
-  /* 「都市計画法には7つあるのに国土利用計画法には無い」理由を、行ごとに繰り返さず1回だけ書く
-     （29単元に同じ一文を並べると、行の半分以上が同じ灰色の説明で埋まる） */
-  h+='<div class="panel"><div class="mini" style="margin-bottom:8px">'
-    +'小見出しは、こざりえの動画の字幕から作った区切りです。'
-    +'字幕から区切れなかった単元は「小見出しなし」＝単元まるごとで解きます。'
-    +'区切りが '+USUB_MAX+'問を超えるものは分け、'+USUB_MIN+'問未満のものは前の区切りへ寄せています。'
-    +'</div><div class="mini">並びは講義で習う順（あこ課長の再生リストの順）です。'
-    +'「毎年N問」は過去問10年（2016〜2025）の出典から数えた1年あたりの出題数で、'
-    +'科目ごとの合計が本試験の配点（権利14・法令8・業法20・税2・評定1・需給4）に一致するようにしています。'
-    +'統計だけは毎年数字が入れ替わり過去問で測れないため、配点を出さず別枠にしています。</div></div>';
+  /* 末尾の説明4行は置かない（2026-08-17 本人指示）。「小見出しなし」の印を消したので
+     その説明も要らなくなった。並びの根拠と配点の根拠は SPEC.md に書いてある。 */
   return h;
 }
 
@@ -2267,8 +2316,15 @@ function vFields(){
   var cm=(S.fmode==='cat');
   var h='<div class="pad'+stag()+'"><div class="h">'+(cm?'単元学習':'動画学習')+'</div>'
     +'<div style="margin:0 0 12px">'
-    +'<button class="tog'+(cm?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画で進む</button>'
-    +'<button class="tog'+(cm?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="cat">単元で進む</button>'
+    /* 2026-08-17 本人指示：入口の切替と絞り込みを**1行**にまとめる
+       （「動画学習　単元学習 / すべて　残り」）。呼び名も画面の見出しと同じ言葉にそろえる。 */
+    +'<button class="tog'+(cm?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画学習</button>'
+    +'<button class="tog'+(cm?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="cat">単元学習</button>'
+    +(cm?('<span class="togsep">/</span>'
+      +'<button class="tog'+(S.urest?'':' on')+'" style="margin:0 6px 6px 0"'
+      +' data-act="ufilt" data-v="">すべて</button>'
+      +'<button class="tog'+(S.urest?' on':'')+'" style="margin:0 6px 6px 0"'
+      +' data-act="ufilt" data-v="rest">残り</button>'):'')
     +'</div>';
   h+=(cm?vFieldsCat():vFieldsVideo());
   h+='</div>';
@@ -2329,7 +2385,10 @@ function vrowHtml(vid){
   var vs=videoStat(vid),ms=vidMs(vid);
   var pc=vs.n?Math.round(vs.ok/vs.n*100):0;
   var no=vno(vid),cat=catOfVid(vid),sub=(no===null);
-  var q=vs.done?'':(vs.n===0?'':(vs.ok>0?vs.ok+'/'+vs.n:vs.n+'問'));
+  /* どの状態でも「正解/全」を出す（2026-08-17 本人指示）。
+     以前は未着手を「41問」、完了を数字なしの✓だけにしていたので、
+     **何問あって何問できたか**が読めなかった。未着手は 0/41、完了は 41/41 ✓。 */
+  var q=vs.n===0?'':(vs.ok+'/'+vs.n);
   /* 長押しの先読み＝行では省略される見出しの全文と尺・章数（長押しのたびに探索しない） */
   var pv=(no===null?'':'#'+no+'　')+(VLEN[vid]?mmss(VLEN[vid])+'　':'')+(VCHN[vid]?'章'+VCHN[vid]:'');
   return '<button class="vrow'+(sub?' sub':'')+(vs.done?' done':'')+'" data-act="vid" data-v="'+esc(vid)+'"'
@@ -2434,8 +2493,34 @@ function selItems(){
    ・問題が0問の章は出さない（畳んだ件数は1行で明示する）。
    ・動画のヘッダーに、その動画に対応する問題数と「この動画の問題を解く」を置く。
    ・章の行をタップすると、入っている問題の頭と紐づけの根拠（videos[].why）が出る。 */
+/* 単元ページ（2026-08-17）。一覧の行を押すと遷移してくる。
+   中身は今まで <details> の中に畳んでいたものと同じ＝新しい部品は作っていない。
+   ・見出し＝単元名／大分類・毎年N問・正解/全
+   ・「残り」「全」の2ボタン（一覧の行から外したもの）
+   ・小見出しの一覧（名前が長いので折り返す。数字は出さない＝押した先のボタンと重なるため） */
+function vUnit(c,s){
+  var q=CATQ[c]||0,off=CATQ_OFF[c];
+  var rest=restCount(itemsOfCat(c));
+  var h='<div class="pad'+stag()+'">'
+   +'<button class="btn sm" data-act="tab" data-v="fields" style="margin-bottom:10px">一覧へ戻る</button>'
+   +'<div class="panel" id="m1hero"><div class="h" style="margin:0">'+esc(c)+'</div>'
+   +'<div class="sub" style="margin:6px 0 0">'+esc(CINFO[c]?CINFO[c].big:'')
+   +' ／ '+(off?esc(off):'毎年 '+q.toFixed(1)+'問')+' ／ '+s.okn+'/'+s.n+'問</div>'
+   +'<div class="bar3" style="margin-top:10px"><i style="width:'
+   +(s.n?(s.okn/s.n*100).toFixed(1):'0')+'%"></i></div>'
+   +'<div style="display:flex;gap:8px;margin-top:12px">'
+   +twoBtns('startCat',' data-c="'+esc(c)+'"',rest,s.n,'','flex:1;width:auto;margin:0')
+   +'</div></div>';
+  /* 単元の中の小見出しは出さない（2026-08-17 本人裁定）。
+     「別に小分類で区切る必要ないか。単元では残りの問題やるだけだしね。
+       大体順番に出てくればいいし、出てきた問題でわからないところは動画に飛べるしね」。
+     ＝区切りの名前を作り直す作業（あこ課長の章で割り直す案）ごと不要になった。
+     代わりに**出題の並び**をあこ課長の習う順にする（sortQ）＝順番に出てくればよい、を満たす。 */
+  return h+'</div>';
+}
 function vStudy(){
   var c=S.cat,s=catStat(c);
+  if(S.ucat)return vUnit(c,s);          /* 単元ページ（2026-08-17） */
   /* 一覧から動画の行を押したときはその1本だけを出す
      （軸が「大分類 → 動画を再生リスト順」なので、小分類の全動画を並べない） */
   var vids=(CHAP[c]||[]);
@@ -3793,7 +3878,31 @@ document.addEventListener('click',function(e){
   if(a==='vid'){
     var tv=t.getAttribute('data-v'),tc=catOfVid(tv);
     if(!tc)return;
+    S.fieldsY=window.scrollY||0;S.ucat=false;
     S.studyVid=tv;m1ToStudy(t,tc);return;
+  }
+  /* 単元の行 → 単元ページ。画面を新設せず vStudy を単元向けに分岐させる
+     （vStudy は元から studyVid が無いとき小分類を出す作りなので、そこに乗せる）。
+     戻ったとき一覧の同じ位置に戻す＝拾う作業は「下まで見る→入る→戻る→次」の繰り返しで、
+     先頭へ跳ぶと下の単元に指が届かない（2026-08-17）。 */
+  if(a==='ucat'){
+    var uc=t.getAttribute('data-c');
+    if(!uc)return;
+    S.fieldsY=window.scrollY||0;
+    S.studyVid=null;S.ucat=true;m1ToStudy(t,uc);return;
+  }
+  if(a==='ufilt'){S.urest=(t.getAttribute('data-v')==='rest');S.fieldsY=0;render();return}
+  /* 大分類まるごとの残り。本人が明示的に押した範囲なので未習フィルタは通さない。 */
+  if(a==='ubrest'){
+    var ub=t.getAttribute('data-b');
+    var ua=[];catsOfBig(ub).forEach(function(c){
+      itemsOfCat(c).forEach(function(it){ua.push(it)})});
+    if(!restOnly(ua).length)return;
+    var uv=catBaseVid(catsOfBig(ub)[0],ub);
+    S.kind='new';m1ToQuiz(t,function(){
+      S.pickExplicit=true;S.pendBig=ub;startQueue(restOnly(ua),ub+'の残り',false,uv);
+      S.roundCat=null;S.roundSub=null;});
+    return;
   }
   /* 一覧の開閉・並び替えは FLIP で（消える行はゴースト・残る行は移動・入る行はフェードイン）。
      S.enter=false は必須＝既存の .viewin/.stag と入場アニメを重ねない（M3_depth.md §6-5） */
@@ -3927,7 +4036,12 @@ document.addEventListener('click',function(e){
        章・動画は渡していたのにここだけ抜けていた＝2026-08-15 批評で判明）。
        基準の動画は catBaseVid() で選ぶ＝その小分類と同じ科目の動画に限る。
        動画が無い小分類もあるので、科目そのものを基準にする S.pendBig を併用する。 */
-    var cbb=CINFO[cc]?CINFO[cc].big:null,cbv=catBaseVid(cc,cbb);
+    var cbb=CINFO[cc]?CINFO[cc].big:null;
+    /* 2026-08-17：単元から解くときは**基準の動画を渡さない**。渡すとその1本の中の秒で並び、
+       その動画に載っていない肢が全部うしろへ回る。単元は複数の動画にまたがる（中央3本）ので、
+       あこ課長の習う順（通し番号→秒）で並べたい＝sortQ の S.baseVid なし の道を通す。
+       解禁は S.pendBig（科目そのもの）で足りる＝基準の動画は解禁のために要らない。 */
+    var cbv=null;
     /* startQueue が冒頭で roundCat を落とすので、印は**呼んだ後**に付ける（startChap と同じ形） */
     S.kind='new';m1ToQuiz(t,function(){S.pendBig=cbb;startQueue(pickRest(itemsOfCat(cc),t),cc,false,cbv);
       S.roundCat=cc;S.roundSub=null;});return;
