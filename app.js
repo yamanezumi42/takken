@@ -2820,10 +2820,11 @@ function vQuiz(){
       +'<button class="b x" data-act="ans" data-o="0">×</button></div>'
       /* パスの右に「おかしいところ」。行は増やさない（2026-08-17 本人指定）。
          パスは中央のまま、報告はその右に小さく置く＝左右の重さを揃える。 */
-      +'<div class="passrow"><span></span>'
+      +'<div class="passrow"><span class="sp"></span>'
       +'<button class="pass" data-act="pass">パス</button>'
       +'<button class="repbtn'+(repOf(id).tags.length?' repon':'')+'" data-act="repsheet"'
-      +' data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button></div></div>';
+      +' data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button>'
+      +'<span class="sp"></span></div></div>';
   }else{
     h+='<div class="expwrap'+(EA?' stagexp':'')+'">'+expBlock(it,id)+'</div>';
   }
@@ -2838,13 +2839,6 @@ function syncNextBar(){
   var b=document.getElementById('nextbar');
   if(!b)return;
   b.hidden=!(S.view==='quiz'&&S.phase==='exp'&&S.queue.length&&S.qi<S.queue.length);
-  /* 解説中の「おかしいところ」は、この行の右に置く（行を増やさない・2026-08-17 本人指定）。 */
-  var rb=document.getElementById('nb-rep'),id=S.queue[S.qi];
-  if(rb){
-    if(b.hidden||!id){rb.hidden=true}
-    else{rb.hidden=false;rb.setAttribute('data-id',id);
-      rb.innerHTML=IC.warn;rb.className='repbtn'+(repOf(id).tags.length?' repon':'')}
-  }
 }
 /* 回答したら、正誤の行が画面の上（固定ヘッダーのすぐ下）に来るまでスクロールする。
    これが無いと、長い問題では○×を押しても解説の頭が画面の外にあって読めない。
@@ -2934,6 +2928,9 @@ function qHead(ses,p){
   /* 前の問題へ＝**正解率の行の左端**（2026-08-17 本人指定）。出題中で2問目以降だけ出す。 */
   var pv=(S.view==='quiz'&&S.qi>0)
     ?'<button class="hprev" data-act="prevq" aria-label="前の問題へ">'+IC.chevL+'</button>':'';
+  /* 解説中の「おかしいところ」＝この行の右端（2026-08-18 本人指摘。
+     下の「次の問題」の横に30pxのアイコンで置いたら、隅に潰れて見えなくなった）。
+     出題中はパスの横に出しているので、ここには出さない＝二重にしない。 */
   return '<div class="hd">'+pv+'<div class="sc"><b class="scn">'
     +'<span class="m4-num" id="hRight">'+ri+'</span>/'
     +'<span class="m4-num" id="hTotal">'+tot+'</span>問</b>　正解率 <b class="scr">'
@@ -2993,6 +2990,12 @@ function expBlock(it,id){
      いままで誤りを見つけるのは本人がチャットで言うときだけで、**発見が最後**だった。
      ここに置けば学習を止めずに溜まり、あとでまとめて直せる。
      正誤に関係なく出す（図や動画のずれは正解した肢でも起きる）。 */
+  /* 「おかしいところ」＝**解説の末尾**（休ませる段の直前）。最初に置いていた位置に戻した
+     （2026-08-18 本人指摘「解説の時は前の位置にもどして」）。出題中はパスの横。 */
+  h+='<div class="passrow" style="margin-top:12px"><span class="sp"></span>'
+    +'<button class="repbtn'+(repOf(id).tags.length?' repon':'')+'" data-act="repsheet"'
+    +' data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button>'
+    +'<span class="sp"></span></div>';
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
   var sv=severeTopics().filter(function(x){return x.cat===it.cat&&x.topic===(it.topic||'未分類')})[0];
   if(sv)h+='<div class="warn" style="margin-top:10px">'+IC.warn+' 重症：この章は動画に戻る（'+esc(sv.topic)+'／誤答'+sv.ng+'回）</div>';
@@ -3576,8 +3579,9 @@ function dataSheet(){
   m.innerHTML='<div class="sheet">'
    +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">設定とデータ</div>'
    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
-   /* おかしいところの報告の一覧。ここからコピーしてチャットに貼れば、まとめて直せる。 */
-   +repListHtml()
+   /* 報告の一覧は置かない（2026-08-18 本人指示）。
+      私が `gh api repos/yamanezumi42/takken-records/contents/takken_records.json` で
+      直接読めるようになったので、コピペしてもらう必要がなくなった。 */
    +'<div class="mini" style="margin-bottom:6px">試験日</div>'
    +'<input id="sExam" type="date" value="'+esc(examDay())+'" style="width:100%">'
    +'<div class="rowx" style="gap:8px;margin:8px 0 0">'

@@ -1021,14 +1021,15 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .hd .hprev{background:none;border:0;color:var(--accd);padding:0 2px 0 0;min-height:0;
   display:inline-flex;align-items:center;cursor:pointer;flex:none}
 /* パスの行＝左の余白・パス（中央）・報告（右）で、パスを真ん中に保つ */
-.passrow{display:flex;align-items:center;justify-content:center;gap:10px}
-.passrow>span,.passrow>.repbtn{flex:0 0 40px}
-.passrow>span{height:1px}
-.repbtn{background:none;border:0;color:var(--muted);padding:6px;min-height:0;cursor:pointer;
-  display:inline-flex;align-items:center;justify-content:center}
-.repbtn.repon{color:var(--accd)}
-#nextbar{display:flex;align-items:center;gap:8px}
-#nextbar .repbtn{pointer-events:auto;flex:none}
+/* パスと報告を**確実に中央**へ。`.pass` の margin:auto が自由空間を食って左に寄るので打ち消す。
+   左右に同じ幅の空きを置き、パスを真ん中に保つ（2026-08-18 本人のスクショ指示）。 */
+.passrow{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
+.passrow .pass{margin:0}
+.passrow .sp{flex:1 1 0;height:1px;min-width:0}
+.repbtn{background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--muted);
+  min-height:40px;padding:0 14px;cursor:pointer;flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;font-family:var(--font)}
+.repbtn.repon{color:var(--accd);border-color:var(--accd)}
 .qhead .qrule{height:1px;background:var(--accd);opacity:.35}
 /* 下の余白＝タブの高さ（実測53px）＋ホームインジケータ（iPhone15で34px）＋12px。
    ○×は margin-top:auto で面の下端に置いているので、この余白ぶんだけ上に上がる。
@@ -1126,7 +1127,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <div class="m3-fg" id="m3fg" aria-hidden="true"><span class="glare"></span></div>
 <!-- 解説の間だけ出す「次の問題」。#view の外に置く＝#view は入場で transform（scale）するので、
      中に置くと position:fixed が効かなくなる。タブ（z-index 20）より下の層に置いてタブを隠さない。 -->
-<div id="nextbar" hidden><button class="btn pri" data-act="next">次の問題</button><button class="repbtn" id="nb-rep" data-act="repsheet" aria-label="おかしいところを報告"></button></div>
+<div id="nextbar" hidden><button class="btn pri" data-act="next">次の問題</button></div>
 <nav id="tabs"></nav>
 <!-- 演出オーバーレイ。#view の外に置く（＝彩度変化のフィルタ対象外・レイアウトに影響しない） -->
 <div id="fx" hidden></div>
@@ -1223,7 +1224,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='63a4f156';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='05af0fd1';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
