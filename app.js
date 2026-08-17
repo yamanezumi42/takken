@@ -163,6 +163,7 @@ var IC={
  play:svg('<circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.6l5 3.4-5 3.4z"/>'),
  check:svg('<path d="M4.5 12.5l4.5 4.5L19.5 6.5"/>',2),
  chev:svg('<path d="M9 5l7 7-7 7"/>'),
+ chevL:svg('<path d="M15 5l-7 7 7 7"/>'),      /* 前の問題へ（2026-08-17） */
  down:svg('<path d="M5 9l7 7 7-7"/>'),
  up:svg('<path d="M5 15l7-7 7 7"/>'),
  warn:svg('<path d="M12 4.5 21 19.5H3z"/><path d="M12 10v4"/><path d="M12 16.7v.3"/>'),
@@ -2776,6 +2777,8 @@ function vQuiz(){
     +(S.sneak[id]?'<span class="chip">抜き打ち</span>':'')
     +'<span class="sdot s'+STG[stateOf(id)]+' m4-badge" id="stBadge" data-stage="'+STG[stateOf(id)]
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
+    /* 前の問題へ＝「n / m」の左に ＜（2026-08-17 本人指定の位置）。行を増やさない。 */
+    +(S.qi>0?'<button class="qprev" data-act="prevq" aria-label="前の問題へ">'+IC.chevL+'</button>':'')
     +'<span class="qcnt"><span class="m6-roll" style="--rh:16px;font-size:12px"'
     +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
     /* 「/ 2」も桁ロールと同じ 16px の箱に入れる。素のテキストのままだと、行の高さを
@@ -2783,7 +2786,12 @@ function vQuiz(){
     +'<span class="qtot"> / '+n3(tot)+'</span></span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
-    +IC.down+'</button></div><div class="qrule"></div></div>';
+    +IC.down+'</button>'
+    /* おかしいところの報告＝ヘッダーのアイコン1つに畳む。押すとシートで選ぶ。
+       行として出すと出題中と解説の両方に並んで邪魔になる（2026-08-17 本人指摘）。 */
+    +'<button class="btn sm'+(repOf(id).tags.length?' repon':'')+'" style="min-height:28px;padding:0 8px"'
+    +' data-act="repsheet" data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button>'
+    +'</div><div class="qrule"></div></div>';
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
   h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+esc(it.lead)+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
@@ -2818,11 +2826,6 @@ function vQuiz(){
       +'<div class="ans"><button class="b" data-act="ans" data-o="1">○</button>'
       +'<button class="b x" data-act="ans" data-o="0">×</button></div>'
       +'<div style="display:flex"><button class="pass" data-act="pass">パス</button></div></div>';
-    /* 答える前にも報告できるようにする（2026-08-17 本人指示）。
-       「明らかにこれ習ってない」ときに、○か×を答えないと報告できないのは本末転倒だった。
-       パスして次へ行く前にここで印を付けられる。 */
-    h+=repHtml(id);
-    if(S.qi>0)h+='<button class="btn sm" style="margin-top:10px" data-act="prevq">前の問題へ</button>';
   }else{
     h+='<div class="expwrap'+(EA?' stagexp':'')+'">'+expBlock(it,id)+'</div>';
   }
@@ -2982,8 +2985,6 @@ function expBlock(it,id){
      いままで誤りを見つけるのは本人がチャットで言うときだけで、**発見が最後**だった。
      ここに置けば学習を止めずに溜まり、あとでまとめて直せる。
      正誤に関係なく出す（図や動画のずれは正解した肢でも起きる）。 */
-  h+=repHtml(id);
-  if(S.qi>0)h+='<button class="btn sm" style="margin-top:10px" data-act="prevq">前の問題へ</button>';
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
   var sv=severeTopics().filter(function(x){return x.cat===it.cat&&x.topic===(it.topic||'未分類')})[0];
   if(sv)h+='<div class="warn" style="margin-top:10px">'+IC.warn+' 重症：この章は動画に戻る（'+esc(sv.topic)+'／誤答'+sv.ng+'回）</div>';
@@ -3512,6 +3513,16 @@ function bars(rows){
    直す側は肢idさえあれば場所が特定できる。 */
 /* 報告は「印を複数＋メモ」。古い形（文字列1つ）で入っていたものも読めるようにする。 */
 /* 報告の印。**出題中（答える前）にも解説の下にも同じものを出す**（2026-08-17 本人指示）。 */
+/* 報告のシート（ヘッダーのアイコンから開く）。行を占めずに6つの印とメモを出す。 */
+function repSheet(id){
+  var m=document.getElementById('modal'),it=BY[id]||{};
+  m.innerHTML='<div class="sheet">'
+   +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">おかしいところ</div>'
+   +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+   +'<div class="mini" style="margin-bottom:8px">'+esc(String(it.stem||'').slice(0,44))+'…</div>'
+   +repHtml(id)+'</div>';
+  m6SheetOpen();      /* 開き方は他のシートと同じ手順にそろえる（m.hidden は中で外れる） */
+}
 function repHtml(id){
   var rp=repOf(id);
   return '<div class="hr"></div><div class="mini" style="margin-bottom:6px">おかしいところ（複数えらべます）</div><div class="whys">'
@@ -4108,7 +4119,10 @@ document.addEventListener('click',function(e){
     if(k>=0)ro.tags.splice(k,1);else ro.tags.push(rw);
     if(!ST.reports)ST.reports={};
     if(ro.tags.length)ST.reports[ri]={tags:ro.tags,memo:ro.memo};else delete ST.reports[ri];
-    saveST();render();return;
+    saveST();
+    var sh=document.getElementById('modal');
+    if(sh&&!sh.hidden)repSheet(ri);else render();
+    return;
   }
   if(a==='repcopy'){
     var ta=document.getElementById('repta');
@@ -4118,6 +4132,7 @@ document.addEventListener('click',function(e){
     return;
   }
   if(a==='repclear'){ST.reports={};saveST();dataSheet();return}
+  if(a==='repsheet'){repSheet(t.getAttribute('data-id'));return}
   if(a==='repmemo')return;      /* メモは下の change で拾う（押しただけでは再描画しない） */
   if(a==='rsess'){if(confirm('ヘッダーの成績（このセッションの集計）をリセットします。問題ごとの履歴は消えません。'))
     {ST.session={total:0,right:0,streak:0,best:ST.session.best||0};
