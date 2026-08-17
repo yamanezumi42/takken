@@ -34,6 +34,22 @@ function d3(it){return (it&&D3OF[it.diff_ai])||null}        /* 3段階（null＝
 function d3Rank(it){var g=d3(it);return g?D3.indexOf(g):9}  /* 易0 普1 難2 未評価9＝末尾 */
 function d3Hard(it){var g=d3(it);return g?D3.indexOf(g):-1} /* 難い順に並べる用（未評価は最後） */
 var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え'];
+/* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
+document.addEventListener('change',function(e){
+  var el=e.target;
+  if(!el||!el.getAttribute||el.getAttribute('data-act')!=='repmemo')return;
+  var id=el.getAttribute('data-id'),o=repOf(id);
+  if(!o.tags.length)return;
+  ST.reports[id]={tags:o.tags,memo:el.value||''};saveST();
+},true);
+/* データの間違いの報告（2026-08-17 本人の設計）。押すと ST.reports[肢id] に入る。
+   本人「画像が間違えてるとか、参考動画がずれてるとか、この範囲じゃないとか
+   いくつか選択肢を入れるともっといい。そしたらチャットで報告したことを直してで済む」
+   「複数付けられるといい。1つだけ間違っているとは限らない」
+   「どんな選択肢があるかも大事。そこになかったら報告しても伝わらない」
+   ＝**複数選べる**。足りない場合のために **その他＋メモ**を必ず置く。 */
+var REPS=['まだ習ってない','答えが逆','図が違う','図が足りない','動画がずれてる',
+          'この単元じゃない','問題文が変','解説が変','その他'];
 var SEC_PER_Q=30;                   /* 1問あたりの想定時間（秒）＝学習時間の換算に使う */
 var EXAM_DEFAULT='2026-10-18';      /* 試験日（10月第3日曜・受験票で確認） */
 var PASS_LINE=35;                   /* 合格ラインの目安 */
@@ -2956,6 +2972,20 @@ function expBlock(it,id){
         +' data-act="vwatch" data-k="'+esc(ch2.vid+'#'+ch2.sec)+'"><span class="lbl'+(ch2.jt?' w':'')+'">'+esc(ch2.label)+'</span>'
         +'<span class="tm num">'+mmss(ch2.sec)+' から見る</span>'+IC.chev+'</a>':'')+'</div>';
   }
+  /* データの間違いを、その場で1タップ報告する（2026-08-17 本人の設計）。
+     いままで誤りを見つけるのは本人がチャットで言うときだけで、**発見が最後**だった。
+     ここに置けば学習を止めずに溜まり、あとでまとめて直せる。
+     正誤に関係なく出す（図や動画のずれは正解した肢でも起きる）。 */
+  var rp=repOf(id);
+  h+='<div class="hr"></div><div class="mini" style="margin-bottom:6px">おかしいところ（複数えらべます）</div><div class="whys">'
+    +REPS.map(function(w){return '<button class="tog'+(rp.tags.indexOf(w)>=0?' on':'')+'" data-act="rep"'
+      +' data-w="'+esc(w)+'" data-id="'+esc(id)+'">'+esc(w)+'</button>'}).join('')
+    +'</div>'
+    +(rp.tags.length
+      ?'<input id="repmemo" data-act="repmemo" data-id="'+esc(id)+'" value="'+esc(rp.memo||'')
+       +'" placeholder="何がどうおかしいか（任意）" style="width:100%;margin-top:8px">'
+       +'<div class="mini" style="margin-top:6px">報告しました。設定の「おかしいところの報告」で一覧をコピーできます</div>'
+      :'');
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
   var sv=severeTopics().filter(function(x){return x.cat===it.cat&&x.topic===(it.topic||'未分類')})[0];
   if(sv)h+='<div class="warn" style="margin-top:10px">'+IC.warn+' 重症：この章は動画に戻る（'+esc(sv.topic)+'／誤答'+sv.ng+'回）</div>';
@@ -3452,6 +3482,34 @@ function bars(rows){
 }
 
 /* ---------- データ書き出し／読み込み ---------- */
+/* 報告の一覧＝そのままコピーして貼れる形（肢id・種別・出典）。
+   直す側は肢idさえあれば場所が特定できる。 */
+/* 報告は「印を複数＋メモ」。古い形（文字列1つ）で入っていたものも読めるようにする。 */
+function repOf(id){
+  var v=(ST.reports||{})[id];
+  if(!v)return {tags:[],memo:''};
+  if(typeof v==='string')return {tags:[v],memo:''};
+  return {tags:v.tags||[],memo:v.memo||''};
+}
+function repText(){
+  var r=ST.reports||{},k=Object.keys(r);
+  if(!k.length)return '';
+  return k.map(function(i){
+    var it=BY[i],s=(it&&it.src)||{},o=repOf(i);
+    return i+'\t'+o.tags.join('・')+'\t'+((s.year?s.year+'年問'+s.q:'')||'')
+      +'\t'+((it&&it.cat)||'')+(o.memo?'\t'+o.memo:'');
+  }).join('\n');
+}
+function repListHtml(){
+  var r=ST.reports||{},n=Object.keys(r).length;
+  if(!n)return '';
+  return '<div class="panel" style="margin-bottom:12px"><div class="spread" style="margin-bottom:6px">'
+    +'<div class="mini">おかしいところの報告 '+n+'件</div>'
+    +'<button class="btn sm" style="width:auto" data-act="repcopy">コピー</button></div>'
+    +'<textarea id="repta" readonly style="width:100%;height:96px;font-size:11px">'
+    +esc(repText())+'</textarea>'
+    +'<button class="btn sm" style="margin-top:6px" data-act="repclear">報告を消す</button></div>';
+}
 function dataSheet(){
   var m=document.getElementById('modal');
   var json=stOut();
@@ -3460,6 +3518,8 @@ function dataSheet(){
   m.innerHTML='<div class="sheet">'
    +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">設定とデータ</div>'
    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+   /* おかしいところの報告の一覧。ここからコピーしてチャットに貼れば、まとめて直せる。 */
+   +repListHtml()
    +'<div class="mini" style="margin-bottom:6px">試験日</div>'
    +'<input id="sExam" type="date" value="'+esc(examDay())+'" style="width:100%">'
    +'<div class="rowx" style="gap:8px;margin:8px 0 0">'
@@ -3987,6 +4047,24 @@ document.addEventListener('click',function(e){
   if(a==='pass'){next();return}
   if(a==='next'){next();return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
+  /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
+  if(a==='rep'){
+    var ri=t.getAttribute('data-id'),rw=t.getAttribute('data-w'),ro=repOf(ri);
+    var k=ro.tags.indexOf(rw);
+    if(k>=0)ro.tags.splice(k,1);else ro.tags.push(rw);
+    if(!ST.reports)ST.reports={};
+    if(ro.tags.length)ST.reports[ri]={tags:ro.tags,memo:ro.memo};else delete ST.reports[ri];
+    saveST();render();return;
+  }
+  if(a==='repcopy'){
+    var ta=document.getElementById('repta');
+    if(ta){ta.focus();ta.setSelectionRange(0,ta.value.length);
+      try{document.execCommand('copy')}catch(e){}
+      msg('コピーしました。チャットに貼ってください。');}
+    return;
+  }
+  if(a==='repclear'){ST.reports={};saveST();dataSheet();return}
+  if(a==='repmemo')return;      /* メモは下の change で拾う（押しただけでは再描画しない） */
   if(a==='rsess'){if(confirm('ヘッダーの成績（このセッションの集計）をリセットします。問題ごとの履歴は消えません。'))
     {ST.session={total:0,right:0,streak:0,best:ST.session.best||0};
      S.sT=0;S.sR=0;S.sStreak=0;S.sBest=0;saveRun();saveST();render()}return}
