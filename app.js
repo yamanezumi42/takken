@@ -1554,7 +1554,7 @@ function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
    wrongs＝このセッションで間違えた問題（完走後に周回する）／round＝周回の回数 */
 /* lockedOut＝未習で出さなかった件数／sT,sR,sStreak,sBest＝この1回（周回なら「その周」）の成績 */
 var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:null,label:'',sneak:{},
-        urest:false,ucat:false,fieldsY:0,
+        urest:false,ucat:false,fieldsY:0,openZero:{},
         openBig:{},openCat:{},openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
         /* いま解いている「単位」の印。roundVid/roundSec＝動画・章から入ったとき、
            roundCat/roundSub＝単元・小見出しから入ったとき。完走画面の「次へ」の行き先を決める。
@@ -2576,11 +2576,16 @@ function vStudy(){
     var empty=0;
     list.forEach(function(ch){
       var its=chapItemsUp(v.vid,ch.sec),n=its.length;
-      /* 0問の章も出す（2026-08-15 本人指摘「省いてない？」）。
-         動画の目次と画面の章が一致していないと、どこまで見たか突き合わせられない。 */
-      /* 一覧には出すが、「視聴 ◯/◯」の分母は問題のある章だけで数える。
-         こざりえは登録166章のうち124章が0問なので、入れると分母が数倍に膨らむ。 */
+      /* 0問の章は畳む（2026-08-17 本人指示）。あこ課長の章1,077のうち588（55%）が0問で、
+         一覧の半分が中身のない行になっていた。
+         2026-08-15 の「省いてない？」とは矛盾しない＝あのときは**問題があるはずの章が
+         抜けていた**という指摘で、今回は**問題が0問なのに出ている**という話（本人の説明）。
+         開いたときは**その場（タイムスタンプの順）に戻す**＝末尾にまとめて並べない
+         （本人「たたんだ場合順番に配置されるようにもしてね。順番が前後するのは避けて」）。
+         この loop は章の秒の昇順なので、飛ばすのをやめるだけで順番は保たれる。 */
+      /* 「視聴 ◯/◯」の分母は問題のある章だけで数える（0問を入れると分母が膨らむ）。 */
       if(!n){empty++}else{shown++}
+      if(!n&&!S.openZero[v.vid])return;
       var key=v.vid+'#'+ch.sec,w=ST.watched[key];
       if(w&&n)seen++;
       var ck=v.vid+'|'+ch.sec,op=!!S.openChap[ck];
@@ -2593,12 +2598,14 @@ function vStudy(){
          2026-08-15 検証：「残り N問」「全 N問」の2つが並ぶと章名の列が 84px まで痩せ、
          「宅建業/の事務/所」と縦に折れていた。章名を「…」で切ると何の章か分からなくなるので、
          名前を優先して段を分ける（ボタンが1つの行も同じ形にして、行ごとに姿が変わらないようにする）。 */
-      /* 行の名前は「その行に入っている肢の論点」を先に見る（chapRowLab）。
-         判定担当が指した秒が章頭でないと、行に「物権変動 45:51」と出て中身は代理、
-         という食い違いが起きる（2026-08-16）。動画の章名は消さず2行目に小さく残す
-         ＝動画の目次と突き合わせて「どこまで見たか」を追えるようにするため。
-         論点名が1件も無い章（＝いまのデータの全章）は今までどおり章名だけを出す。 */
-      var rlab=chapRowLab(v.vid,ch.sec,ch.label);
+      /* 行の名前は**動画の章名（タイムスタンプの題名）そのまま**（2026-08-17 本人指示で差し戻し）。
+         2026-08-16 に判定の論点名を優先する形（chapRowLab）にしたが、動画学習を
+         あこ課長だけにした今は 章＝タイムスタンプそのものなので、章名を差し置く理由がない。
+         実測：問題がある章489のうち441（90%）で行の名前が章名と食い違っていた
+         （章名『詐欺』→行『詐欺による取消しは善意無過失の第三者に対抗できな…』）。
+         論点名は「何を問い答えがどちらか」を書いた文なので、**章の一覧に出すと答えが読める**
+         （出題画面では隠す対応を入れたのに、ここが残っていた）。 */
+      var rlab=ch.label;
       h+='<details class="m6-det chrow" data-k="'+esc(ck)+'"'+(op?' open':'')+'>'
         +'<summary data-act="openchap" data-k="'+esc(ck)+'">'
         +'<span class="nm">'+esc(rlab)+' <span class="sec">'+mmss(ch.sec)+'</span>'
@@ -2618,7 +2625,10 @@ function vStudy(){
       if(its.length>12)h+='<div class="mini">ほか '+(its.length-12)+'問</div>';
       h+='</div></details>';
     });
-    if(empty)h+='<div class="mini" style="margin-top:8px">まだ問題が紐づいていない章 '+empty+'件（この章からは出題しません）</div>';
+    /* 0問の章の開閉。押すと**その場**（タイムスタンプの順）に差し戻る（末尾に集めない）。 */
+    if(empty)h+='<button class="vrow zrow" data-act="zerochap" data-v="'+esc(v.vid)+'">'
+      +'<span class="rc"><span class="nm">問題のない章 '+empty+'件</span>'
+      +'<span class="ar">'+(S.openZero[v.vid]?IC.up:IC.down)+'</span></span></button>';
     /* 動画には問題が紐づいているのに章が1つも出ない＝データの秒がずれている合図（黙って畳まない） */
     if(vn&&empty===list.length&&list.length)
       h+='<div class="warn" style="margin-top:8px">'+IC.warn+' この動画は '+vn+'問 紐づいていますが、'
@@ -3892,6 +3902,9 @@ document.addEventListener('click',function(e){
     S.studyVid=null;S.ucat=true;m1ToStudy(t,uc);return;
   }
   if(a==='ufilt'){S.urest=(t.getAttribute('data-v')==='rest');S.fieldsY=0;render();return}
+  /* 0問の章の開閉（動画ページ）。開くとタイムスタンプの順のその場に戻る。 */
+  if(a==='zerochap'){var zv=t.getAttribute('data-v');
+    m6FlipRender(function(){S.openZero[zv]=!S.openZero[zv];S.enter=false;render()});return}
   /* 大分類まるごとの残り。本人が明示的に押した範囲なので未習フィルタは通さない。 */
   if(a==='ubrest'){
     var ub=t.getAttribute('data-b');

@@ -870,6 +870,9 @@ details.m6-det.chrow>summary .nm{flex:0 0 100%}
 /* 2026-08-17 作り直し：単元の行は動画学習の行（.vrow）と同じ 36px・1行にする。
    2段目の「残り」「全」ボタンは行から外し、単元ページ（vStudy の単元版）へ移した。
    本人「一個一個の枠が大きくて見づらい」。旧 .urh / .ur-flat / .usub は使わない。 */
+/* 0問の章の開閉の行（動画ページ）。章の行と混ざらないよう淡くする（2026-08-17） */
+.zrow{margin-top:6px}
+.zrow .nm{font-size:11.5px;color:var(--muted)}
 /* 入口の切替と絞り込みを1行に並べたときの区切り（2026-08-17） */
 /* ボタンと同じ高さの箱にしないと、区切りだけ7px下がる（2026-08-17 実測） */
 .togsep{display:inline-block;height:34px;line-height:34px;vertical-align:top;
@@ -1206,7 +1209,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='4e65644f';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='53470bb4';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
