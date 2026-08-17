@@ -2818,6 +2818,11 @@ function vQuiz(){
       +'<div class="ans"><button class="b" data-act="ans" data-o="1">○</button>'
       +'<button class="b x" data-act="ans" data-o="0">×</button></div>'
       +'<div style="display:flex"><button class="pass" data-act="pass">パス</button></div></div>';
+    /* 答える前にも報告できるようにする（2026-08-17 本人指示）。
+       「明らかにこれ習ってない」ときに、○か×を答えないと報告できないのは本末転倒だった。
+       パスして次へ行く前にここで印を付けられる。 */
+    h+=repHtml(id);
+    if(S.qi>0)h+='<button class="btn sm" style="margin-top:10px" data-act="prevq">前の問題へ</button>';
   }else{
     h+='<div class="expwrap'+(EA?' stagexp':'')+'">'+expBlock(it,id)+'</div>';
   }
@@ -2977,16 +2982,8 @@ function expBlock(it,id){
      いままで誤りを見つけるのは本人がチャットで言うときだけで、**発見が最後**だった。
      ここに置けば学習を止めずに溜まり、あとでまとめて直せる。
      正誤に関係なく出す（図や動画のずれは正解した肢でも起きる）。 */
-  var rp=repOf(id);
-  h+='<div class="hr"></div><div class="mini" style="margin-bottom:6px">おかしいところ（複数えらべます）</div><div class="whys">'
-    +REPS.map(function(w){return '<button class="tog'+(rp.tags.indexOf(w)>=0?' on':'')+'" data-act="rep"'
-      +' data-w="'+esc(w)+'" data-id="'+esc(id)+'">'+esc(w)+'</button>'}).join('')
-    +'</div>'
-    +(rp.tags.length
-      ?'<input id="repmemo" data-act="repmemo" data-id="'+esc(id)+'" value="'+esc(rp.memo||'')
-       +'" placeholder="何がどうおかしいか（任意）" style="width:100%;margin-top:8px">'
-       +'<div class="mini" style="margin-top:6px">報告しました。設定の「おかしいところの報告」で一覧をコピーできます</div>'
-      :'');
+  h+=repHtml(id);
+  if(S.qi>0)h+='<button class="btn sm" style="margin-top:10px" data-act="prevq">前の問題へ</button>';
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
   var sv=severeTopics().filter(function(x){return x.cat===it.cat&&x.topic===(it.topic||'未分類')})[0];
   if(sv)h+='<div class="warn" style="margin-top:10px">'+IC.warn+' 重症：この章は動画に戻る（'+esc(sv.topic)+'／誤答'+sv.ng+'回）</div>';
@@ -2999,10 +2996,33 @@ function expBlock(it,id){
    ・間違いが残っている＝「間違えた N問を解く」が最上段（主役）。0になるまで周回する
    ・0になったときだけ「次の動画へ」を主役にする（この動画を仕上げた合図）
    ・「ホームへ戻る」は置かない（下部タブがある） */
+/* 完走画面で開く動画＝いま解いた範囲の代表。基準の動画があればそれ、無ければ
+   最後に答えた肢の章（chapFor）。あこ課長のリンクを優先する。 */
+function resultWatch(){
+  if(S.roundVid)return {vid:S.roundVid,sec:S.roundSec||0,
+    label:vlab(S.roundVid)||''};
+  var ids=S.queue||[],it=null,i;
+  for(i=ids.length-1;i>=0&&!it;i--)if(BY[ids[i]])it=BY[ids[i]];
+  if(!it)return null;
+  var vs=vidsOf(it),v=null;
+  for(i=0;i<vs.length;i++)if(VSRC[vs[i].vid]===VIDSRC){v=vs[i];break}
+  if(!v)v=vs[0];
+  if(!v)return null;
+  return {vid:v.vid,sec:(typeof v.sec==='number'?v.sec:0),
+    label:v.chapter||vlab(v.vid)||''};
+}
 function setResultBtns(wn,nx,perfect,nc,nu){
   var rb=document.getElementById('r-round'),nb=document.getElementById('r-next'),
       ag=document.getElementById('r-again'),cb=document.getElementById('r-nextchap'),
-      ub=document.getElementById('r-nextcat');
+      ub=document.getElementById('r-nextcat'),
+      wb=document.getElementById('r-watch');
+  /* いま解いた範囲の動画（あこ課長）を開くリンク。最後に答えた肢の章を使う。 */
+  if(wb){
+    var wv=resultWatch();
+    wb.hidden=!wv;
+    if(wv){wb.href=vurl(wv.vid,wv.sec);wb.setAttribute('data-k',wv.vid+'#'+wv.sec);
+      wb.innerHTML=IC.yt+'動画を見る（'+esc(wv.label)+' '+mmss(wv.sec)+'）'}
+  }
   if(rb){rb.hidden=!wn;if(wn)rb.textContent='間違えた '+n3(wn)+'問を解く'}
   /* 章を解き終えたら次の章へ。動画の続きを1回分ずつ進める導線（2026-08-15） */
   if(cb){cb.hidden=!nc;if(nc){cb.setAttribute('data-s',nc.sec);
@@ -3051,6 +3071,11 @@ function vDone(){
   if(nu)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextcat" data-c="'+esc(nu.cat)+'"'
     +(nu.sub?' data-i="'+nu.i+'"':'')+'>'+(nu.sub?'次の小見出しへ（':'次の単元へ（')+esc(nu.label)+'）</button>';
   if(nx)h+='<button class="btn '+((nw||nc)?'':'acc')+'" style="margin-top:10px" data-act="nextvid" data-v="'+esc(nx.vid)+'">次の動画へ</button>';
+  /* 静的な #r-btns と同じものを出す（片方だけだと本人には見えない＝検査Z1） */
+  var rw=resultWatch();
+  if(rw)h+='<a class="btn" style="margin-top:10px" href="'+vurl(rw.vid,rw.sec)+'" target="_blank"'
+    +' rel="noreferrer" data-act="vwatch" data-k="'+esc(rw.vid+'#'+rw.sec)+'">'
+    +IC.yt+'動画を見る（'+esc(rw.label)+' '+mmss(rw.sec)+'）</a>';
   h+='<div class="hr"></div>';
   /* 全問正解なら「もう一度」は出さない。 */
   if(!nw&&!perfect)h+='<button class="btn" data-act="again">もう一度この範囲を解く</button>';
@@ -3486,6 +3511,19 @@ function bars(rows){
 /* 報告の一覧＝そのままコピーして貼れる形（肢id・種別・出典）。
    直す側は肢idさえあれば場所が特定できる。 */
 /* 報告は「印を複数＋メモ」。古い形（文字列1つ）で入っていたものも読めるようにする。 */
+/* 報告の印。**出題中（答える前）にも解説の下にも同じものを出す**（2026-08-17 本人指示）。 */
+function repHtml(id){
+  var rp=repOf(id);
+  return '<div class="hr"></div><div class="mini" style="margin-bottom:6px">おかしいところ（複数えらべます）</div><div class="whys">'
+    +REPS.map(function(w){return '<button class="tog'+(rp.tags.indexOf(w)>=0?' on':'')+'" data-act="rep"'
+      +' data-w="'+esc(w)+'" data-id="'+esc(id)+'">'+esc(w)+'</button>'}).join('')
+    +'</div>'
+    +(rp.tags.length
+      ?'<input id="repmemo" data-act="repmemo" data-id="'+esc(id)+'" value="'+esc(rp.memo||'')
+       +'" placeholder="何がどうおかしいか（任意）" style="width:100%;margin-top:8px">'
+       +'<div class="mini" style="margin-top:6px">報告しました。設定の「おかしいところの報告」で一覧をコピーできます</div>'
+      :'');
+}
 function repOf(id){
   var v=(ST.reports||{})[id];
   if(!v)return {tags:[],memo:''};
@@ -3854,6 +3892,9 @@ function doAnswer(userOx){
   var wasClosed=closed(it.cat);
   var doneBefore=sibs.every(function(x){return att(R(x.id))>0});
   S.res=answer(id,userOx);S.phase='exp';
+  /* この回ぶんの答えを控える。前の問題へ戻ったときに解説を出し直すのに使う
+     （2026-08-17 本人指示「答えた後に前の問題にも戻れるように」）。 */
+  S.ansLog=S.ansLog||{};S.ansLog[S.qi]=S.res;
   S.broke=(!S.res.ok&&FXST.lost>=2);
   var r=R(id),ev={closed:false,topicDone:false,severe:false};
   if(S.res.ok){
@@ -3896,7 +3937,10 @@ function next(){
 }
 function advance(){
   clearFx();
-  S.qi++;S.phase='q';S.res=null;S.broke=false;
+  S.qi++;S.broke=false;
+  /* 前へ戻ったあと進むときは、控えてある答えを出し直す（また答えさせない） */
+  var lg=(S.ansLog||{})[S.qi];
+  if(lg){S.res=lg;S.phase='exp'}else{S.phase='q';S.res=null}
   if(S.qi>=S.queue.length){
     /* 抜き打ちは「解き終えたとき」に今日の印を付ける（開始時に付けると、途中でやめただけで
        その日の抜き打ちが失われる。途中でやめたら印は付かない＝またできる。2026-08-15 批評）。 */
@@ -4046,6 +4090,15 @@ document.addEventListener('click',function(e){
     dataSheet();return;
   }
   if(a==='pass'){next();return}
+  /* 前の問題へ戻る（答える前でも答えた後でも）。控えがあれば解説つきで、無ければ問題のまま。
+     記録は動かさない＝戻って眺めるだけ（2026-08-17 本人指示）。 */
+  if(a==='prevq'){
+    if(S.qi<=0)return;
+    clearFx();S.qi--;
+    var pl=(S.ansLog||{})[S.qi];
+    if(pl){S.res=pl;S.phase='exp'}else{S.res=null;S.phase='q'}
+    S.anim=null;S.enter=false;render();window.scrollTo(0,0);return;
+  }
   if(a==='next'){next();return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */

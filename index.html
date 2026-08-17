@@ -1164,6 +1164,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     <!-- 単元・小見出しから入ったときの導線。動画側（次の章へ・次の動画へ）とは排他で出す -->
     <button class="acc" type="button" data-act="nextcat" id="r-nextcat" hidden>次の単元へ</button>
     <button class="acc" type="button" data-act="nextvid" id="r-next" hidden>次の動画へ</button>
+    <!-- いま解いた範囲の動画をYouTubeで開く。『次の動画へ』は問題に飛ぶだけなので別に置く -->
+    <a class="btn" id="r-watch" target="_blank" rel="noreferrer" data-act="vwatch" hidden></a>
     <button class="pri" type="button" data-act="again" id="r-again" hidden>もう一度この範囲を解く</button>
     <button type="button" data-act="tab" data-v="home">ホームへ戻る</button>
   </div>
@@ -1209,7 +1211,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='92e83faf';
+  var DB='takken-data', STORE='blob', KEY='v1', VER='6a0d0868';
   var $=function(id){return document.getElementById(id)};
 
   function idb(){return new Promise(function(res,rej){
