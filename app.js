@@ -1232,6 +1232,15 @@ function catStat(cat){
 function wrongPool(){
   return ITEMS.filter(function(it){var r=R(it.id);return !!r&&(r.ng||0)>0&&(r.streak||0)===0});
 }
+/* その動画／その章の「間違えた問題」（2026-08-18）。数え方はホームと同じ wrongPool。 */
+function wrongInVid(vid){
+  var w={};wrongPool().forEach(function(it){w[it.id]=1});
+  return videoItemsUp(vid).filter(function(it){return w[it.id]});
+}
+function wrongInChap(vid,sec){
+  var w={};wrongPool().forEach(function(it){w[it.id]=1});
+  return chapItemsUp(vid,sec).filter(function(it){return w[it.id]});
+}
 function wrongByBigMap(){
   var m={};BIGS.forEach(function(b){m[b]=0});
   wrongPool().forEach(function(it){m[it.big]=(m[it.big]||0)+1});
@@ -2542,7 +2551,8 @@ function vUnit(c,s){
    +(s.n?(s.okn/s.n*100).toFixed(1):'0')+'%"></i></div>'
    +'<div style="display:flex;gap:8px;margin-top:12px">'
    +twoBtns('startCat',' data-c="'+esc(c)+'"',rest,s.n,'','flex:1;width:auto;margin:0')
-   +'</div></div>';
+   +'</div>'
+   +'</div>';
   /* 単元の中の小見出しは出さない（2026-08-17 本人裁定）。
      「別に小分類で区切る必要ないか。単元では残りの問題やるだけだしね。
        大体順番に出てくればいいし、出てきた問題でわからないところは動画に飛べるしね」。
@@ -2604,7 +2614,13 @@ function vStudy(){
       +'<a class="btn" href="'+vurl(v.vid,0)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(wkey)+'">'
       +IC.yt+'動画を見る</a>'
       +(vn?twoBtns('startVid',' data-v="'+esc(v.vid)+'"',restCount(videoItemsUp(v.vid)),vn,'','margin-top:8px')
-          :'<button class="btn" style="margin-top:8px" disabled>この動画の問題を解く（0問）</button>');
+          :'<button class="btn" style="margin-top:8px" disabled>この動画の問題を解く（0問）</button>')
+      /* その動画の「間違えた問題」（2026-08-18 本人指示）。ホームは全部・大分類ごとはあったが
+         動画・章ごとが無く、動画を3本またいで溜まると狙って直せなかった。
+         数え方はホームと同じ wrongPool（間違えて、まだ連続正解が0の肢）。 */
+      +(function(){var wv2=wrongInVid(v.vid).length;
+        return wv2?'<button class="btn" style="margin-top:8px" data-act="startWrongVid" data-v="'
+          +esc(v.vid)+'">間違えた '+n3(wv2)+'問</button>':''})();
     var empty=0;
     list.forEach(function(ch){
       var its=chapItemsUp(v.vid,ch.sec),n=its.length;
@@ -2645,7 +2661,11 @@ function vStudy(){
         +(rlab===ch.label?'':'<span class="chsrc">動画の章　'+esc(ch.label)+'</span>')+'</span>'
         +'<span class="badge">'+(rest>0&&rest<n?('残り '+rest):(n+'問'))+'</span>'
         +'<a class="btn sm" href="'+vurl(v.vid,ch.sec)+'" target="_blank" rel="noreferrer" data-act="vwatch" data-k="'+esc(key)+'">'+IC.yt+'</a>'
-        +(n?'<span class="chbt">'+twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(rlab)+'"',rest,n,'sm','')+'</span>':'')
+        +(n?'<span class="chbt">'+twoBtns('startChap',' data-v="'+esc(v.vid)+'" data-s="'+ch.sec+'" data-l="'+esc(rlab)+'"',rest,n,'sm','')
+            +(function(){var wc2=wrongInChap(v.vid,ch.sec).length;
+              return wc2?'<button class="btn sm" data-act="startWrongChap" data-v="'+esc(v.vid)
+                +'" data-s="'+ch.sec+'" data-l="'+esc(rlab)+'">間違い '+n3(wc2)+'</button>':''})()
+            +'</span>':'')
         +'<span class="m6-mk">'+IC.chev+'</span></summary>';
       /* 紐づけの根拠を見せる（本人の指摘「どういう基準でその問題を選んでいるか分からない」） */
       h+='<div class="m6-dtxt">';
@@ -4198,6 +4218,20 @@ document.addEventListener('click',function(e){
   }
   if(a==='startWrong'){S.round=0;S.kind='review';startQueue(wrongToday(),'今日の間違い',false);return}
   if(a==='startWrongAll'){S.round=0;S.kind='review';startQueue(wrongPool(),'間違い',false);return}
+  if(a==='startWrongVid'){
+    var wv3=t.getAttribute('data-v');
+    S.round=0;S.kind='review';S.pickExplicit=true;
+    m1ToQuiz(t,function(){startQueue(wrongInVid(wv3),(vlab(wv3)||'この動画')+' の間違い',false,wv3);
+      S.roundVid=wv3});
+    return;
+  }
+  if(a==='startWrongChap'){
+    var wc3=t.getAttribute('data-v'),ws3=+t.getAttribute('data-s'),wl3=t.getAttribute('data-l')||'章';
+    S.round=0;S.kind='review';S.pickExplicit=true;
+    m1ToQuiz(t,function(){startQueue(wrongInChap(wc3,ws3),wl3+' の間違い',false,wc3);
+      S.roundVid=wc3;S.roundSec=ws3});
+    return;
+  }
   if(a==='startWrongBig'){
     var wbg=t.getAttribute('data-b');
     S.round=0;S.kind='review';startQueue(wrongPool().filter(function(it){return it.big===wbg}),wbg+' の間違い',false);return;
