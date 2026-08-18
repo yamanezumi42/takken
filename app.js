@@ -704,6 +704,8 @@ function normST(o){
   if(['auto','strong','weak','off'].indexOf(o.settings.fx)<0)o.settings.fx='auto';
   if(typeof o.settings.sound!=='boolean')o.settings.sound=false;   /* 音は既定オフ */
   if(!o.closedSeen||typeof o.closedSeen!=='object')o.closedSeen={}; /* 最大演出を出した小分類 */
+  /* 解き切ったチェックの回（キー＝配信の時刻）。持たないと開き直したときに行が戻る。 */
+  if(!o.checkDone||typeof o.checkDone!=='object')o.checkDone={};
   if(!/^\d{4}-\d{2}-\d{2}$/.test(o.settings.exam||''))o.settings.exam=EXAM_DEFAULT;  /* 試験日 */
   if(typeof o.settings.min!=='number'||o.settings.min<10)o.settings.min=120;         /* 1日の学習時間（分） */
   if(typeof o.settings.vmin!=='number'||o.settings.vmin<0)o.settings.vmin=39;        /* うち動画を見る時間（分） */
@@ -2022,6 +2024,9 @@ function verFootHtml(){
 function checkHtml(){
   var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
   if(!ids.length)return '';
+  /* 最後まで解き切った回は出さない（2026-08-18 本人指示「最後の画面まで来たときは
+     ホーム画面に表示されないようにして欲しい」）。回の区別は CHECK.dataAt。 */
+  if(CHECK.dataAt&&(ST.checkDone||{})[CHECK.dataAt])return '';
   /* 端末のデータが、この並びのために配信したものより古いなら、押させない。
      古い図を見て「これは違う」と判断させてしまうと、正解データが汚れる。 */
   var v=window.TAKKEN_SRC||{},stale=false;
@@ -2041,6 +2046,7 @@ function startCheck(nq){
   if(!ids.length){msg('チェックする問題がありません');return}
   if(nq>0)ids=ids.slice(0,nq);
   S.pickExplicit=true;S.keepOrder=true;S.kind='review';
+  S.checkAt=CHECK.dataAt||'';          /* この回を終えたときに印を付けるため */
   startQueue(ids.map(function(i){return BY[i]}),'チェック用問題',false,null,true,false);
 }
 function flowHtml(){
@@ -4201,6 +4207,13 @@ function advance(){
     if(!S.wrongs.length&&S.roundVid){
       var vp2=vpOf(S.roundVid);
       if(videoStat(S.roundVid).done&&!vp2.completedAt)vp2.completedAt=today();
+    }
+    /* チェックの回を最後まで解き切った＝ホームから消す（本人指示 2026-08-18）。
+       解き直したいときは、私が次の回を配信すれば別の dataAt で再び出る。 */
+    if(S.checkAt){
+      if(!ST.checkDone)ST.checkDone={};
+      ST.checkDone[S.checkAt]=today();
+      S.checkAt='';saveST();
     }
     closeRunClock();     /* dropRun で ST.run が消える前に、かかった時間を確定させる */
     dropRun();S.anim=null;M2.sfx('clear');render();return;
