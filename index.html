@@ -1231,7 +1231,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='05fee817';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='8db8b10d';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1291,16 +1291,33 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       if(!todo.length){say('最新です');rec.man=man;return put(rec,KEY2).then(function(){return 0})}
       var mb=todo.reduce(function(a,p){return a+man.files[p].bytes},0)/1048576;
       var i=0;
+      /* **1ファイルごとに保存する**。最後にまとめて保存していたら、34MB×110ファイルの途中で
+         画面を離れた（iOSが裏に回した）ときに全部消えて、古いデータで起動していた
+         （2026-08-18 実機。取り込んだのに 49/55 のまま）。
+         版（sha）もファイル単位で控えるので、次に押すと**続きから**になる。 */
       function step(){
-        if(i>=todo.length){rec.man=man;return put(rec,KEY2).then(function(){return todo.length})}
+        if(i>=todo.length){
+          rec.man=man;                       /* 最後に版をそろえる（消えたファイルの掃除もここ） */
+          return put(rec,KEY2).then(function(){return todo.length});
+        }
         var p=todo[i];
-        say('取り込み中 '+(i+1)+'/'+todo.length+'（'+mb.toFixed(1)+'MB）');
-        return ghGet(p).then(function(o){rec.parts[p]=o;i++;return step()});
+        say('取り込み中 '+(i+1)+'/'+todo.length+'（残り '+mb.toFixed(1)+'MB）');
+        return ghGet(p).then(function(o){
+          rec.parts[p]=o;
+          if(!rec.man)rec.man={files:{}};
+          if(!rec.man.files)rec.man.files={};
+          rec.man.files[p]=man.files[p];     /* この1件は取り終えた、と控える */
+          mb-=man.files[p].bytes/1048576; if(mb<0)mb=0;
+          i++;
+          return put(rec,KEY2).then(step);   /* ここで保存＝途中で切れても残る */
+        });
       }
       return step();
     });
   }
   window.TAKKEN_SYNC=ghSync;
+  /* いまどのデータで動いているか（設定に出して食い違いを見つけるため） */
+  window.TAKKEN_SRC={src:'なし',n:0,files:0};
 
   function idb(){return new Promise(function(res,rej){
     var r=indexedDB.open(DB,1);
@@ -1377,10 +1394,17 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   get(KEY2).then(function(r2){
     if(r2&&r2.parts&&r2.parts['items_index.json']&&!force){
       var d2=assemble(r2);
-      if(d2.items.length){apply(d2);boot();return null}
+      if(d2.items.length){
+        window.TAKKEN_SRC={src:'リポジトリ（data）',n:d2.items.length,
+          files:Object.keys((r2.man&&r2.man.files)||{}).length};
+        apply(d2);boot();return null;
+      }
     }
     return get(KEY).then(function(d){
-      if(d&&d.items&&d.items.length&&!force){apply(d);boot();return null}
+      if(d&&d.items&&d.items.length&&!force){
+        window.TAKKEN_SRC={src:'手渡しのファイル（takken_data.json）',n:d.items.length,files:1};
+        apply(d);boot();return null;
+      }
       ask(force?'入れ直します。':'');
       return null;
     });

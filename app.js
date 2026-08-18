@@ -3727,7 +3727,9 @@ function dataSheet(){
    +'<button class="btn sm" style="width:auto" data-act="datapull" id="dpbtn">問題データを更新</button></div>'
    /* 進み具合は**ボタンのすぐ下**に出す。シート末尾の #msg に書いていたので、
       押しても画面外に文字が出るだけで「なにもならない」ように見えていた（2026-08-18 本人報告）。 */
-   +'<div class="mini" id="dpstat" style="margin-top:6px;min-height:16px"></div>'
+   +'<div class="mini" id="dpstat" style="margin-top:6px;min-height:16px">'
+   +(window.TAKKEN_SRC?('いま使っているデータ＝'+esc(window.TAKKEN_SRC.src)+'／'
+      +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'):'')+'</div>'
    +'<div class="mini" style="margin-top:2px">問題・図は '+esc(GH().repo||'—')
    +' の <b>data</b> ブランチから取り込みます（記録は main。触りません）。'
    +'変わったファイルだけ落とすので数百KBで済みます。</div>'
