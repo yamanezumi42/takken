@@ -39,7 +39,11 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
    OKが出たら次の範囲へ広げる。ここは私が書き換えて配信する＝殻に入るので
    takken_data.json を渡し直さなくていい（32MBを毎回渡すのは現実的でない）。
    ids は「順番が意味を持つ」＝並べ替えない（keepOrder）。 */
-var CHECK={label:'図の当て直し 1問目',note:'2025年問35 従たる事務所の供託先',ids:['b5_3-001-3']};
+/* dataAt ＝ この並びに合わせて問題データを配信した時刻。
+   端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
+   「降りてないものを端末で確認させようとしてたってこと?」）。 */
+var CHECK={label:"図の当て直し 1問目",note:"2025年問35 従たる事務所の供託先。図=誰がどこにいくら1枚／章=vPqH2kByVKU@366（増設の流れ）",
+  dataAt:"2026-08-18 15:00",ids:["b5_3-001-3"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -2012,6 +2016,18 @@ function verLineHtml(){
 function checkHtml(){
   var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
   if(!ids.length)return '';
+  /* 端末のデータが、この並びのために配信したものより古いなら、押させない。
+     古い図を見て「これは違う」と判断させてしまうと、正解データが汚れる。 */
+  var v=window.TAKKEN_SRC||{},stale=false;
+  if(CHECK.dataAt){
+    var at=String(v.at||'');
+    stale=(at<CHECK.dataAt);
+  }
+  if(stale)return '<div class="panel" style="margin-bottom:12px;border-color:#e8cfcf;background:#fdf5f5">'
+    +'<div class="mini" style="line-height:1.8">直した分をチェック（'+esc(CHECK.label||'')+'）<br>'
+    +'<b>まだチェックできません。</b>端末のデータがこの直しより古いです'
+    +'（端末 '+esc(v.at||'未取得')+' ／ 必要 '+esc(CHECK.dataAt)+'）。<br>'
+    +'上の行の「確認」を押してデータを取り込んでから、もう一度ここを見てください。</div></div>';
   var ns=[1,3,5,10],h='<div class="panel" style="margin-bottom:12px;border-color:#cfd8e8;background:#f5f8fd">'
     +'<div class="mini" style="margin-bottom:2px">直した分をチェック</div>'
     +'<div style="font-weight:600;margin-bottom:2px">'+esc(CHECK.label||'（無題）')+' '+ids.length+'問</div>'
