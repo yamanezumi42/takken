@@ -42,8 +42,8 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"チェック用問題",note:"報告を受けて直した3問。写しの添付＝該当なし／不足額の有価証券＝#8の図も足して2枚",
-  dataAt:"2026-08-18 20:14",ids:["b5_3-011-2", "b5_3-021-4", "b5_5-084-1"]};
+var CHECK={label:"チェック用問題",note:"規則を変えて #9 に戻ってきた2問。判定は #9 の481秒（取戻しの原則）と626秒（公告不要の例外）。図は正解データと同じ2枚。",
+  dataAt:"2026-08-18 21:37",ids:["b5_4-001-4", "b5_4-008-2"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -331,10 +331,31 @@ function isJudged(v){
   var w=v&&v.why;
   return !!(w&&w.length===1&&w[0]===JMARK);
 }
+/* ---------- 一覧・順序に使うリンク（2026-08-18 本人判断で規則を変えた） ----------
+   判定（肢→動画）は「判定した1本を足すだけで、元の機械リンクを消さない」設計
+   （tools/apply_retopic.py が意図的にそうしている＝基準の動画 chapFor() を守るため）。
+   そのため **判定済みの肢が、判定していない機械リンクのせいで「習っていない動画」の
+   問題一覧に居座る**。実測3,202肢。#9 営業保証金2 が「44問OKなのに終われない」のがこれで、
+   保証協会の還付の肢（判定済みは #11）が #9 の『営業保証金の還付』章に載っていた。
+
+   規則＝**チャンネルごとに、判定済みのリンクがあれば判定済みだけを一覧に使う。**
+   ・判定がまだのチャンネルは今までどおり機械リンクを使う（＝判定が届いていない肢は消えない）
+   ・**肢の下に出す動画のリンク（vidsOf）は今までどおり全部出す**＝飛べる先は減らさない
+   ・data 側の need_seq も同じ規則で引き直す（tools/links_rule.py が唯一の実装）
+   ・数え方を写した python＝tools/vid_items.py（app.html のこの箇所を sha で照合して止まる） */
+function vidsForList(it){
+  var vs=vidsOf(it),by={},out=[],i,sc;
+  for(i=0;i<vs.length;i++){sc=VSRC[vs[i].vid]||'';(by[sc]=by[sc]||[]).push(vs[i])}
+  Object.keys(by).forEach(function(k){
+    var a=by[k],p=a.filter(function(v){return v.pick||isJudged(v)});
+    out=out.concat(p.length?p:a);
+  });
+  return out;
+}
 var VIDIDS={},CHIDS={},CHIDS2={},SECOK={},NOVID=[],IPOS={},JLINKN=0,JSPAN=0;
 ITEMS.forEach(function(it,ix){
   IPOS[it.id]=ix;                         /* 章の中の並びを元の順に保つための位置 */
-  var vs=vidsOf(it);
+  var vs=vidsForList(it);
   if(!vs.length){NOVID.push(it.id);return}
   var seen={};
   vs.forEach(function(v){
