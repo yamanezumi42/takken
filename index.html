@@ -1231,7 +1231,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='e96e0017';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='42ed2ac2';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1262,6 +1262,15 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         return r.text();
       }).then(function(t){return JSON.parse(t)});
   }
+  /* 端末の時刻で「YYYY-MM-DD HH:MM」。CHECK.dataAt と文字で比べるので同じ形にする。 */
+  function stamp(){
+    var d=new Date(),z=function(x){return (x<10?'0':'')+x};
+    return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes());
+  }
+  function srcAt(at){
+    if(window.TAKKEN_SRC)window.TAKKEN_SRC.at=at;
+    try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
+  }
   /* parts（ファイルごとの中身）から、アプリが読む形に組み立てる。 */
   function assemble(rec){
     var idx=rec.parts['items_index.json']||[],items=[],figs={};
@@ -1288,7 +1297,12 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         if(!have[p]||have[p].sha!==man.files[p].sha)todo.push(p);
       });
       Object.keys(rec.parts).forEach(function(p){if(!man.files[p])delete rec.parts[p]});
-      if(!todo.length){say('最新です');rec.man=man;return put(rec,KEY2).then(function(){return 0})}
+      if(!todo.length){
+        /* 落とすものが無くても**確認した時刻は刻む**。刻まないと版がいつまでも
+           「未取得」のままで、チェックのボタンが出ない（2026-08-18 実機）。 */
+        say('最新です');rec.man=man;rec.at=stamp();
+        return put(rec,KEY2).then(function(){srcAt(rec.at);return 0});
+      }
       var mb=todo.reduce(function(a,p){return a+man.files[p].bytes},0)/1048576;
       var i=0;
       /* **1ファイルごとに保存する**。最後にまとめて保存していたら、34MB×110ファイルの途中で
@@ -1298,8 +1312,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       function step(){
         if(i>=todo.length){
           rec.man=man;                       /* 最後に版をそろえる（消えたファイルの掃除もここ） */
-          rec.at=new Date().toISOString().slice(0,16).replace('T',' ');
-          return put(rec,KEY2).then(function(){return todo.length});
+          rec.at=stamp();
+          return put(rec,KEY2).then(function(){srcAt(rec.at);return todo.length});
         }
         var p=todo[i];
         say('取り込み中 '+(i+1)+'/'+todo.length+'（残り '+mb.toFixed(1)+'MB）');

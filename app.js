@@ -4362,6 +4362,7 @@ document.addEventListener('click',function(e){
   if(a==='startCheck'){startCheck(+(t.getAttribute('data-n')||0));return}
   if(a==='datapull'){dataPull();return}
   if(a==='dreload'){location.reload();return}
+  /* 版が変わったらホームを描き直す（チェックの行の出し入れがすぐ効くように） */
   /* 記録のリセット。押し間違いは戻せないので、必ず件数を出して確認を取る。 */
   if(a==='vreset'){vResetAsk(t.getAttribute('data-v'));return}
   if(a==='vresetgo'){vResetGo(t.getAttribute('data-v'));return}
