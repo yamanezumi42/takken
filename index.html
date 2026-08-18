@@ -1094,6 +1094,10 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 #importer .impnote{font-size:13px;line-height:1.9;color:var(--muted);margin:0 0 18px}
 #importer .impbtn{display:block;text-align:center;background:var(--fg);color:#fff;
                   border-radius:var(--btnradius);padding:14px 0;font-size:14px;font-weight:500}
+#importer .impbtn+.impbtn,#importer .impbtn+.impsub{margin-top:8px}
+#importer .impsub{background:transparent;color:var(--fg);border:1px solid var(--line)}
+#importer button.impbtn{width:100%;border:0;font-family:inherit}
+#importer button.impbtn:disabled{opacity:.45}
 #importer .impstat{font-size:12px;color:var(--muted);margin-top:12px;min-height:18px;text-align:center}
 
 </style>
@@ -1215,7 +1219,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       端末に保存した <b>takken_data.json</b> を選んでください。<br>
       一度読み込めば、次からは自動で開きます。
     </p>
-    <label class="impbtn" for="impfile">ファイルを選ぶ</label>
+    <button class="impbtn" id="impgh" hidden>GitHubから取り込む</button>
+    <label class="impbtn impsub" for="impfile">ファイルを選ぶ</label>
     <input id="impfile" type="file" accept="application/json,.json" hidden>
     <div class="impstat" id="impstat"></div>
   </div>
@@ -1226,8 +1231,75 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', VER='22f10c56';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='0aa70086';
   var $=function(id){return document.getElementById(id)};
+  /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
+     34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
+       manifest.json … 各ファイルの sha だけ（5KB）。まずこれを見る
+       items/NN.json … 単元ごとの問題（平均343KB）
+       figs/NN_k.json … 図の束（最大591KB）
+     置き場所は非公開リポジトリ＝公開ホスティングはしない（解説は転載禁止）。
+     トークンは端末の localStorage のみ（記録の保存で既に入っているものを使う）。
+     所有者は記録用リポジトリ（owner/takken-records）の owner から取り、名前は takken-data。 */
+  var DATAREPO='takken-data';
+  function ghConf(){
+    try{
+      var st=JSON.parse(localStorage.getItem('takken_v1')||'{}');
+      var g=(st.settings&&st.settings.gh)||{};
+      var owner=String(g.repo||'').split('/')[0]||'';
+      return {owner:owner,token:g.token||'',repo:owner?owner+'/'+DATAREPO:''};
+    }catch(e){return {owner:'',token:'',repo:''}}
+  }
+  /* 1MB を超えるファイルは raw で取らないと中身が返らない（contents API の仕様）。 */
+  function ghGet(path){
+    var c=ghConf();
+    return fetch('https://api.github.com/repos/'+c.repo+'/contents/'+path+'?ref=main',
+      {headers:{Authorization:'Bearer '+c.token,Accept:'application/vnd.github.raw',
+                'X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'})
+      .then(function(r){
+        if(!r.ok)throw new Error(path+' が取れません（'+r.status+'）');
+        return r.text();
+      }).then(function(t){return JSON.parse(t)});
+  }
+  /* parts（ファイルごとの中身）から、アプリが読む形に組み立てる。 */
+  function assemble(rec){
+    var idx=rec.parts['items_index.json']||[],items=[],figs={};
+    idx.forEach(function(r){var a=rec.parts[r.file];if(a&&a.length)items=items.concat(a)});
+    Object.keys(rec.parts).forEach(function(p){
+      if(p.indexOf('figs/')===0){var o=rec.parts[p];for(var k in o)figs[k]=o[k]}
+    });
+    return {items:items,chapters:rec.parts['chapters.json']||{},
+            curriculum:rec.parts['curriculum.json']||null,figs:figs};
+  }
+  /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
+  function ghSync(onStat){
+    var c=ghConf();
+    if(!c.token||!c.owner)return Promise.reject(new Error('トークンが未設定です（設定＝データ）'));
+    var rec=null;
+    var say=onStat||function(){};
+    say('版を確認しています…');
+    return get(KEY2).then(function(r){
+      rec=r||{man:{files:{}},parts:{}};
+      return ghGet('manifest.json');
+    }).then(function(man){
+      var have=(rec.man&&rec.man.files)||{},todo=[];
+      Object.keys(man.files).forEach(function(p){
+        if(!have[p]||have[p].sha!==man.files[p].sha)todo.push(p);
+      });
+      Object.keys(rec.parts).forEach(function(p){if(!man.files[p])delete rec.parts[p]});
+      if(!todo.length){say('最新です');rec.man=man;return put(rec,KEY2).then(function(){return 0})}
+      var mb=todo.reduce(function(a,p){return a+man.files[p].bytes},0)/1048576;
+      var i=0;
+      function step(){
+        if(i>=todo.length){rec.man=man;return put(rec,KEY2).then(function(){return todo.length})}
+        var p=todo[i];
+        say('取り込み中 '+(i+1)+'/'+todo.length+'（'+mb.toFixed(1)+'MB）');
+        return ghGet(p).then(function(o){rec.parts[p]=o;i++;return step()});
+      }
+      return step();
+    });
+  }
+  window.TAKKEN_SYNC=ghSync;
 
   function idb(){return new Promise(function(res,rej){
     var r=indexedDB.open(DB,1);
@@ -1235,13 +1307,13 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     r.onsuccess=function(){res(r.result)};
     r.onerror=function(){rej(r.error)};
   })}
-  function get(){return idb().then(function(d){return new Promise(function(res,rej){
-    var t=d.transaction(STORE,'readonly').objectStore(STORE).get(KEY);
+  function get(k){return idb().then(function(d){return new Promise(function(res,rej){
+    var t=d.transaction(STORE,'readonly').objectStore(STORE).get(k||KEY);
     t.onsuccess=function(){res(t.result||null)};t.onerror=function(){rej(t.error)};
   })})}
-  function put(v){return idb().then(function(d){return new Promise(function(res,rej){
+  function put(v,k){return idb().then(function(d){return new Promise(function(res,rej){
     var t=d.transaction(STORE,'readwrite');
-    t.objectStore(STORE).put(v,KEY);
+    t.objectStore(STORE).put(v,k||KEY);
     t.oncomplete=function(){res(true)};t.onerror=function(){rej(t.error)};
   })})}
 
@@ -1268,6 +1340,19 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     var im=$('importer'); im.hidden=false;
     var b=$('m6boot'); if(b)b.style.display='none';
     if(msg)$('impstat').textContent=msg;
+    /* トークンがあるときだけ「GitHubから取り込む」を出す */
+    var gb=$('impgh'),c=ghConf();
+    if(gb&&c.token&&c.owner){
+      gb.hidden=false;
+      gb.onclick=function(){
+        gb.disabled=true;
+        ghSync(function(t){$('impstat').textContent=t})
+          .then(function(){$('impstat').textContent='取り込みました。開き直します。';
+                           setTimeout(function(){location.reload()},400)})
+          .catch(function(err){gb.disabled=false;
+                 $('impstat').textContent=(err&&err.message)||'取り込めませんでした'});
+      };
+    }
     $('impfile').onchange=function(e){
       var f=e.target.files&&e.target.files[0]; if(!f)return;
       $('impstat').textContent='読み込み中…（'+(f.size/1048576).toFixed(1)+'MB）';
@@ -1286,9 +1371,18 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   }
 
   var force=(location.hash||'').indexOf('import')>=0;
-  get().then(function(d){
-    if(d&&d.items&&d.items.length&&!force){apply(d);boot()}
-    else ask(force?'入れ直します。ファイルを選んでください。':'');
+  /* v2（非公開リポジトリから取り込んだ分）を優先。無ければ v1（手渡しの34MB）で起動する
+     ＝トークンが無くても今まで通り動く。 */
+  get(KEY2).then(function(r2){
+    if(r2&&r2.parts&&r2.parts['items_index.json']&&!force){
+      var d2=assemble(r2);
+      if(d2.items.length){apply(d2);boot();return null}
+    }
+    return get(KEY).then(function(d){
+      if(d&&d.items&&d.items.length&&!force){apply(d);boot();return null}
+      ask(force?'入れ直します。':'');
+      return null;
+    });
   }).catch(function(){ ask('この端末では保存領域が使えません。ホーム画面に追加してから開いてください。') });
 
   /* オフラインで起動できるようにする（殻だけキャッシュ。データは上のIndexedDB） */

@@ -3721,6 +3721,12 @@ function dataSheet(){
    +'<div class="rowx" style="gap:8px;margin-top:8px">'
    +'<button class="btn sm" style="width:auto" data-act="ghpush">今すぐ上げる</button>'
    +'<button class="btn sm" style="width:auto" data-act="ghpull">記録を取り戻す</button></div>'
+   /* 問題データを非公開リポジトリから取り込む（2026-08-18 本人指示。34MBの手渡しをやめる）。
+      落ちてくるのは**変わったファイルだけ**＝単元1つなら約340KB、図1枚なら最大591KB。 */
+   +'<div class="rowx" style="gap:8px;margin-top:8px">'
+   +'<button class="btn sm" style="width:auto" data-act="datapull">問題データを更新</button></div>'
+   +'<div class="mini" style="margin-top:6px">問題・図は '+esc((GH().repo||'—').split('/')[0]||'—')
+   +'/takken-data（非公開）から取り込みます。変わったファイルだけ落とすので数百KBで済みます。</div>'
    +'<div class="mini" style="margin-top:6px">最後に上げた '+(GH().at?esc(GH().at):'—')
    +(GH().err?' ／ <span style="color:var(--ngdeep)">'+esc(GH().err)+'</span>':'')
    +'<br>トークンはこの端末の中だけに保存します（公開されるコードには入りません）。'
@@ -3780,6 +3786,20 @@ function ghSave(){
   var o={repo:repo,err:''};
   if(tok&&tok.indexOf('•')<0)o.token=tok;      /* 伏せ字のままなら変更しない */
   ghSet(o);msg('保存しました');dataSheet();
+}
+/* 非公開リポジトリから問題データを取り込む（2026-08-18 本人指示）。
+   仕組みは殻の側（build_pwa の LOADER）にある＝アプリより先に動く必要があるため。
+   ここはその呼び出し口。単体の app.html（配信前の確認用）には無いので、無ければ断る。 */
+function dataPull(){
+  if(typeof window.TAKKEN_SYNC!=='function'){
+    msg('この画面では使えません（配信版のアプリで押してください）');return;
+  }
+  msg('データを確認しています…');
+  window.TAKKEN_SYNC(function(t){msg(t)}).then(function(n){
+    if(!n){msg('最新です');return}
+    msg(n+'ファイルを取り込みました。開き直します');
+    setTimeout(function(){location.reload()},700);
+  }).catch(function(err){msg((err&&err.message)||'取り込めませんでした')});
 }
 function ghHeaders(){return {Authorization:'Bearer '+GH().token,Accept:'application/vnd.github+json',
   'X-GitHub-Api-Version':'2022-11-28'}}
@@ -4230,6 +4250,7 @@ document.addEventListener('click',function(e){
   }
   if(a==='next'){next();return}
   if(a==='startCheck'){startCheck(+(t.getAttribute('data-n')||0));return}
+  if(a==='datapull'){dataPull();return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
   /* 選んだだけでは保存しない＝**送信で確定**（2026-08-18 本人の設計）。 */
