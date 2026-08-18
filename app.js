@@ -42,8 +42,8 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"図の当て直し 1問目",note:"2025年問35 従たる事務所の供託先。図=誰がどこにいくら1枚／章=vPqH2kByVKU@366（増設の流れ）",
-  dataAt:"2026-08-18 15:00",ids:["b5_3-001-3"]};
+var CHECK={label:"図の当て直し 1問目",note:"2025年問35 従たる事務所の供託先。図=誰がどこにいくら1枚／章=vPqH2kByVKU@366",
+  dataAt:"2026-08-18 15:12",ids:["b5_3-001-3"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -2005,10 +2005,9 @@ function verLineHtml(){
       +(v.busy?'<br>'+esc(v.busy):'')
       +(v.err?'<br><span style="color:var(--ngdeep)">'+esc(v.err)+'</span>':'')
     +'</div>';
-  /* ふだんは押す必要がない（起動時に自動で取り込み、入れば読み込み直す）。
-     出題中に新しいデータが来たときだけ「開き直す」を出す。「確認」は保険。 */
+  /* 押すボタンは置かない（起動時に勝手に取り込んで読み込み直す。2026-08-18 本人「いらんだろ」）。
+     出題中に新しいデータが来たときだけ「開き直す」を出す＝本人が区切りを決められるように。 */
   if(v.pending)s+='<button class="btn sm" style="width:auto" data-act="dreload">開き直す</button>';
-  else s+='<button class="btn sm" style="width:auto" data-act="datapull">確認</button>';
   return s+'</div>'+(v.pending?'<div class="mini" style="margin:-6px 0 12px">新しいデータを '
     +v.pending+'ファイル取り込みました。開き直すと反映されます。</div>':'')+'</div>';
 }
@@ -2029,7 +2028,7 @@ function checkHtml(){
     +'<div class="mini" style="line-height:1.8">直した分をチェック（'+esc(CHECK.label||'')+'）<br>'
     +'<b>まだチェックできません。</b>端末のデータがこの直しより古いです'
     +'（端末 '+esc(v.at||'未取得')+' ／ 必要 '+esc(CHECK.dataAt)+'）。<br>'
-    +'上の行の「確認」を押してデータを取り込んでから、もう一度ここを見てください。</div></div>';
+    +'アプリを閉じて開き直すと、自動で取り込みます。</div></div>';
   var ns=[1,3,5,10],h='<div class="panel" style="margin-bottom:12px;border-color:#cfd8e8;background:#f5f8fd">'
     +'<div class="mini" style="margin-bottom:2px">直した分をチェック</div>'
     +'<div style="font-weight:600;margin-bottom:2px">'+esc(CHECK.label||'（無題）')+' '+ids.length+'問</div>'
@@ -3816,13 +3815,9 @@ function dataSheet(){
    +'<div class="rowx" style="gap:8px;margin-top:8px">'
    +'<button class="btn sm" style="width:auto" data-act="ghpush">今すぐ上げる</button>'
    +'<button class="btn sm" style="width:auto" data-act="ghpull">記録を取り戻す</button></div>'
-   /* 問題データを非公開リポジトリから取り込む（2026-08-18 本人指示。34MBの手渡しをやめる）。
-      落ちてくるのは**変わったファイルだけ**＝単元1つなら約340KB、図1枚なら最大591KB。 */
-   +'<div class="rowx" style="gap:8px;margin-top:8px">'
-   +'<button class="btn sm" style="width:auto" data-act="datapull" id="dpbtn">問題データを更新</button></div>'
-   /* 進み具合は**ボタンのすぐ下**に出す。シート末尾の #msg に書いていたので、
-      押しても画面外に文字が出るだけで「なにもならない」ように見えていた（2026-08-18 本人報告）。 */
-   +'<div class="mini" id="dpstat" style="margin-top:6px;min-height:16px">'
+   /* 問題データは**起動時に勝手に取り込む**。押すボタンは置かない（2026-08-18 本人指示）。
+      ここには「いま何で動いているか」だけ出す。 */
+   +'<div class="mini" id="dpstat" style="margin-top:8px;min-height:16px">'
    +(window.TAKKEN_SRC?('いま使っているデータ＝'+esc(window.TAKKEN_SRC.src)+'／'
       +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'):'')+'</div>'
    +'<div class="mini" style="margin-top:2px">問題・図は '+esc(GH().repo||'—')

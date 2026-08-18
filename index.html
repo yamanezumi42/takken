@@ -1231,7 +1231,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='bb840ce7';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='aab3895e';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1300,8 +1300,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       if(!todo.length){
         /* 落とすものが無くても**確認した時刻は刻む**。刻まないと版がいつまでも
            「未取得」のままで、チェックのボタンが出ない（2026-08-18 実機）。 */
-        say('最新です');rec.man=man;rec.at=stamp();
-        return put(rec,KEY2).then(function(){srcAt(rec.at);return 0});
+        say('最新です（'+(man.builtAt||'')+'）');rec.man=man;rec.at=stamp();
+        return put(rec,KEY2).then(function(){srcAt(man.builtAt||rec.at);return 0});
       }
       var mb=todo.reduce(function(a,p){return a+man.files[p].bytes},0)/1048576;
       var i=0;
@@ -1313,7 +1313,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         if(i>=todo.length){
           rec.man=man;                       /* 最後に版をそろえる（消えたファイルの掃除もここ） */
           rec.at=stamp();
-          return put(rec,KEY2).then(function(){srcAt(rec.at);return todo.length});
+          return put(rec,KEY2).then(function(){srcAt(man.builtAt||rec.at);return todo.length});
         }
         var p=todo[i];
         say('取り込み中 '+(i+1)+'/'+todo.length+'（残り '+mb.toFixed(1)+'MB）');
@@ -1451,7 +1451,9 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         window.TAKKEN_SRC.src='リポジトリ';
         window.TAKKEN_SRC.n=d2.items.length;
         window.TAKKEN_SRC.files=Object.keys((r2.man&&r2.man.files)||{}).length;
-        window.TAKKEN_SRC.at=r2.at||'';
+        /* 版の時刻は**データ自身の builtAt**（サーバ側の事実）を正とする。
+           端末側で書く rec.at は、書けなかったときに空になる（2026-08-18 実機）。 */
+        window.TAKKEN_SRC.at=((r2.man&&r2.man.builtAt)||r2.at||'');
         apply(d2);boot();autoSync();return null;
       }
     }
