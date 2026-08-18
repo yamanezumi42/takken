@@ -42,8 +42,8 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"チェック用問題",note:"届出後でなければ開始不可／併用可／供託先／変換と地方債90%／支店2つ1000万",
-  dataAt:"2026-08-18 16:20",ids:["b5_3-003-イ", "b5_3-005-3", "b5_3-006-1", "b5_3-019-3", "b5_3-022-1"]};
+var CHECK={label:"チェック用問題",note:"round5の4問をやり直し（前回は図が届く前に解かれた）",
+  dataAt:"2026-08-18 16:44",ids:["b5_3-005-3", "b5_3-006-1", "b5_3-019-3", "b5_3-022-1"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -2013,7 +2013,7 @@ function verFootHtml(){
   var v=window.TAKKEN_SRC;
   if(!v)return '';
   return '<div class="mini" style="margin-top:18px;opacity:.45;font-size:10px;text-align:right">'
-    +esc(v.at||'—')+'　'+n3(v.n||0)+'問　'+esc(String(v.ver||'?'))+'</div>';
+    +esc(v.at||'—')+'　'+n3(v.n||0)+'問　図'+(v.figs||0)+'　'+esc(String(v.ver||'?'))+'</div>';
 }
 /* 私が直した問題だけを、直した順に確かめる（2026-08-18 本人指定）。
    1問→3問→5問→10問→全部 と段を上げ、OKが出てから次の範囲へ広げる。
