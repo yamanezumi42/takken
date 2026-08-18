@@ -1231,7 +1231,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='42ed2ac2';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='bb840ce7';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1420,7 +1420,19 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         try{window.dispatchEvent(new Event('takken-data'))}catch(e){}})
         .then(function(k){
           window.TAKKEN_SRC.busy='';
-          if(k)window.TAKKEN_SRC.pending=k;
+          if(k){
+            /* 新しいデータが入ったら**勝手に読み込み直す**（本人指示 2026-08-18
+               「毎回起動時に確認を押さずに勝手に更新すればよくない?」）。
+               ただし**出題中は入れ替えない**（解いている途中で問題が変わると危ない）。
+               その場合は「開き直す」を出して本人に任せる。 */
+            var busy=false;
+            try{
+              var st=JSON.parse(localStorage.getItem('takken_v1')||'{}');
+              busy=!!(st.run&&st.run.queue&&st.run.queue.length);
+            }catch(e2){}
+            if(!busy){location.reload();return}
+            window.TAKKEN_SRC.pending=k;
+          }
           try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
         }).catch(function(err){
           window.TAKKEN_SRC.busy='';

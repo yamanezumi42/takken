@@ -2005,6 +2005,8 @@ function verLineHtml(){
       +(v.busy?'<br>'+esc(v.busy):'')
       +(v.err?'<br><span style="color:var(--ngdeep)">'+esc(v.err)+'</span>':'')
     +'</div>';
+  /* ふだんは押す必要がない（起動時に自動で取り込み、入れば読み込み直す）。
+     出題中に新しいデータが来たときだけ「開き直す」を出す。「確認」は保険。 */
   if(v.pending)s+='<button class="btn sm" style="width:auto" data-act="dreload">開き直す</button>';
   else s+='<button class="btn sm" style="width:auto" data-act="datapull">確認</button>';
   return s+'</div>'+(v.pending?'<div class="mini" style="margin:-6px 0 12px">新しいデータを '
@@ -4391,6 +4393,9 @@ document.addEventListener('click',function(e){
     if(S.ansSnap&&S.ansSnap.id===si)undoAns(S.ansSnap);else saveST();
     S.ansSnap=null;S.repDraft=null;
     if(S.ansLog)delete S.ansLog[S.qi];        /* 戻ったときに解説を出さない＝未解答に戻す */
+    /* 報告は**送った直後に上げる**（本人指示 2026-08-18）。起動時と完走時だけだと、
+       私が報告を読めるのが遅れて、直しの往復が伸びる。 */
+    try{ghAuto('report')}catch(e3){}
     msg('報告しました（'+d2.tags.join('・')+'）／この問題はパス＝まだ解いてない問題に戻します');
     setTimeout(function(){next()},900);
     return;
