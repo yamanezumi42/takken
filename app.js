@@ -2030,18 +2030,10 @@ function checkHtml(){
   }
   if(stale)return '<div class="mini" style="margin-bottom:12px;color:var(--ngdeep)">'
     +'チェック用問題は、アプリを開き直すと出ます</div>';
-  /* 名前は「チェック用問題」（2026-08-18 本人指定）。説明は出さない（本人「いらん説明は
-     入れなくていい」）。他の行と同じ平らな見え方にする。 */
-  var ns=[1,3,5,10],h='<div class="panel" style="margin-bottom:12px">'
-    +'<div class="spread" style="margin-bottom:8px">'
-    +'<div style="font-weight:600">チェック用問題</div>'
-    +'<div class="mini">'+ids.length+'問</div></div>'
-    +'<div class="whys">';
-  ns.forEach(function(k){
-    if(k<=ids.length)h+='<button class="tog" data-act="startCheck" data-n="'+k+'">'+k+'問</button>';
-  });
-  if(ids.length>1)h+='<button class="tog" data-act="startCheck" data-n="0">全部</button>';
-  return h+'</div></div>';
+  /* ボタンは1つだけ（2026-08-18 本人「基本的にチェックは全部やるからチェックするっていう
+     ボタンだけでいい」）。1問/3問…の出し分けは要らなかった。 */
+  return '<button class="frow" data-act="startCheck" data-n="0">'
+    +'<span>チェック用問題</span><span class="fst">'+ids.length+'問'+IC.chev+'</span></button>';
 }
 function startCheck(nq){
   var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
