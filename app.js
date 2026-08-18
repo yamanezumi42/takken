@@ -1930,7 +1930,7 @@ function vHome(){
   /* 今日の流れ＝終わったもの・いま・まだ。学習の順は「動画を見る → その動画の問題を解く」
      なので、その3つを順に並べる（2026-08-14 確定）。数字の枠はホームから外し、
      抜き打ちと間違いは復習の画面に集約した＝引き算の原則。 */
-  h+=verLineHtml();      /* 版の行＝出どころ・問題数・殻の版。押すと確認しに行く */
+  h+=verLineHtml();      /* 出題中に新しいデータが来たとき／失敗したときだけ出る */
   h+=checkHtml();        /* 私が直した分のチェック（CHECK が空のときは何も出ない） */
   h+=flowHtml();
 
@@ -1947,6 +1947,7 @@ function vHome(){
   /* ホームにボタンは置かない（2026-08-16 本人指示。「動画を見る」「問題を解く」に続いて
      「単元学習」も不要）。入口は下のタブ＝学習タブに一本化する。 */
   h+='</div>';
+  h+=verFootHtml();      /* データの版＝隅に小さく（押せない） */
   return h;
 }
 /* その大分類を「今日の流れ」で解禁する動画たち。
@@ -1992,24 +1993,27 @@ function vidsLeft(){
    「どれが動いているか」を毎回聞くことになっていた。**常時出す**。
    iOSはホーム画面のアプリとSafariで保存領域が別なので、それも出す。
    取り込むものがあれば「開き直す」を出す（勉強中に勝手に入れ替えない）。 */
+/* データの版＝**隅に小さく**（2026-08-18 本人「目立たせなくていい。隅の方でよく見ると
+   あるくらいでいい」）。枠もボタンも置かない。困ったときだけ読めればよい。
+   例外は2つ＝①出題中に新しいデータが来た（開き直す）②取り込みに失敗した（理由を出す）。 */
 function verLineHtml(){
   var v=window.TAKKEN_SRC;
-  if(!v)return '<div class="mini" style="margin-bottom:10px;opacity:.6">データ＝この画面では不明（配信版で見てください）</div>';
-  var s='<div class="panel" style="margin-bottom:12px;padding:10px 12px">'
-    +'<div class="rowx" style="gap:8px;align-items:center">'
-    +'<div class="mini" style="flex:1;line-height:1.7">'
-      +'データ <b>'+esc(v.src||'なし')+'</b>／'+n3(v.n||0)+'問'
-      +(v.files>1?'／'+v.files+'ファイル':'')
-      +(v.at?'／'+esc(v.at):'')
-      +'<br>殻 '+esc(String(v.ver||'?'))+'／'+esc(v.ctx||'?')
-      +(v.busy?'<br>'+esc(v.busy):'')
-      +(v.err?'<br><span style="color:var(--ngdeep)">'+esc(v.err)+'</span>':'')
-    +'</div>';
-  /* 押すボタンは置かない（起動時に勝手に取り込んで読み込み直す。2026-08-18 本人「いらんだろ」）。
-     出題中に新しいデータが来たときだけ「開き直す」を出す＝本人が区切りを決められるように。 */
-  if(v.pending)s+='<button class="btn sm" style="width:auto" data-act="dreload">開き直す</button>';
-  return s+'</div>'+(v.pending?'<div class="mini" style="margin:-6px 0 12px">新しいデータを '
-    +v.pending+'ファイル取り込みました。開き直すと反映されます。</div>':'')+'</div>';
+  if(!v)return '';
+  if(v.pending)
+    return '<div class="rowx" style="gap:8px;align-items:center;margin-bottom:10px">'
+      +'<span class="mini" style="flex:1">新しいデータがあります</span>'
+      +'<button class="btn sm" style="width:auto" data-act="dreload">開き直す</button></div>';
+  if(v.err)
+    return '<div class="mini" style="margin-bottom:10px;color:var(--ngdeep)">'
+      +esc(v.err)+'</div>';
+  return '';
+}
+/* 隅の1行（ホームの末尾）。押せない・小さい・薄い。 */
+function verFootHtml(){
+  var v=window.TAKKEN_SRC;
+  if(!v)return '';
+  return '<div class="mini" style="margin-top:18px;opacity:.45;font-size:10px;text-align:right">'
+    +esc(v.at||'—')+'　'+n3(v.n||0)+'問　'+esc(String(v.ver||'?'))+'</div>';
 }
 /* 私が直した問題だけを、直した順に確かめる（2026-08-18 本人指定）。
    1問→3問→5問→10問→全部 と段を上げ、OKが出てから次の範囲へ広げる。
@@ -2024,20 +2028,19 @@ function checkHtml(){
     var at=String(v.at||'');
     stale=(at<CHECK.dataAt);
   }
-  if(stale)return '<div class="panel" style="margin-bottom:12px;border-color:#e8cfcf;background:#fdf5f5">'
-    +'<div class="mini" style="line-height:1.8">直した分をチェック（'+esc(CHECK.label||'')+'）<br>'
-    +'<b>まだチェックできません。</b>端末のデータがこの直しより古いです'
-    +'（端末 '+esc(v.at||'未取得')+' ／ 必要 '+esc(CHECK.dataAt)+'）。<br>'
-    +'アプリを閉じて開き直すと、自動で取り込みます。</div></div>';
-  var ns=[1,3,5,10],h='<div class="panel" style="margin-bottom:12px;border-color:#cfd8e8;background:#f5f8fd">'
-    +'<div class="mini" style="margin-bottom:2px">直した分をチェック</div>'
-    +'<div style="font-weight:600;margin-bottom:2px">'+esc(CHECK.label||'（無題）')+' '+ids.length+'問</div>'
-    +(CHECK.note?'<div class="mini" style="margin-bottom:6px">'+esc(CHECK.note)+'</div>':'<div style="height:6px"></div>')
+  if(stale)return '<div class="mini" style="margin-bottom:12px;color:var(--ngdeep)">'
+    +'チェック用問題は、アプリを開き直すと出ます</div>';
+  /* 名前は「チェック用問題」（2026-08-18 本人指定）。説明は出さない（本人「いらん説明は
+     入れなくていい」）。他の行と同じ平らな見え方にする。 */
+  var ns=[1,3,5,10],h='<div class="panel" style="margin-bottom:12px">'
+    +'<div class="spread" style="margin-bottom:8px">'
+    +'<div style="font-weight:600">チェック用問題</div>'
+    +'<div class="mini">'+ids.length+'問</div></div>'
     +'<div class="whys">';
   ns.forEach(function(k){
     if(k<=ids.length)h+='<button class="tog" data-act="startCheck" data-n="'+k+'">'+k+'問</button>';
   });
-  h+='<button class="tog" data-act="startCheck" data-n="0">全部（'+ids.length+'問）</button>';
+  if(ids.length>1)h+='<button class="tog" data-act="startCheck" data-n="0">全部</button>';
   return h+'</div></div>';
 }
 function startCheck(nq){
@@ -2045,7 +2048,7 @@ function startCheck(nq){
   if(!ids.length){msg('チェックする問題がありません');return}
   if(nq>0)ids=ids.slice(0,nq);
   S.pickExplicit=true;S.keepOrder=true;S.kind='review';
-  startQueue(ids.map(function(i){return BY[i]}),'チェック：'+(CHECK.label||''),false,null,true,false);
+  startQueue(ids.map(function(i){return BY[i]}),'チェック用問題',false,null,true,false);
 }
 function flowHtml(){
   var cur=nextVidAll(),pl=plan(),h='<div class="flow">';
