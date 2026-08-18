@@ -1658,6 +1658,7 @@ function startQueue(list,label,withSneak,baseVid,keepGrad,keepRound){
   if(!S.round){S.wrongs=[];S.roundVid=baseVid||null}  /* 周回でないセッションの開始で溜め直す */
   S.queue=arr.map(function(it){return it.id});
   S.qi=0;S.phase='q';S.res=null;S.label=label||'';
+  S.ansLog={};                 /* 前のセッションの控えを持ち越さない */
   /* この1回ぶんの成績（周回のときは「その周」の成績）。通算＝ST.session とは混ぜない。 */
   S.sT=0;S.sR=0;S.sStreak=0;S.sBest=0;S.spent=0;
   saveRun(true);      /* fresh=true ＝ run.spent を0に戻す（周回ごとに時間を測り直す） */
@@ -1725,6 +1726,7 @@ function resumeRun(fromStart){
   S.queue=r.queue.filter(function(id){return !!BY[id]});   /* データ差し替えで消えたidは落とす */
   S.qi=fromStart?0:Math.min(r.qi||0,Math.max(0,S.queue.length-1));
   S.label=r.label||'';S.sort=r.sort||S.sort;S.phase='q';S.res=null;S.broke=false;S.sneak={};
+  S.ansLog={};                 /* 再開でも控えは持ち越さない */
   S.baseVid=r.baseVid||null;S.baseSrc=r.baseSrc||DEFSRC;   /* 基準の動画も一緒に戻す */
   S.kind=r.kind||'new';                                    /* 学習時間の内訳の行き先も戻す */
   S.spent=0;                                               /* 時間は run.spent 側を正とする */
@@ -3937,7 +3939,10 @@ function doAnswer(userOx){
   S.res=answer(id,userOx);S.phase='exp';
   /* この回ぶんの答えを控える。前の問題へ戻ったときに解説を出し直すのに使う
      （2026-08-17 本人指示「答えた後に前の問題にも戻れるように」）。 */
-  S.ansLog=S.ansLog||{};S.ansLog[S.qi]=S.res;
+  /* 番号だけで持つと、別のセッションの控えが同じ番号で残って解説が先に出る
+     （2026-08-18 本人報告「抜き打ちで解答が既に出ている」「次の問題で解説が出る」）。
+     問題idを一緒に控え、取り出すときに一致を確かめる。 */
+  S.ansLog=S.ansLog||{};S.ansLog[S.qi]={id:id,res:S.res};
   S.broke=(!S.res.ok&&FXST.lost>=2);
   var r=R(id),ev={closed:false,topicDone:false,severe:false};
   if(S.res.ok){
@@ -3967,6 +3972,14 @@ function doAnswer(userOx){
   playFx(S.res.ok,S.tier);
 }
 /* 「次の問題」＝今のカードを上へ8pxフェードアウト（0.16s）→ 次のカードが下から入る */
+/* 控えてある答え。**いま並んでいる問題と id が一致したときだけ**返す。
+   一致を見ないと、別のセッションの控えが同じ番号で残っていて解説が先に出る。 */
+function ansLogAt(i){
+  var lg=(S.ansLog||{})[i];
+  if(!lg)return null;
+  if(!lg.id||lg.id!==S.queue[i]){delete S.ansLog[i];return null}
+  return lg.res;
+}
 function next(){
   if(NEXTLOCK)return;
   var w=document.querySelector('.qwrap');
@@ -3982,7 +3995,7 @@ function advance(){
   clearFx();
   S.qi++;S.broke=false;
   /* 前へ戻ったあと進むときは、控えてある答えを出し直す（また答えさせない） */
-  var lg=(S.ansLog||{})[S.qi];
+  var lg=ansLogAt(S.qi);
   if(lg){S.res=lg;S.phase='exp'}else{S.phase='q';S.res=null}
   if(S.qi>=S.queue.length){
     /* 抜き打ちは「解き終えたとき」に今日の印を付ける（開始時に付けると、途中でやめただけで
@@ -4138,7 +4151,7 @@ document.addEventListener('click',function(e){
   if(a==='prevq'){
     if(S.qi<=0)return;
     clearFx();S.qi--;
-    var pl=(S.ansLog||{})[S.qi];
+    var pl=ansLogAt(S.qi);
     if(pl){S.res=pl;S.phase='exp'}else{S.res=null;S.phase='q'}
     S.anim=null;S.enter=false;render();window.scrollTo(0,0);return;
   }
