@@ -34,13 +34,18 @@ function d3(it){return (it&&D3OF[it.diff_ai])||null}        /* 3段階（null＝
 function d3Rank(it){var g=d3(it);return g?D3.indexOf(g):9}  /* 易0 普1 難2 未評価9＝末尾 */
 function d3Hard(it){var g=d3(it);return g?D3.indexOf(g):-1} /* 難い順に並べる用（未評価は最後） */
 var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え'];
+/* ---------- チェック用の並び（2026-08-18 本人指定） ----------
+   **私が直した問題だけ**を、直した順に並べる。さとうさんが 1問→3問→5問→10問 と確かめ、
+   OKが出たら次の範囲へ広げる。ここは私が書き換えて配信する＝殻に入るので
+   takken_data.json を渡し直さなくていい（32MBを毎回渡すのは現実的でない）。
+   ids は「順番が意味を持つ」＝並べ替えない（keepOrder）。 */
+var CHECK={label:'',note:'',ids:[]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
   if(!el||!el.getAttribute||el.getAttribute('data-act')!=='repmemo')return;
-  var id=el.getAttribute('data-id'),o=repOf(id);
-  if(!o.tags.length)return;
-  ST.reports[id]={tags:o.tags,memo:el.value||''};saveST();
+  var id=el.getAttribute('data-id');
+  if(S.repDraft&&S.repDraft.id===id)S.repDraft.memo=el.value||'';
 },true);
 /* データの間違いの報告（2026-08-17 本人の設計）。押すと ST.reports[肢id] に入る。
    本人「画像が間違えてるとか、参考動画がずれてるとか、この範囲じゃないとか
@@ -50,7 +55,9 @@ document.addEventListener('change',function(e){
    ＝**複数選べる**。足りない場合のために **その他＋メモ**を必ず置く。
    問題文・解説・答えの誤りは報告の対象にしない（過去問と解説は出典どおりで直す対象ではない）。
    **貼り付けたデータ（図・動画・単元・順番）の誤りだけ**を集める。 */
-var REPS=['まだ習ってない','図が違う','図が足りない','動画がずれてる','この単元じゃない','その他'];
+/* 報告は2択だけ（2026-08-18 本人指定）。「実質、習ってないか図が適切じゃないの2択」。
+   細かく分けても直す作業は同じで、選ぶ手間が増えるだけだった。コメントで補う。 */
+var REPS=['まだ習ってない','図が適切じゃない'];
 var SEC_PER_Q=30;                   /* 1問あたりの想定時間（秒）＝学習時間の換算に使う */
 var EXAM_DEFAULT='2026-10-18';      /* 試験日（10月第3日曜・受験票で確認） */
 var PASS_LINE=35;                   /* 合格ラインの目安 */
@@ -1651,7 +1658,8 @@ function startQueue(list,label,withSneak,baseVid,keepGrad,keepRound){
     arr=arr.filter(function(it){return att(R(it.id))>0||inRange(it,ob)});
     S.lockedOut=before-arr.length;
   }
-  arr=sortQ(arr);
+  arr=S.keepOrder?arr:sortQ(arr);
+  S.keepOrder=false;              /* 1回使ったら降ろす＝次のセッションに漏らさない */
   S.sneak={};
   /* 抜き打ちは「復習」として独立した枠で出す（新規の順序を乱さない）ので、
      通常のセッションに混ぜ込むことはしない。 */
@@ -1918,6 +1926,7 @@ function vHome(){
   /* 今日の流れ＝終わったもの・いま・まだ。学習の順は「動画を見る → その動画の問題を解く」
      なので、その3つを順に並べる（2026-08-14 確定）。数字の枠はホームから外し、
      抜き打ちと間違いは復習の画面に集約した＝引き算の原則。 */
+  h+=checkHtml();        /* 私が直した分のチェック（CHECK が空のときは何も出ない） */
   h+=flowHtml();
 
   /* 中断中の出題セッション */
@@ -1973,6 +1982,30 @@ function vidsLeft(){
 /* 今日の流れ＝「直前に終わった問題」「いまの動画」「その動画の問題」の3行 */
 /* 今日の流れ＝①いまの科目の動画 ②その科目の未着手（新規） ③抜き打ち。
    主教材が「1本＝1科目」になったので、動画は科目単位・問題は枠ぶんで出す。 */
+/* 私が直した問題だけを、直した順に確かめる（2026-08-18 本人指定）。
+   1問→3問→5問→10問→全部 と段を上げ、OKが出てから次の範囲へ広げる。
+   卒業した問題も出す（keepGrad）／未習でも出す（pickExplicit）／並べ替えない（keepOrder）。 */
+function checkHtml(){
+  var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
+  if(!ids.length)return '';
+  var ns=[1,3,5,10],h='<div class="panel" style="margin-bottom:12px;border-color:#cfd8e8;background:#f5f8fd">'
+    +'<div class="mini" style="margin-bottom:2px">直した分をチェック</div>'
+    +'<div style="font-weight:600;margin-bottom:2px">'+esc(CHECK.label||'（無題）')+' '+ids.length+'問</div>'
+    +(CHECK.note?'<div class="mini" style="margin-bottom:6px">'+esc(CHECK.note)+'</div>':'<div style="height:6px"></div>')
+    +'<div class="whys">';
+  ns.forEach(function(k){
+    if(k<=ids.length)h+='<button class="tog" data-act="startCheck" data-n="'+k+'">'+k+'問</button>';
+  });
+  h+='<button class="tog" data-act="startCheck" data-n="0">全部（'+ids.length+'問）</button>';
+  return h+'</div></div>';
+}
+function startCheck(nq){
+  var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
+  if(!ids.length){msg('チェックする問題がありません');return}
+  if(nq>0)ids=ids.slice(0,nq);
+  S.pickExplicit=true;S.keepOrder=true;S.kind='review';
+  startQueue(ids.map(function(i){return BY[i]}),'チェック：'+(CHECK.label||''),false,null,true,false);
+}
 function flowHtml(){
   var cur=nextVidAll(),pl=plan(),h='<div class="flow">';
   /* 動画の行と「続き」の行は出さない（2026-08-16 本人指示「なくしてほしい」）。
@@ -2842,11 +2875,9 @@ function vQuiz(){
       +'<button class="b x" data-act="ans" data-o="0">×</button></div>'
       /* パスの右に「おかしいところ」。行は増やさない（2026-08-17 本人指定）。
          パスは中央のまま、報告はその右に小さく置く＝左右の重さを揃える。 */
-      +'<div class="passrow"><span class="sp"></span>'
-      +'<button class="pass" data-act="pass">パス</button>'
-      +'<button class="repbtn'+(repOf(id).tags.length?' repon':'')+'" data-act="repsheet"'
-      +' data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button>'
-      +'<span class="sp"></span></div></div>';
+      /* パスは廃止（2026-08-18 本人指定「報告＝送信がパスになるので要らない」）。
+         報告も出題中には出さない＝答えた後に、解説を見てから出す。 */
+      +'</div>';
   }else{
     h+='<div class="expwrap'+(EA?' stagexp':'')+'">'+expBlock(it,id)+'</div>';
   }
@@ -3014,10 +3045,7 @@ function expBlock(it,id){
      正誤に関係なく出す（図や動画のずれは正解した肢でも起きる）。 */
   /* 「おかしいところ」＝**解説の末尾**（休ませる段の直前）。最初に置いていた位置に戻した
      （2026-08-18 本人指摘「解説の時は前の位置にもどして」）。出題中はパスの横。 */
-  h+='<div class="passrow" style="margin-top:12px"><span class="sp"></span>'
-    +'<button class="repbtn'+(repOf(id).tags.length?' repon':'')+'" data-act="repsheet"'
-    +' data-id="'+esc(id)+'" aria-label="おかしいところを報告">'+IC.warn+'</button>'
-    +'<span class="sp"></span></div>';
+  h+=repInline(id);        /* シートを開かず、その場で押せる（2026-08-18 本人指定） */
   h+=boxMeterHtml(r);      /* 休ませる段が動く（M4：進む＝Ease Out／戻る＝Ease In） */
   var sv=severeTopics().filter(function(x){return x.cat===it.cat&&x.topic===(it.topic||'未分類')})[0];
   if(sv)h+='<div class="warn" style="margin-top:10px">'+IC.warn+' 重症：この章は動画に戻る（'+esc(sv.topic)+'／誤答'+sv.ng+'回）</div>';
@@ -3547,6 +3575,50 @@ function bars(rows){
 /* 報告は「印を複数＋メモ」。古い形（文字列1つ）で入っていたものも読めるようにする。 */
 /* 報告の印。**出題中（答える前）にも解説の下にも同じものを出す**（2026-08-17 本人指示）。 */
 /* 報告のシート（ヘッダーのアイコンから開く）。行を占めずに6つの印とメモを出す。 */
+/* 報告＝解説の末尾にその場で出す（2026-08-18 本人の設計）。
+   ・選ぶのは2つだけ ・コメントは任意 ・**送信を押した時点でパス扱い**
+   ・パス＝この1問の記録を取り消して「まだ解いてない問題」に戻す
+     （報告した問題は直したあともう一度解く必要があるので、解いた扱いにしてはいけない） */
+function repInline(id){
+  var d=(S.repDraft&&S.repDraft.id===id)?S.repDraft:{id:id,tags:[],memo:''};
+  S.repDraft=d;
+  return '<div class="hr"></div><div class="repbox">'
+    +'<div class="mini" style="margin-bottom:6px">'+IC.warn+' おかしいところ</div>'
+    +'<div class="whys">'+REPS.map(function(w){
+        return '<button class="tog'+(d.tags.indexOf(w)>=0?' on':'')+'" data-act="rep"'
+          +' data-w="'+esc(w)+'" data-id="'+esc(id)+'">'+esc(w)+'</button>'}).join('')
+    +'</div>'
+    +'<input id="repmemo" data-act="repmemo" data-id="'+esc(id)+'" value="'+esc(d.memo||'')
+    +'" placeholder="コメント（任意）" style="width:100%;margin-top:8px">'
+    +'<button class="btn sm" data-act="repsend" data-id="'+esc(id)+'" style="margin-top:8px"'
+    +(d.tags.length?'':' disabled')+'>送信（パスになります）</button>'
+    +'</div>';
+}
+/* 答える直前の控え。送信＝パスのときに、この1問ぶんだけ元へ戻す。
+   件数を引き算で戻すと取りこぼすので、触られる場所をまるごと控える。 */
+function snapAns(id){
+  var it=BY[id]||{},vid=(it.vids&&it.vids[0]&&it.vids[0].vid)||null,t=today();
+  function cp(o){return o?JSON.parse(JSON.stringify(o)):null}
+  return {id:id,vid:vid,day:t,
+    rec:cp(ST.items[id]),
+    sess:cp(ST.session),
+    days:cp(ST.days[t]),
+    vp:vid?cp(ST.vp[vid]):null,
+    wrongs:(S.wrongs||[]).slice(),
+    sT:S.sT,sR:S.sR,sStreak:S.sStreak,sBest:S.sBest,
+    lost:FXST.lost,streak:FXST.streak};
+}
+function undoAns(sp){
+  if(!sp)return;
+  if(sp.rec)ST.items[sp.id]=sp.rec;else delete ST.items[sp.id];
+  if(sp.sess)ST.session=sp.sess;
+  if(sp.days)ST.days[sp.day]=sp.days;else delete ST.days[sp.day];
+  if(sp.vid){if(sp.vp)ST.vp[sp.vid]=sp.vp;else delete ST.vp[sp.vid]}
+  S.wrongs=sp.wrongs;
+  S.sT=sp.sT;S.sR=sp.sR;S.sStreak=sp.sStreak;S.sBest=sp.sBest;
+  FXST.lost=sp.lost;FXST.streak=sp.streak;
+  saveST();
+}
 function repSheet(id){
   var m=document.getElementById('modal'),it=BY[id]||{};
   m.innerHTML='<div class="sheet">'
@@ -3936,6 +4008,7 @@ function doAnswer(userOx){
   /* 演出の段を決めるため、回答前の状態を控える */
   var wasClosed=closed(it.cat);
   var doneBefore=sibs.every(function(x){return att(R(x.id))>0});
+  S.ansSnap=snapAns(id);          /* 送信＝パスで戻せるように、答える前を控える */
   S.res=answer(id,userOx);S.phase='exp';
   /* この回ぶんの答えを控える。前の問題へ戻ったときに解説を出し直すのに使う
      （2026-08-17 本人指示「答えた後に前の問題にも戻れるように」）。 */
@@ -4156,17 +4229,34 @@ document.addEventListener('click',function(e){
     S.anim=null;S.enter=false;render();window.scrollTo(0,0);return;
   }
   if(a==='next'){next();return}
+  if(a==='startCheck'){startCheck(+(t.getAttribute('data-n')||0));return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
+  /* 選んだだけでは保存しない＝**送信で確定**（2026-08-18 本人の設計）。 */
   if(a==='rep'){
-    var ri=t.getAttribute('data-id'),rw=t.getAttribute('data-w'),ro=repOf(ri);
-    var k=ro.tags.indexOf(rw);
-    if(k>=0)ro.tags.splice(k,1);else ro.tags.push(rw);
+    var ri=t.getAttribute('data-id'),rw=t.getAttribute('data-w');
+    var d=(S.repDraft&&S.repDraft.id===ri)?S.repDraft:{id:ri,tags:[],memo:''};
+    var mi=document.getElementById('repmemo');
+    if(mi)d.memo=mi.value||'';        /* 打ちかけのコメントを消さない */
+    var k=d.tags.indexOf(rw);
+    if(k>=0)d.tags.splice(k,1);else d.tags.push(rw);
+    S.repDraft=d;render();return;
+  }
+  /* 送信＝報告を確定し、**この1問をパスにする**（記録を取り消して未解答に戻す）。
+     報告した内容を一瞬見せてから次の問題へ（2026-08-18 本人了承）。 */
+  if(a==='repsend'){
+    var si=t.getAttribute('data-id');
+    var d2=(S.repDraft&&S.repDraft.id===si)?S.repDraft:null;
+    if(!d2||!d2.tags.length){msg('どちらかを選んでください');return}
+    var mi2=document.getElementById('repmemo');
+    if(mi2)d2.memo=mi2.value||'';
     if(!ST.reports)ST.reports={};
-    if(ro.tags.length)ST.reports[ri]={tags:ro.tags,memo:ro.memo};else delete ST.reports[ri];
-    saveST();
-    var sh=document.getElementById('modal');
-    if(sh&&!sh.hidden)repSheet(ri);else render();
+    ST.reports[si]={tags:d2.tags.slice(),memo:d2.memo||'',at:nowStamp()};
+    if(S.ansSnap&&S.ansSnap.id===si)undoAns(S.ansSnap);else saveST();
+    S.ansSnap=null;S.repDraft=null;
+    if(S.ansLog)delete S.ansLog[S.qi];        /* 戻ったときに解説を出さない＝未解答に戻す */
+    msg('報告しました（'+d2.tags.join('・')+'）／この問題はパス＝まだ解いてない問題に戻します');
+    setTimeout(function(){next()},900);
     return;
   }
   if(a==='repcopy'){
