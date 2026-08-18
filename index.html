@@ -1231,29 +1231,30 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b20630b5';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='05fee817';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
        manifest.json … 各ファイルの sha だけ（5KB）。まずこれを見る
        items/NN.json … 単元ごとの問題（平均343KB）
        figs/NN_k.json … 図の束（最大591KB）
-     置き場所は非公開リポジトリ＝公開ホスティングはしない（解説は転載禁止）。
-     トークンは端末の localStorage のみ（記録の保存で既に入っているものを使う）。
-     所有者は記録用リポジトリ（owner/takken-records）の owner から取り、名前は takken-data。 */
-  var DATAREPO='takken-data';
+     置き場所は**記録用リポジトリの data ブランチ**（非公開）＝公開ホスティングはしない。
+     別リポジトリ（takken-data）にしたら端末のトークンが読めず 404 になった
+     （2026-08-18 実機）。同じリポジトリなら今のトークンで読める。
+     記録は main にあるので、data ブランチを読み書きしても記録に触らない。 */
+  var DATAREF='data';
   function ghConf(){
     try{
       var st=JSON.parse(localStorage.getItem('takken_v1')||'{}');
       var g=(st.settings&&st.settings.gh)||{};
-      var owner=String(g.repo||'').split('/')[0]||'';
-      return {owner:owner,token:g.token||'',repo:owner?owner+'/'+DATAREPO:''};
+      var repo=String(g.repo||'');
+      return {owner:repo.split('/')[0]||'',token:g.token||'',repo:repo};
     }catch(e){return {owner:'',token:'',repo:''}}
   }
   /* 1MB を超えるファイルは raw で取らないと中身が返らない（contents API の仕様）。 */
   function ghGet(path){
     var c=ghConf();
-    return fetch('https://api.github.com/repos/'+c.repo+'/contents/'+path+'?ref=main',
+    return fetch('https://api.github.com/repos/'+c.repo+'/contents/'+path+'?ref='+DATAREF,
       {headers:{Authorization:'Bearer '+c.token,Accept:'application/vnd.github.raw',
                 'X-GitHub-Api-Version':'2022-11-28'},cache:'no-store'})
       .then(function(r){
@@ -1274,7 +1275,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
     var c=ghConf();
-    if(!c.token||!c.owner)return Promise.reject(new Error('トークンが未設定です（設定＝データ）'));
+    if(!c.token||!c.repo)return Promise.reject(new Error('リポジトリとトークンを先に保存してください（設定＝データ）'));
     var rec=null;
     var say=onStat||function(){};
     say('版を確認しています…');
@@ -1342,7 +1343,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     if(msg)$('impstat').textContent=msg;
     /* トークンがあるときだけ「GitHubから取り込む」を出す */
     var gb=$('impgh'),c=ghConf();
-    if(gb&&c.token&&c.owner){
+    if(gb&&c.token&&c.repo){
       gb.hidden=false;
       gb.onclick=function(){
         gb.disabled=true;

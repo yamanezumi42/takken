@@ -3728,8 +3728,9 @@ function dataSheet(){
    /* 進み具合は**ボタンのすぐ下**に出す。シート末尾の #msg に書いていたので、
       押しても画面外に文字が出るだけで「なにもならない」ように見えていた（2026-08-18 本人報告）。 */
    +'<div class="mini" id="dpstat" style="margin-top:6px;min-height:16px"></div>'
-   +'<div class="mini" style="margin-top:2px">問題・図は '+esc((GH().repo||'—').split('/')[0]||'—')
-   +'/takken-data（非公開）から取り込みます。変わったファイルだけ落とすので数百KBで済みます。</div>'
+   +'<div class="mini" style="margin-top:2px">問題・図は '+esc(GH().repo||'—')
+   +' の <b>data</b> ブランチから取り込みます（記録は main。触りません）。'
+   +'変わったファイルだけ落とすので数百KBで済みます。</div>'
    +'<div class="mini" style="margin-top:6px">最後に上げた '+(GH().at?esc(GH().at):'—')
    +(GH().err?' ／ <span style="color:var(--ngdeep)">'+esc(GH().err)+'</span>':'')
    +'<br>トークンはこの端末の中だけに保存します（公開されるコードには入りません）。'
