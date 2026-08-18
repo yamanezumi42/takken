@@ -2882,7 +2882,11 @@ function vQuiz(){
   var qj=(chs[0]&&chs[0].jt&&!(S.view==='quiz'&&S.phase==='q'))?' j':'';
   h+='<div class="qhead m5-qr'+ac()+'"'+ad(0)+'><div class="qrow'+qj+'">'+flw(16)
     +'<span class="qname'+qj+'">'
-    +esc((chs[0]&&chs[0].label)||it.topic||it.cat)+'</span>'
+    /* 出題中は**単元名だけ**（2026-08-18 本人指摘「上の方の論点で答えが推察できてしまう」）。
+       論点名は既に隠していたが、隠すと小見出し・章名に落ちるので、そこも答えを示していた
+       （例「公告せずに取戻し（例外）」）。答えた後は章名・論点名を出す。 */
+    +esc((S.view==='quiz'&&S.phase==='q')?(it.cat||it.topic||'')
+         :((chs[0]&&chs[0].label)||it.topic||it.cat))+'</span>'
     +(S.sneak[id]?'<span class="chip">抜き打ち</span>':'')
     +'<span class="sdot s'+STG[stateOf(id)]+' m4-badge" id="stBadge" data-stage="'+STG[stateOf(id)]
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
@@ -3646,8 +3650,10 @@ function repInline(id){
     +'</div>'
     +'<input id="repmemo" data-act="repmemo" data-id="'+esc(id)+'" value="'+esc(d.memo||'')
     +'" placeholder="コメント（任意）" style="width:100%;margin-top:8px">'
-    +'<button class="btn sm" data-act="repsend" data-id="'+esc(id)+'" style="margin-top:8px"'
-    +(d.tags.length?'':' disabled')+'>送信（パスになります）</button>'
+    /* コメントだけでも送れる（2026-08-18 本人指示）。打っている途中に描き直さないので、
+       押せる状態を変えずに、押したときに中身を見て判断する。文言は「送信」だけ。 */
+    +'<button class="btn sm" data-act="repsend" data-id="'+esc(id)+'" style="margin-top:8px">'
+    +'送信</button>'
     +'</div>';
 }
 /* 答える直前の控え。送信＝パスのときに、この1問ぶんだけ元へ戻す。
@@ -4388,10 +4394,14 @@ document.addEventListener('click',function(e){
      報告した内容を一瞬見せてから次の問題へ（2026-08-18 本人了承）。 */
   if(a==='repsend'){
     var si=t.getAttribute('data-id');
-    var d2=(S.repDraft&&S.repDraft.id===si)?S.repDraft:null;
-    if(!d2||!d2.tags.length){msg('どちらかを選んでください');return}
+    var d2=(S.repDraft&&S.repDraft.id===si)?S.repDraft:{id:si,tags:[],memo:''};
     var mi2=document.getElementById('repmemo');
     if(mi2)d2.memo=mi2.value||'';
+    /* 選択が無くてもコメントがあれば送れる（本人指示 2026-08-18）。両方空のときだけ断る。 */
+    if(!d2.tags.length&&!String(d2.memo||'').trim()){
+      msg('選ぶか、コメントを書いてください');return;
+    }
+    S.repDraft=d2;
     if(!ST.reports)ST.reports={};
     ST.reports[si]={tags:d2.tags.slice(),memo:d2.memo||'',at:nowStamp()};
     if(S.ansSnap&&S.ansSnap.id===si)undoAns(S.ansSnap);else saveST();
@@ -4400,7 +4410,8 @@ document.addEventListener('click',function(e){
     /* 報告は**送った直後に上げる**（本人指示 2026-08-18）。起動時と完走時だけだと、
        私が報告を読めるのが遅れて、直しの往復が伸びる。 */
     try{ghAuto('report')}catch(e3){}
-    msg('報告しました（'+d2.tags.join('・')+'）／この問題はパス＝まだ解いてない問題に戻します');
+    msg('報告しました'+(d2.tags.length?'（'+d2.tags.join('・')+'）':'（コメント）')
+        +'／この問題はパス＝まだ解いてない問題に戻します');
     setTimeout(function(){next()},900);
     return;
   }
@@ -5593,8 +5604,15 @@ function srcSheet(id){
    +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">出典と根拠</div>'
    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
    +'<div class="m6-stxt">'+esc(srcLabel(it))+'</div>'
-   +(why.length?'<div class="mini" style="margin-top:6px">根拠 '+esc(why.join('・'))+'</div>':'')
-   +(chs.length?'<div class="hr"></div>'+chs.map(function(ch){
+   /* 出題中は根拠（判定の理由）も出さない＝何を問われているかの手がかりになる */
+   +((why.length&&!(S.view==='quiz'&&S.phase==='q'))
+      ?'<div class="mini" style="margin-top:6px">根拠 '+esc(why.join('・'))+'</div>':'')
+   /* 出題中は動画リンクを出さない（章名が答えを示す。2026-08-18 本人指摘）。
+      答えた後の解説には同じリンクが出るので、学習の妨げにはならない。 */
+   +((S.view==='quiz'&&S.phase==='q')
+      ?'<div class="mini" style="margin-top:8px">動画のリンクと章は、答えた後に出します</div>'
+      :'')
+   +((chs.length&&!(S.view==='quiz'&&S.phase==='q'))?'<div class="hr"></div>'+chs.map(function(ch){
        return '<a class="link" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
         +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'">'+IC.yt
         +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+(ch.src?'（'+esc(ch.src)+'）':'')+'</span>'
