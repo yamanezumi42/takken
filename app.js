@@ -2646,6 +2646,17 @@ function vStudy(){
        +(s.rate===null?'':' ／ 正解率 '+pct(s.rate))
        +(closed(c)?' ／ <b style="color:var(--chipfg)">閉じた</b>':'')))
    +'</div></div>';
+  /* この動画の記録をリセット（2026-08-18 本人指示）。
+     図と動画リンクを付け直した動画は、正解率や卒業が**誤った材料の上**で付いている。
+     まだ解いたことがない状態に戻して、直した材料で解き直せるようにする。
+     消すのは肢の解答記録と動画の進捗だけ＝日別の実績・学習時間・通算は消さない
+     （過去に勉強した事実を消すと記録として嘘になる）。 */
+  if(S.studyVid&&vv0&&vv0.n)
+    h+='<div class="rowx" style="gap:8px;margin:-4px 0 12px">'
+      +'<button class="btn sm" style="width:auto" data-act="vreset" data-v="'+esc(S.studyVid)+'">'
+      +'記録をリセット（'+vv0.n+'問）</button>'
+      +'<span class="mini" style="flex:1;line-height:1.6">まだ解いたことがない状態に戻します。'
+      +'解いた日数・学習時間は残ります。</span></div>';
 
   if(!vids.length){
     h+='<div class="panel"><div class="mini">'+IC.warn+' この小分類の動画データがありません（chapters.js 未整備）。</div></div>';
@@ -3645,6 +3656,46 @@ function undoAns(sp){
   FXST.lost=sp.lost;FXST.streak=sp.streak;
   saveST();
 }
+/* ---------- この動画の記録をリセット（2026-08-18 本人指示） ----------
+   対象＝その動画の「ここまでで解ける」肢（画面に出ている数と同じ範囲にする）。
+   消す＝肢ごとの解答記録（正誤・連続正解・卒業・休ませる段・最後に解いた日）と動画の進捗。
+   消さない＝日別の実績・学習時間・通算の累計・報告。 */
+function vResetTargets(vid){
+  return videoItemsUp(vid).filter(function(it){return att(R(it.id))>0});
+}
+function vResetAsk(vid){
+  var its=vResetTargets(vid),all=videoItemsUp(vid).length;
+  var m=document.getElementById('modal');
+  m.innerHTML='<div class="sheet">'
+   +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">記録をリセット</div>'
+   +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+   +'<div class="mini" style="line-height:1.9">'+esc(vlab(vid)||vid)+'<br>'
+   +'この動画の '+all+'問のうち、<b>解いた記録がある '+its.length+'問</b>を'
+   +'「まだ解いたことがない」状態に戻します。<br>'
+   +'消えるのは正誤・連続正解・卒業・休ませる段です。<br>'
+   +'<b>解いた日数・学習時間・報告は残ります。</b><br>'
+   +'元に戻せません。</div>'
+   +'<div class="rowx" style="gap:8px;margin-top:12px">'
+   +'<button class="btn sm" style="width:auto" data-act="vresetgo" data-v="'+esc(vid)+'">'
+   +'リセットする（'+its.length+'問）</button>'
+   +'<button class="btn sm" style="width:auto" data-act="closeModal">やめる</button></div></div>';
+  m6SheetOpen();
+}
+function vResetGo(vid){
+  var its=vResetTargets(vid),k=0;
+  its.forEach(function(it){if(ST.items[it.id]){delete ST.items[it.id];k++}});
+  var vp=ST.vp[vid];
+  if(vp){
+    var ids={};its.forEach(function(it){ids[it.id]=1});
+    if(vp.done)vp.done=vp.done.filter(function(i){return !ids[i]});
+    if(vp.wrong)vp.wrong=vp.wrong.filter(function(i){return !ids[i]});
+    vp.completedAt=null;vp.round=0;
+  }
+  saveST();
+  var mm=document.getElementById('modal');if(mm)mm.hidden=true;
+  msg(k+'問を「まだ解いてない」に戻しました');
+  render();
+}
 function repSheet(id){
   var m=document.getElementById('modal'),it=BY[id]||{};
   m.innerHTML='<div class="sheet">'
@@ -4295,6 +4346,9 @@ document.addEventListener('click',function(e){
   if(a==='startCheck'){startCheck(+(t.getAttribute('data-n')||0));return}
   if(a==='datapull'){dataPull();return}
   if(a==='dreload'){location.reload();return}
+  /* 記録のリセット。押し間違いは戻せないので、必ず件数を出して確認を取る。 */
+  if(a==='vreset'){vResetAsk(t.getAttribute('data-v'));return}
+  if(a==='vresetgo'){vResetGo(t.getAttribute('data-v'));return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
   /* 選んだだけでは保存しない＝**送信で確定**（2026-08-18 本人の設計）。 */
