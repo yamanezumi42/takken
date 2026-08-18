@@ -1023,6 +1023,11 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 /* パスの行＝左の余白・パス（中央）・報告（右）で、パスを真ん中に保つ */
 /* パスと報告を**確実に中央**へ。`.pass` の margin:auto が自由空間を食って左に寄るので打ち消す。
    左右に同じ幅の空きを置き、パスを真ん中に保つ（2026-08-18 本人のスクショ指示）。 */
+/* 起動の演出の覆い（2026-08-18）。全画面・最前面。触れば消える。
+   中の案は 393×760 で作ってあるので、狭い端末では中央に置いて上下を切る。 */
+#bfx{position:fixed;inset:0;z-index:90;background:var(--bg);overflow:hidden;
+     display:flex;align-items:center;justify-content:center}
+#bfx>div{flex:0 0 auto}
 .repbox{margin-top:12px}
 .repbox .whys{gap:8px}
 .passrow{display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
@@ -1231,7 +1236,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='202da48d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='7f483883';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1368,6 +1373,11 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   function boot(){
     var T=window.TAKKEN_BOOT; T.data=Math.round(performance.now());
     var im=$('importer'); if(im&&im.parentNode)im.parentNode.removeChild(im);
+    /* 起動の演出（採用11案から1つ引く）。app.js より先に読む＝ホームが出る前に出せる。
+       失敗しても学習は止めない（onerror で捨てる）。 */
+    var bf=document.createElement('script');
+    bf.src='bootfx.js?v='+VER; bf.onerror=function(){};
+    document.body.appendChild(bf);
     var s=document.createElement('script');
     s.src='app.js?v='+VER;
     s.onload=function(){T.ready=Math.round(performance.now());

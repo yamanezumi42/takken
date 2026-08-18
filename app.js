@@ -42,8 +42,8 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"チェック用問題",note:"営業保証金1の最後の4問。併用可（新設も同じ）／支店分も主たる事務所の最寄り／支店新設の供託先／1月以内の規定はない",
-  dataAt:"2026-08-18 17:14",ids:["b5_3-001-2", "b5_3-021-2", "b5_3-024-2", "b5_3-026-1"]};
+var CHECK={label:"チェック用問題",note:"#8の残り8問。need_seqが9や28になって出ないままだった7問を8に直し、取戻しの公告が必要な1問は#9へ置いた",
+  dataAt:"2026-08-18 18:28",ids:["b5_3-006-2", "b5_3-009-1", "b5_3-011-1", "b5_3-014-3", "b5_3-026-4", "b5_3-026-2", "b5_5-082-2", "b5_3-023-1"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -1844,7 +1844,8 @@ function render(){
   m6Fills(v);                          /* 進捗の塗り（scaleX）を前回値から伸ばす */
   m6Rolls(v);                          /* 桁ロールを前回値から回す */
   m6PopHide();                         /* 長押しのプレビューは描画のたびに畳む */
-  m6BootSwap();                        /* 初回だけ：骨組み→実データのクロスフェード */
+  m6BootSwap();
+  bootFx();                 /* 起動の演出＝1回だけ（BOOTFXDONE で守る） */                        /* 初回だけ：骨組み→実データのクロスフェード */
   S.enter=false;S.dir=null;S.anim=null;ANIMON=false;
   LASTVIEW=S.view;
   if(S.view==='quiz')bindTilt();
@@ -5650,6 +5651,35 @@ function m6Fills(root){
    その間だけ #m6boot（静的な骨組み）が見えている。実データが来たら位置を動かさずクロスフェード。
    明滅は 0.9秒×2＝1.8秒で必ず止まる（infinite にしない＝安全基準）。 */
 var M6BOOT=true;
+/* ---------- 起動の演出（2026-08-18 本人指示） ----------
+   本人「筋トレのアプリの時みたくなんか出てる…デザインというかアニメーションつけてほしい」
+   「最初の画面はランダムで色々出るようにしたい」
+   採用11案（B・D・I2・K・L・N・O・P・Q・R・S）から**起動ごとに1つ引く**。
+   覆いは全画面。演出が終わったら消してホームが現れる。1回だけ（同じ起動で2回出さない）。
+   ・束は殻の bootfx.js（tools/build_bootfx.py が作る）。無ければ何もしない＝学習は止めない
+   ・演出中でも触れば飛ばせる（待たされない）
+   ・端末が「動きを控える」設定なら出さない（bootfx 側で判定） */
+var BOOTFXDONE=false;
+function bootFx(){
+  if(BOOTFXDONE)return; BOOTFXDONE=true;
+  var B=window.TAKKEN_BOOTFX;
+  if(!B||typeof B.play!=='function')return;
+  var ov=document.createElement('div');
+  ov.id='bfx';
+  document.body.appendChild(ov);
+  var id=B.play(ov);
+  if(!id){if(ov.parentNode)ov.parentNode.removeChild(ov);return}
+  var gone=false;
+  function bye(){
+    if(gone)return; gone=true;
+    var a=ov.animate?ov.animate([{opacity:1},{opacity:0}],
+      {duration:260,easing:'cubic-bezier(.4,0,.7,.2)',fill:'forwards'}):null;
+    var rm=function(){if(ov.parentNode)ov.parentNode.removeChild(ov)};
+    if(a)a.onfinish=rm; else rm();
+  }
+  ov.addEventListener('pointerdown',bye);      /* 触れば飛ばせる */
+  setTimeout(bye,2300);                        /* どの案も2.2秒以内に終わる */
+}
 function m6BootSwap(){
   if(!M6BOOT)return; M6BOOT=false;
   var b=document.getElementById('m6boot'),v=document.getElementById('view');
