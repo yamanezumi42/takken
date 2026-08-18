@@ -3724,8 +3724,11 @@ function dataSheet(){
    /* 問題データを非公開リポジトリから取り込む（2026-08-18 本人指示。34MBの手渡しをやめる）。
       落ちてくるのは**変わったファイルだけ**＝単元1つなら約340KB、図1枚なら最大591KB。 */
    +'<div class="rowx" style="gap:8px;margin-top:8px">'
-   +'<button class="btn sm" style="width:auto" data-act="datapull">問題データを更新</button></div>'
-   +'<div class="mini" style="margin-top:6px">問題・図は '+esc((GH().repo||'—').split('/')[0]||'—')
+   +'<button class="btn sm" style="width:auto" data-act="datapull" id="dpbtn">問題データを更新</button></div>'
+   /* 進み具合は**ボタンのすぐ下**に出す。シート末尾の #msg に書いていたので、
+      押しても画面外に文字が出るだけで「なにもならない」ように見えていた（2026-08-18 本人報告）。 */
+   +'<div class="mini" id="dpstat" style="margin-top:6px;min-height:16px"></div>'
+   +'<div class="mini" style="margin-top:2px">問題・図は '+esc((GH().repo||'—').split('/')[0]||'—')
    +'/takken-data（非公開）から取り込みます。変わったファイルだけ落とすので数百KBで済みます。</div>'
    +'<div class="mini" style="margin-top:6px">最後に上げた '+(GH().at?esc(GH().at):'—')
    +(GH().err?' ／ <span style="color:var(--ngdeep)">'+esc(GH().err)+'</span>':'')
@@ -3791,15 +3794,26 @@ function ghSave(){
    仕組みは殻の側（build_pwa の LOADER）にある＝アプリより先に動く必要があるため。
    ここはその呼び出し口。単体の app.html（配信前の確認用）には無いので、無ければ断る。 */
 function dataPull(){
+  var say=function(t){
+    var e=document.getElementById('dpstat');
+    if(e)e.textContent=t; else msg(t);
+    try{console.log('[データ更新] '+t)}catch(e2){}
+  };
+  var b=document.getElementById('dpbtn');
   if(typeof window.TAKKEN_SYNC!=='function'){
-    msg('この画面では使えません（配信版のアプリで押してください）');return;
+    /* 殻（index.html）が古いキャッシュのまま＝もう一度開き直すと新しくなる */
+    say('この版では使えません。いったん閉じて、もう一度開いてから押してください');return;
   }
-  msg('データを確認しています…');
-  window.TAKKEN_SYNC(function(t){msg(t)}).then(function(n){
-    if(!n){msg('最新です');return}
-    msg(n+'ファイルを取り込みました。開き直します');
+  if(b)b.disabled=true;
+  say('版を確認しています…');
+  window.TAKKEN_SYNC(say).then(function(k){
+    if(!k){say('最新です（落としたファイル0）');if(b)b.disabled=false;return}
+    say(k+'ファイルを取り込みました。開き直します…');
     setTimeout(function(){location.reload()},700);
-  }).catch(function(err){msg((err&&err.message)||'取り込めませんでした')});
+  }).catch(function(err){
+    if(b)b.disabled=false;
+    say('取り込めませんでした：'+((err&&err.message)||'不明'));
+  });
 }
 function ghHeaders(){return {Authorization:'Bearer '+GH().token,Accept:'application/vnd.github+json',
   'X-GitHub-Api-Version':'2022-11-28'}}
