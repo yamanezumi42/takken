@@ -1231,7 +1231,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='8db8b10d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2ca2138d';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1298,6 +1298,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       function step(){
         if(i>=todo.length){
           rec.man=man;                       /* 最後に版をそろえる（消えたファイルの掃除もここ） */
+          rec.at=new Date().toISOString().slice(0,16).replace('T',' ');
           return put(rec,KEY2).then(function(){return todo.length});
         }
         var p=todo[i];
@@ -1316,8 +1317,14 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     });
   }
   window.TAKKEN_SYNC=ghSync;
-  /* いまどのデータで動いているか（設定に出して食い違いを見つけるため） */
-  window.TAKKEN_SRC={src:'なし',n:0,files:0};
+  /* ---------- 版の情報（2026-08-18） ----------
+     出どころが3つ（手渡しの34MB・リポジトリ・保存領域）あるのに画面に何も出ておらず、
+     「どれが動いているか」を毎回本人に聞くことになっていた（いたちごっこの原因）。
+     **画面に常時出す**。スクショ1枚で分かる形にする。
+     iOSはホーム画面のアプリとSafariのタブで保存領域が別なので、それも出す。 */
+  window.TAKKEN_SRC={src:'なし',n:0,files:0,ver:VER,at:'',
+    ctx:(window.navigator.standalone||(window.matchMedia&&
+         matchMedia('(display-mode: standalone)').matches))?'アプリ':'ブラウザ'};
 
   function idb(){return new Promise(function(res,rej){
     var r=indexedDB.open(DB,1);
@@ -1388,6 +1395,26 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     };
   }
 
+  /* 起動のたびに版を確認する。押し忘れで古いまま勉強していた（2026-08-18 実機）ため。
+     勉強中に勝手に入れ替えると危ないので、**落として保存はするが、反映は開き直したとき**。
+     取り込むものがあったことだけ画面に出す。 */
+  function autoSync(){
+    var c=ghConf();
+    if(!c.token||!c.repo)return;
+    setTimeout(function(){
+      ghSync(function(t){window.TAKKEN_SRC.busy=t;
+        try{window.dispatchEvent(new Event('takken-data'))}catch(e){}})
+        .then(function(k){
+          window.TAKKEN_SRC.busy='';
+          if(k)window.TAKKEN_SRC.pending=k;
+          try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
+        }).catch(function(err){
+          window.TAKKEN_SRC.busy='';
+          window.TAKKEN_SRC.err=(err&&err.message)||'確認できません';
+          try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
+        });
+    },1200);
+  }
   var force=(location.hash||'').indexOf('import')>=0;
   /* v2（非公開リポジトリから取り込んだ分）を優先。無ければ v1（手渡しの34MB）で起動する
      ＝トークンが無くても今まで通り動く。 */
@@ -1395,15 +1422,18 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     if(r2&&r2.parts&&r2.parts['items_index.json']&&!force){
       var d2=assemble(r2);
       if(d2.items.length){
-        window.TAKKEN_SRC={src:'リポジトリ（data）',n:d2.items.length,
-          files:Object.keys((r2.man&&r2.man.files)||{}).length};
-        apply(d2);boot();return null;
+        window.TAKKEN_SRC.src='リポジトリ';
+        window.TAKKEN_SRC.n=d2.items.length;
+        window.TAKKEN_SRC.files=Object.keys((r2.man&&r2.man.files)||{}).length;
+        window.TAKKEN_SRC.at=r2.at||'';
+        apply(d2);boot();autoSync();return null;
       }
     }
     return get(KEY).then(function(d){
       if(d&&d.items&&d.items.length&&!force){
-        window.TAKKEN_SRC={src:'手渡しのファイル（takken_data.json）',n:d.items.length,files:1};
-        apply(d);boot();return null;
+        window.TAKKEN_SRC.src='手渡しの34MB';
+        window.TAKKEN_SRC.n=d.items.length;window.TAKKEN_SRC.files=1;
+        apply(d);boot();autoSync();return null;
       }
       ask(force?'入れ直します。':'');
       return null;

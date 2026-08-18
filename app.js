@@ -1926,6 +1926,7 @@ function vHome(){
   /* 今日の流れ＝終わったもの・いま・まだ。学習の順は「動画を見る → その動画の問題を解く」
      なので、その3つを順に並べる（2026-08-14 確定）。数字の枠はホームから外し、
      抜き打ちと間違いは復習の画面に集約した＝引き算の原則。 */
+  h+=verLineHtml();      /* 版の行＝出どころ・問題数・殻の版。押すと確認しに行く */
   h+=checkHtml();        /* 私が直した分のチェック（CHECK が空のときは何も出ない） */
   h+=flowHtml();
 
@@ -1982,6 +1983,29 @@ function vidsLeft(){
 /* 今日の流れ＝「直前に終わった問題」「いまの動画」「その動画の問題」の3行 */
 /* 今日の流れ＝①いまの科目の動画 ②その科目の未着手（新規） ③抜き打ち。
    主教材が「1本＝1科目」になったので、動画は科目単位・問題は枠ぶんで出す。 */
+/* ---------- 版の行（2026-08-18） ----------
+   データの出どころが3つ（手渡しの34MB・リポジトリ・保存領域）あるのに画面に何も出ておらず、
+   「どれが動いているか」を毎回聞くことになっていた。**常時出す**。
+   iOSはホーム画面のアプリとSafariで保存領域が別なので、それも出す。
+   取り込むものがあれば「開き直す」を出す（勉強中に勝手に入れ替えない）。 */
+function verLineHtml(){
+  var v=window.TAKKEN_SRC;
+  if(!v)return '<div class="mini" style="margin-bottom:10px;opacity:.6">データ＝この画面では不明（配信版で見てください）</div>';
+  var s='<div class="panel" style="margin-bottom:12px;padding:10px 12px">'
+    +'<div class="rowx" style="gap:8px;align-items:center">'
+    +'<div class="mini" style="flex:1;line-height:1.7">'
+      +'データ <b>'+esc(v.src||'なし')+'</b>／'+n3(v.n||0)+'問'
+      +(v.files>1?'／'+v.files+'ファイル':'')
+      +(v.at?'／'+esc(v.at):'')
+      +'<br>殻 '+esc(String(v.ver||'?'))+'／'+esc(v.ctx||'?')
+      +(v.busy?'<br>'+esc(v.busy):'')
+      +(v.err?'<br><span style="color:var(--ngdeep)">'+esc(v.err)+'</span>':'')
+    +'</div>';
+  if(v.pending)s+='<button class="btn sm" style="width:auto" data-act="dreload">開き直す</button>';
+  else s+='<button class="btn sm" style="width:auto" data-act="datapull">確認</button>';
+  return s+'</div>'+(v.pending?'<div class="mini" style="margin:-6px 0 12px">新しいデータを '
+    +v.pending+'ファイル取り込みました。開き直すと反映されます。</div>':'')+'</div>';
+}
 /* 私が直した問題だけを、直した順に確かめる（2026-08-18 本人指定）。
    1問→3問→5問→10問→全部 と段を上げ、OKが出てから次の範囲へ広げる。
    卒業した問題も出す（keepGrad）／未習でも出す（pickExplicit）／並べ替えない（keepOrder）。 */
@@ -2999,6 +3023,8 @@ function qHead(ses,p){
     +'</div>';
 }
 var PROGPREV=0,PROGNEW=0;
+/* 殻が版を確認し終えたら、ホームの版の行を描き直す（押さなくても分かるように） */
+window.addEventListener('takken-data',function(){if(S.view==='home')render()});
 /* 連続正解の数字＝入れ替わる整数なので桁ロール（qHead と applyExpDom の2か所で同じものを使う） */
 function comboHtml(sk){
   return '<span class="combo'+(sk>=5?' hot':'')+'"><span class="m6-roll"'
@@ -4268,6 +4294,7 @@ document.addEventListener('click',function(e){
   if(a==='next'){next();return}
   if(a==='startCheck'){startCheck(+(t.getAttribute('data-n')||0));return}
   if(a==='datapull'){dataPull();return}
+  if(a==='dreload'){location.reload();return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
   /* 選んだだけでは保存しない＝**送信で確定**（2026-08-18 本人の設計）。 */
