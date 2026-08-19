@@ -1090,6 +1090,13 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    淡い面＋濃い文字で、どの配色に切り替えても同じ意味に見えるようにする。 */
 .qwrap .ans .b{border-radius:99px;background:#eef4f0;color:#4f8a70;border:1px solid #dfeae4}
 .qwrap .ans .b.x{background:#f8eeed;color:#b06a63;border-color:#f0dedb}
+/* 配信の帯（ホーム。どの単元を配信したか） */
+.dlv{display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:7px 10px;
+  border-radius:8px;background:var(--oktint);border:1px solid var(--line);
+  font-size:12px;color:var(--fg)}
+.dlv-b{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--ok);color:#fff}
+.dlv b{font-weight:600}
+.dlv-t{margin-left:auto;color:var(--muted);font-size:11px}
 
 /* データ読み込み画面（初回だけ） */
 #importer{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;
@@ -1236,7 +1243,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='4a5e3354';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='c4c4960f';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
