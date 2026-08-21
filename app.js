@@ -727,6 +727,7 @@ function normST(o){
   if(!o.closedSeen||typeof o.closedSeen!=='object')o.closedSeen={}; /* 最大演出を出した小分類 */
   /* 解き切ったチェックの回（キー＝配信の時刻）。持たないと開き直したときに行が戻る。 */
   if(!o.checkDone||typeof o.checkDone!=='object')o.checkDone={};
+  if(!Array.isArray(o.mock))o.mock=[];          /* 模試の結果（前提の校正に使う） */
   if(!/^\d{4}-\d{2}-\d{2}$/.test(o.settings.exam||''))o.settings.exam=EXAM_DEFAULT;  /* 試験日 */
   if(typeof o.settings.min!=='number'||o.settings.min<10)o.settings.min=120;         /* 1日の学習時間（分） */
   if(typeof o.settings.vmin!=='number'||o.settings.vmin<0)o.settings.vmin=39;        /* うち動画を見る時間（分） */
@@ -1829,6 +1830,7 @@ function render(){
   else if(S.view==='fields')h=vFields();
   else if(S.view==='study')h=vStudy();
   else if(S.view==='quiz')h=vQuiz();
+  else if(S.view==='mock')h=vMock();
   else if(S.view==='review')h=vReview();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
@@ -1956,6 +1958,7 @@ function vHome(){
      抜き打ちと間違いは復習の画面に集約した＝引き算の原則。 */
   h+=verLineHtml();      /* 出題中に新しいデータが来たとき／失敗したときだけ出る */
   h+=checkHtml();        /* 私が直した分のチェック（CHECK が空のときは何も出ない） */
+  h+=mockRowHtml();      /* 模試（本試験形式・4択）＝いまの実力を測る */
   h+=flowHtml();
 
   /* 中断中の出題セッション */
@@ -2058,6 +2061,145 @@ function checkList(){
     out.push({unit:c.unit||'',dataAt:c.dataAt||'',ids:ids});
   }
   return out;
+}
+/* ============ 模試（本試験形式・4択・時間を計る） ============
+   2026-08-21 本人の発案「実際にどのくらい覚えているかテストしてみたらわかる」。
+   一問一答（肢の○×）では**本試験の点数が測れない**（4肢のうち3肢が曖昧だと選べない）。
+   シミュレーションの前提が25点〜41点まで振れた原因がここなので、実測に置き換える。
+
+   作り：同じ (年・月・問) の肢を4つ集め、○が1つだけ（正しいものを選べ）または
+   ×が1つだけ（誤っているものを選べ）の問だけを4択として復元する。
+   個数問題は4択にできないので外す。 */
+var MOCK=null;
+function mockPool(){
+  if(MOCK)return MOCK;
+  var by={};
+  ITEMS.forEach(function(it){
+    var sc=it.src||{};
+    if(!sc.year||!sc.q)return;
+    if((it.flags||[]).indexOf('個数')>=0)return;
+    if(/-[アイウエオカキ]$/.test(it.id))return;      /* ア〜エの組合せ問題は4択に復元できない */
+    var k=sc.year+'/'+(sc.month||0)+'/'+sc.q;
+    (by[k]=by[k]||[]).push(it);
+  });
+  var out=[];
+  Object.keys(by).forEach(function(k){
+    var a=by[k];
+    if(a.length!==4)return;
+    /* リードの「○の定義」から、4択の言い方を決める。
+       「正しい場合は○」→ 正しいもの／誤っているもの
+       「違反しなければ○」→ 違反しないもの／違反するもの
+       言い方を固定すると、民法の問に「宅建業法の規定によれば」と出てしまう（2026-08-21 実機で確認）。 */
+    var ld=a[0].lead||'';
+    var pos='正しい',neg='誤っている';
+    if(ld.indexOf('違反しなければ○')>=0){pos='違反しない';neg='違反する'}
+    else if(ld.indexOf('違反すれば○')>=0){pos='違反する';neg='違反しない'}
+    var t=a.filter(function(x){return !!x.ox}).length;
+    if(t!==1&&t!==3)return;                      /* 1つだけ○ か 1つだけ× のときだけ */
+    var findOk=(t===1);                          /* true＝正しいものを選べ */
+    var ans=-1,i;
+    for(i=0;i<4;i++)if((!!a[i].ox)===findOk){ans=i;break}
+    if(ans<0)return;
+    var y=k.split('/');
+    out.push({key:k,year:+y[0],month:+y[1],q:+y[2],items:a,ans:ans,findOk:findOk,
+              ask:(findOk?pos:neg),lead:ld.replace(/(、|。)?\s*[^、。]*○[^]*$/,''),
+              cat:a[0].cat,big:a[0].big,
+              solved:a.filter(function(x){return att(R(x.id))>0}).length});
+  });
+  MOCK=out;return out;
+}
+/* 模試に出す問＝**4肢すべて解いたことがある問**から新しい年を優先
+   （実力を測るのが目的なので未学習は入れない。古い年は法改正で答えが変わるため後ろ） */
+function mockPick(n){
+  var a=mockPool().filter(function(x){return x.solved===4});
+  a.sort(function(x,y){return (y.year-x.year)||(x.q-y.q)});
+  return a.slice(0,n||20);
+}
+function startMock(n){
+  var qs=mockPick(n||20);
+  if(qs.length<5){msg('模試に使える問がまだ足りません');return}
+  S.mock={qs:qs,i:0,sel:[],t0:Date.now(),done:false};
+  S.view='mock';render();
+}
+function mockAnswer(k){
+  var m=S.mock;if(!m||m.done)return;
+  m.sel[m.i]=k;
+  if(m.i+1<m.qs.length){m.i++}
+  else{
+    m.done=true;m.sec=Math.round((Date.now()-m.t0)/1000);
+    var ok=0;
+    m.qs.forEach(function(q,i){if(m.sel[i]===q.ans)ok++});
+    m.ok=ok;
+    if(!ST.mock)ST.mock=[];
+    ST.mock.push({at:nowStamp(),n:m.qs.length,ok:ok,sec:m.sec,
+                  qs:m.qs.map(function(q,i){return {k:q.key,cat:q.cat,ok:(m.sel[i]===q.ans)}})});
+    saveST();
+  }
+  render();
+}
+function vMock(){
+  var m=S.mock;
+  if(!m)return '<div class="wrap"><div class="mini">模試の状態がありません</div></div>';
+  if(m.done)return vMockResult();
+  var q=m.qs[m.i],el=Math.round((Date.now()-m.t0)/1000);
+  var h='<div class="wrap">';
+  h+='<div class="qhead"><div class="qrow"><span class="qname">模試</span>'
+    +'<span class="qcnt"><span class="num">'+(m.i+1)+'</span><span class="qtot"> / '+m.qs.length+'</span></span>'
+    +'<span class="chip">'+esc(String(q.year))+'年 問'+q.q+'</span>'
+    +'<span class="mini" style="margin-left:auto" id="mkclock">'+mmss(el)+'</span>'
+    +'</div><div class="qrule"></div></div>';
+  h+='<div class="lead">'+esc(q.lead||q.items[0].lead||'')+'</div>';
+  h+='<div class="stem" style="font-weight:600">次のうち、'+esc(q.ask)+'ものはどれか。</div>';
+  q.items.forEach(function(it,k){
+    h+='<button class="frow" data-act="mkans" data-k="'+k+'" style="text-align:left;height:auto;'
+      +'min-height:44px;padding:10px 12px;white-space:normal;line-height:1.7">'
+      +'<span class="num" style="margin-right:8px">'+(k+1)+'</span><span>'+esc(it.stem)+'</span></button>';
+  });
+  h+='<div class="mini" style="margin-top:10px">選ぶと次の問へ進みます。正誤は最後まで出ません。</div>';
+  h+='</div>';
+  return h;
+}
+function vMockResult(){
+  var m=S.mock,h='<div class="wrap">';
+  var rate=Math.round(100*m.ok/m.qs.length);
+  h+='<div class="card"><div class="mini">模試の結果</div>'
+    +'<div style="font-size:28px;font-weight:600;margin:6px 0">'+m.ok+' / '+m.qs.length+'問　'+rate+'%</div>'
+    +'<div class="mini">かかった時間 '+mmss(m.sec)+'（1問あたり '+mmss(Math.round(m.sec/m.qs.length))+'）</div>'
+    +'<div class="mini">この正答率が本試験でも続くなら、50問で <b>'+Math.round(rate*50/100)+'点</b>相当'
+    +'（いま解いた範囲＝宅建業法の一部だけの実力）</div>'
+    +'</div>';
+  var per={};
+  m.qs.forEach(function(q,i){
+    var o=per[q.cat]=per[q.cat]||[0,0];o[1]++;if(m.sel[i]===q.ans)o[0]++;
+  });
+  h+='<div class="card"><div class="mini">単元ごと</div>';
+  Object.keys(per).forEach(function(c){
+    h+='<div class="frow" style="pointer-events:none"><span>'+esc(c)+'</span>'
+      +'<span class="fst">'+per[c][0]+' / '+per[c][1]+'</span></div>';
+  });
+  h+='</div>';
+  h+='<div class="card"><div class="mini">間違えた問</div>';
+  var bad=0;
+  m.qs.forEach(function(q,i){
+    if(m.sel[i]===q.ans)return;bad++;
+    h+='<div class="frow" style="pointer-events:none;height:auto;padding:8px 0">'
+      +'<span>'+q.year+'年 問'+q.q+'　'+esc(q.cat)+'</span>'
+      +'<span class="fst">選んだ '+((m.sel[i]|0)+1)+' ／ 正解 '+(q.ans+1)+'</span></div>';
+  });
+  if(!bad)h+='<div class="mini">全問正解</div>';
+  h+='</div>';
+  h+='<button class="btn" data-act="go" data-v="home" style="margin-top:10px">ホームへ戻る</button>';
+  h+='</div>';
+  return h;
+}
+/* 模試の行。4肢すべて解いた問が10問以上あるときだけ出す（測れないものは出さない）。 */
+function mockRowHtml(){
+  var n=mockPick(20).length;
+  if(n<10)return '';
+  var a=ST.mock||[],last=a[a.length-1];
+  return '<button class="frow" data-act="startMock" data-n="20">'
+    +'<span>模試（本試験形式・4択）</span>'
+    +'<span class="fst">'+(last?('前回 '+last.ok+'/'+last.n+'　'):'')+n+'問'+IC.chev+'</span></button>';
 }
 function checkHtml(){
   var list=checkList();
@@ -4415,6 +4557,8 @@ document.addEventListener('click',function(e){
   }
   if(a==='next'){next();return}
   if(a==='startCheck'){startCheck(t.getAttribute('data-at')||'');return}
+  if(a==='startMock'){startMock(+(t.getAttribute('data-n')||20));return}
+  if(a==='mkans'){mockAnswer(+(t.getAttribute('data-k')||0));return}
   if(a==='datapull'){dataPull();return}
   if(a==='dreload'){location.reload();return}
   /* 版が変わったらホームを描き直す（チェックの行の出し入れがすぐ効くように） */
