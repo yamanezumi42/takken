@@ -2042,46 +2042,50 @@ function verFootHtml(){
 /* 私が直した問題だけを、直した順に確かめる（2026-08-18 本人指定）。
    1問→3問→5問→10問→全部 と段を上げ、OKが出てから次の範囲へ広げる。
    卒業した問題も出す（keepGrad）／未習でも出す（pickExplicit）／並べ替えない（keepOrder）。 */
-function checkHtml(){
-  var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
-  if(!ids.length)return '';
-  /* 最後まで解き切った回は出さない（2026-08-18 本人指示「最後の画面まで来たときは
-     ホーム画面に表示されないようにして欲しい」）。回の区別は CHECK.dataAt。 */
-  if(CHECK.dataAt&&(ST.checkDone||{})[CHECK.dataAt])return '';
-  /* 端末のデータが、この並びのために配信したものより古いなら、押させない。
-     古い図を見て「これは違う」と判断させてしまうと、正解データが汚れる。 */
-  var v=window.TAKKEN_SRC||{},stale=false;
-  if(CHECK.dataAt){
-    var at=String(v.at||'');
-    stale=(at<CHECK.dataAt);
+function checkList(){
+  /* 配信の回を**溜められる**ようにした（2026-08-19 本人「もうこの基準で作成していいよ。
+     なんかあったら報告するからそれを対処してくれれば問題ない」＝1単元ごとの承認待ちをやめた）。
+     枠が1つだと次の単元を配信した時点で前の単元のチェックが消えるので、単元ごとに行を並べる。
+     ・新しい順に並べる ・解き切った回（ST.checkDone[dataAt]）は消える
+     ・古いデータの端末では CHECKS が無いので CHECK 1件に落とす（落ちない） */
+  var a=(window.CHECKS&&CHECKS.length)?CHECKS.slice():[CHECK];
+  var out=[];
+  for(var i=0;i<a.length;i++){
+    var c=a[i]||{};
+    var ids=(c.ids||[]).filter(function(x){return !!BY[x]});
+    if(!ids.length)continue;
+    if(c.dataAt&&(ST.checkDone||{})[c.dataAt])continue;
+    out.push({unit:c.unit||'',dataAt:c.dataAt||'',ids:ids});
   }
-  if(stale)return '<div class="mini" style="margin-bottom:12px;color:var(--ngdeep)">'
-    +'チェック用問題は、アプリを開き直すと出ます</div>';
-  /* ボタンは1つだけ（2026-08-18 本人「基本的にチェックは全部やるからチェックするっていう
-     ボタンだけでいい」）。1問/3問…の出し分けは要らなかった。 */
-  return checkBanner()
-    +'<button class="frow" data-act="startCheck" data-n="0">'
-    +'<span>チェック用問題</span><span class="fst">'+ids.length+'問'+IC.chev+'</span></button>';
+  return out;
 }
-/* **どの単元を配信したか**をホームに出す（2026-08-19 本人指示
-   「配信したらどの動画を配信したか分かるようにアプリ上でわかるようにしておいて。
-     ホームに配信しましたとかね」）。
-   CHECK.unit＝ship_check.py が書く単元名（例「#11 保証協会2」）。
-   古いデータには unit が無いので、そのときは出さない（落ちない）。 */
-function checkBanner(){
-  if(!CHECK.unit)return '';
-  var at=(CHECK.dataAt||'').slice(5,16);      /* 08-19 07:10 */
-  return '<div class="dlv"><span class="dlv-b">配信しました</span>'
-    +'<b>'+esc(CHECK.unit)+'</b>'
-    +'<span class="dlv-t">'+esc(at)+'</span></div>';
+function checkHtml(){
+  var list=checkList();
+  if(!list.length)return '';
+  /* 端末のデータが、いちばん新しい回より古いなら押させない。
+     古い図を見て「これは違う」と判断させてしまうと、正解データが汚れる。 */
+  var v=window.TAKKEN_SRC||{},at=String(v.at||''),h='';
+  for(var i=0;i<list.length;i++){
+    var c=list[i];
+    if(c.dataAt&&at<c.dataAt){
+      h+='<div class="mini" style="margin-bottom:8px;color:var(--ngdeep)">'
+        +esc(c.unit||'チェック用問題')+'は、アプリを開き直すと出ます</div>';
+      continue;
+    }
+    h+='<div class="dlv"><span class="dlv-b">配信しました</span><b>'+esc(c.unit||'チェック用問題')
+      +'</b><span class="dlv-t">'+esc((c.dataAt||'').slice(5,16))+'</span></div>'
+      +'<button class="frow" data-act="startCheck" data-at="'+esc(c.dataAt)+'">'
+      +'<span>チェック用問題</span><span class="fst">'+c.ids.length+'問'+IC.chev+'</span></button>';
+  }
+  return h;
 }
-function startCheck(nq){
-  var ids=(CHECK.ids||[]).filter(function(i){return !!BY[i]});
-  if(!ids.length){msg('チェックする問題がありません');return}
-  if(nq>0)ids=ids.slice(0,nq);
+function startCheck(at){
+  var list=checkList(),c=null;
+  for(var i=0;i<list.length;i++)if(!at||list[i].dataAt===at)  { c=list[i]; break }
+  if(!c){msg('チェックする問題がありません');return}
   S.pickExplicit=true;S.keepOrder=true;S.kind='review';
-  S.checkAt=CHECK.dataAt||'';          /* この回を終えたときに印を付けるため */
-  startQueue(ids.map(function(i){return BY[i]}),'チェック用問題',false,null,true,false);
+  S.checkAt=c.dataAt||'';               /* この回を終えたときに印を付けるため */
+  startQueue(c.ids.map(function(i){return BY[i]}),'チェック用問題',false,null,true,false);
 }
 function flowHtml(){
   var cur=nextVidAll(),pl=plan(),h='<div class="flow">';
@@ -2944,14 +2948,19 @@ function vQuiz(){
   /* 同じ問題が複数の動画に現れるので、紐づいた動画すべての章リンクを出す。
      1行に収める（章名は長いので省略記号／時刻は折り返さない） */
   /* 既定は主教材の1本だけ（主役を1つに）。他の動画は「＋N」で開く。 */
-  var showLinks=chs.slice(0,1);
+  /* **出題中は動画のリンクを出さない**（2026-08-20 本人報告
+       「広告不要の例外って動画リンクに書いてあったから答えがわかってしまった」）。
+     見出しの章名は単元名に隠していたが、その下のリンクのラベルが章名のままで、
+     そこに答えが書いてあった（例「公告せずに取戻し（例外）」）。
+     答えた後（S.phase!==q）に出す＝学習の導線は失わない。 */
+  var showLinks=(S.view==='quiz'&&S.phase==='q')?[]:chs.slice(0,1);
   showLinks.forEach(function(ch){
     h+='<a class="link'+ac()+'" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
       +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'"'+ad(4)+'>'+IC.yt
       +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+'</span>'
       +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
   });
-  if(chs.length>1)
+  if(chs.length>1&&!(S.view==='quiz'&&S.phase==='q'))
     h+='<button class="btn sm" style="min-height:26px;padding:0 8px;align-self:flex-start" data-act="togsrc">＋'
       +(chs.length-1)+'</button>';
   /* 何問目はヘッダー（A2の行）へ移した。ここには置かない＝引き算の原則 */
@@ -4405,7 +4414,7 @@ document.addEventListener('click',function(e){
     S.anim=null;S.enter=false;render();window.scrollTo(0,0);return;
   }
   if(a==='next'){next();return}
-  if(a==='startCheck'){startCheck(+(t.getAttribute('data-n')||0));return}
+  if(a==='startCheck'){startCheck(t.getAttribute('data-at')||'');return}
   if(a==='datapull'){dataPull();return}
   if(a==='dreload'){location.reload();return}
   /* 版が変わったらホームを描き直す（チェックの行の出し入れがすぐ効くように） */
