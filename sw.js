@@ -1,7 +1,7 @@
 /* 殻だけをキャッシュしてオフラインで起動できるようにする。
    問題データはここに入れない（IndexedDBにある）。 */
-var V='takken-59fbff4f';
-var ASSETS=['./','./index.html','./app.js?v=59fbff4f','./bootfx.js?v=59fbff4f','./manifest.webmanifest',
+var V='takken-6e2a749d';
+var ASSETS=['./','./index.html','./app.js?v=6e2a749d','./bootfx.js?v=6e2a749d','./manifest.webmanifest',
             './icon-180.png','./icon-192.png','./icon-512.png',
             './fonts/zenoldmincho-subset.woff2','./fonts/washi.png'];
 self.addEventListener('install',function(e){
