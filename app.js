@@ -4174,7 +4174,10 @@ function ghFP(){
   /* 問題の記録だけでなく、視聴の印・動画ごとの進捗・学習時間・日ごとの記録も見る。
      items だけだと「今日は動画を見ただけ」の日が丸ごと上がらない（2026-08-15 批評）。
      settings.gh は入れない（at が毎回変わって無限に上げてしまう）。 */
-  var s2=JSON.stringify([ST.items||{},ST.watched||{},ST.vp||{},ST.tlog||{},ST.days||{},ST.closedSeen||{}]),h=5381;
+  /* **報告と模試も見る**（2026-08-21）。ここに入れないと「模試だけやった」「報告だけした」日が
+     『中身が変わっていない』と判定されて自動で上がらない（実際に模試の結果が届かなかった）。 */
+  var s2=JSON.stringify([ST.items||{},ST.watched||{},ST.vp||{},ST.tlog||{},ST.days||{},
+                         ST.closedSeen||{},ST.reports||{},ST.mock||[]]),h=5381;
   for(var i=0;i<s2.length;i++){h=((h*33)^s2.charCodeAt(i))>>>0}
   return s2.length+'-'+h.toString(36);
 }
