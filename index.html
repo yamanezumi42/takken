@@ -1243,7 +1243,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='920d9336';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='32ea7ed9';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1291,7 +1291,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       if(p.indexOf('figs/')===0){var o=rec.parts[p];for(var k in o)figs[k]=o[k]}
     });
     return {items:items,chapters:rec.parts['chapters.json']||{},
-            curriculum:rec.parts['curriculum.json']||null,figs:figs};
+            curriculum:rec.parts['curriculum.json']||null,figs:figs,
+            mocks:rec.parts['mocks.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1372,6 +1373,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_ITEMS=d.items||[];
     window.TAKKEN_CHAPTERS=d.chapters||{};
     window.TAKKEN_CURRICULUM=d.curriculum||null;
+    window.TAKKEN_MOCKS=d.mocks||null;          /* 模試（本試験形式49問×10回） */
     window.TAKKEN_FIGS=d.figs||{};
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
