@@ -2090,6 +2090,9 @@ function checkList(){
     var ids=(c.ids||[]).filter(function(x){return !!BY[x]});
     if(!ids.length)continue;
     if(c.dataAt&&(ST.checkDone||{})[c.dataAt])continue;
+    /* 図をあとで貼る回（--nofig-all）は、押して確かめてもらう意味が薄いので出さない。
+       動画のリンク先が合っているかは検証担当が字幕を読んで済ませている（2026-08-22 本人指示）。 */
+    if(c.nofig_all)continue;
     out.push({unit:c.unit||'',dataAt:c.dataAt||'',ids:ids});
   }
   return out;
@@ -2204,6 +2207,24 @@ function mockAnswer(k){
   saveST();
   render();
 }
+/* ここまでで採点する。回答済みの問だけで結果を出し、記録にも残す（2026-08-22）。 */
+function mockStop(){
+  var m=S.mock;if(!m||m.done)return;
+  var qs=(m.qs||[]).slice(0,m.i);
+  if(!qs.length)return;
+  m.qs=qs;m.done=true;m.sec=mockSec(m);
+  var ok=0,det=[];
+  qs.forEach(function(q,i){
+    var right=(m.sel[i]===q.ans);if(right)ok++;
+    det.push({no:q.no,k:(q.own?('orig'+q.no):(q.ids||[]).join(',')),orig:!!q.own,
+              cat:q.cat,big:q.big,type:q.type,ok:right,sel:m.sel[i],ans:q.ans});
+  });
+  m.ok=ok;
+  if(!ST.mock)ST.mock=[];
+  ST.mock.push({at:nowStamp(),set:m.set||0,kind:m.kind,n:qs.length,ok:ok,sec:m.sec,
+                途中:true,qs:det});
+  ST.mockRun=null;saveST();render();
+}
 function vMock(){
   var m=S.mock;
   if(!m)return '<div class="wrap"><div class="mini">模試の状態がありません</div></div>';
@@ -2240,6 +2261,10 @@ function vMock(){
   }
   h+='<div class="mini" style="margin-top:10px">選ぶと次へ進みます。正誤は最後まで出ません。'
     +'途中で閉じても続きから戻れます。</div>';
+  /* 途中で切り上げても点数が出るようにする（2026-08-22 本人「何問正解してた？」）。
+     5問だけやって止める使い方があるので、その場でここまでの結果を見られる必要がある。 */
+  if(m.i>0)h+='<button class="btn sm" data-act="mkstop" style="margin-top:10px;width:auto;'
+    +'padding:0 12px">ここまでで採点する（'+m.i+'問）</button>';
   h+='</div>';
   return h;
 }
@@ -2252,7 +2277,8 @@ var MLB=['なし','一つ','二つ','三つ','四つ'];
 function vMockResult(){
   var m=S.mock,qs=m.qs||[],h='<div class="wrap">';
   var rate=Math.round(100*m.ok/qs.length);
-  h+='<div class="card"><div class="mini">通し演習の結果（習った範囲 '+qs.length+'問）</div>'
+  h+='<div class="card"><div class="mini">通し演習の結果（習った範囲 '+qs.length+'問'
+    +((ST.mock||[]).length&&(ST.mock[ST.mock.length-1]||{})['途中']?'・途中で採点':'')+'）</div>'
     +'<div style="font-size:28px;font-weight:600;margin:6px 0">'+m.ok+' / '+qs.length+'問　'+rate+'%</div>'
     +'<div class="mini">かかった時間 '+mmss(m.sec)+'（1問あたり '+mmss(Math.round(m.sec/qs.length))
     +'／本試験は1問2.4分）</div>'
@@ -2312,10 +2338,12 @@ function mockRowHtml(){
   if(!MOCKS.length)return '';
   var r=ST.mockRun;
   if(r&&!r.done){
-    var tot=(r.qs||[]).length||49;
+    var tot=(r.qs||[]).length||49,ok2=0,i2;
+    for(i2=0;i2<(r.sel||[]).length;i2++)
+      if(r.sel[i2]!=null&&r.qs&&r.qs[i2]&&r.sel[i2]===r.qs[i2].ans)ok2++;
     return '<button class="frow" data-act="resumeMock">'
-      +'<span>模試 第'+r.set+'回を続ける</span>'
-      +'<span class="fst">'+((r.i||0)+1)+' / '+tot+'問'+IC.chev+'</span></button>';
+      +'<span>通し演習を続ける</span>'
+      +'<span class="fst">'+(r.i||0)+' / '+tot+'問　いま '+ok2+'問正解'+IC.chev+'</span></button>';
   }
   var a=ST.mock||[],last=a[a.length-1],n2=mockLearned().length;
   if(!n2)return '';
@@ -4689,6 +4717,7 @@ document.addEventListener('click',function(e){
   if(a==='startCheck'){startCheck(t.getAttribute('data-at')||'');return}
   if(a==='startMock'){startMock(+(t.getAttribute('data-n')||0));return}
   if(a==='resumeMock'){resumeMock();return}
+  if(a==='mkstop'){mockStop();return}
   if(a==='mkrev'){S.mockRev=+(t.getAttribute('data-i')||0);render();return}
   if(a==='mkans'){mockAnswer(+(t.getAttribute('data-k')||0));return}
   if(a==='datapull'){dataPull();return}
