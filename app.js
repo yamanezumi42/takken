@@ -43,8 +43,8 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"法令上の制限 #5 都市計画法　地区計画",unit:"",note:"",
-  dataAt:"2026-08-22 12:07",ids:["b2_7-011-1", "b2_1-011-3", "b2_1-011-4", "b2_1-015-4"]};
+var CHECK={label:"権利関係 #21 物権変動",unit:"",note:"",
+  dataAt:"2026-08-22 13:51",ids:["b1_8-027-1"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -1903,6 +1903,31 @@ function renderTabs(){
 }
 
 /* ---------- ホーム（引き算：説明文を置かず、数字と図で示す） ---------- */
+/* ============ 日割り（2026-08-22 実測で決めた形） ============
+   実測＝新規52.5秒/肢・復習35.4秒/肢・正答率84.7%（8日間の記録）。
+   これで「全部を2〜3周」は1日215問＝2.8時間になり続かない。間違えるのは18%だけなので、
+   **1周＋間違えた分＋総復習**にして、総復習を試験直前に置く（批評担当の実測で+6点相当）。 */
+var PLAN2={newEnd:'2026-09-18',allStart:'2026-10-05',allEnd:'2026-10-16',perDay:115};
+function ph(){
+  var t=today();
+  if(t<=PLAN2.newEnd)return 'new';
+  if(t<PLAN2.allStart)return 'rev';
+  if(t<=PLAN2.allEnd)return 'all';
+  return 'last';
+}
+function isSunday(){return new Date(today().replace(/-/g,'/')).getDay()===0}
+/* その日の目標。期間で意味が変わる（新規／間違い直し／総復習／仕上げ）。 */
+function goal2(){
+  var p=ph(),dt=(ST.days[today()]||{});
+  if(p==='new')return {lab:'新規',n:PLAN2.perDay,done:newToday()};
+  if(p==='rev')return {lab:'間違い直し',n:Math.min(wrongPool().length,60),done:dt.n||0};
+  if(p==='all'){
+    var left=Math.max(1,Math.round((new Date(PLAN2.allEnd.replace(/-/g,'/'))
+             -new Date(today().replace(/-/g,'/')))/864e5)+1);
+    return {lab:'総復習',n:Math.ceil(ITEMS.length/12/left*3),done:dt.n||0};
+  }
+  return {lab:'仕上げ',n:49,done:dt.n||0};
+}
 function vHome(){
   var st=allStats(),pl=plan(),dl=pl.daysLeft;
   var h='<div class="pad'+stag()+'">';
@@ -1921,8 +1946,8 @@ function vHome(){
   h+='<div class="hpair">'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">試験まで</div>'
     +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
-    +'<div class="hcard">'+flw(17)+'<div class="hlab">1日あたり</div>'
-    +'<div class="hnum">'+n3(newToday())+'<span>/ '+n3(perday)+'問</span></div></div>'
+    +'<div class="hcard">'+flw(17)+'<div class="hlab">'+goal2().lab+'</div>'
+    +'<div class="hnum">'+n3(goal2().done)+'<span>/ '+n3(goal2().n)+'問</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">今日'+(drev?'・復習 '+n3(drev):'')+'</div>'
     +'<div class="hnum">'+n3(dn)+'<span>問</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">いま</div>'
@@ -1944,6 +1969,11 @@ function vHome(){
     +'<span>解いた問題数 <b>'+n3(apn)+'</b>問</span></div>'
     +'<div class="bar3" style="margin-bottom:14px"><i style="width:'
     +(ITEMS.length?(apd/ITEMS.length*100).toFixed(1):'0')+'%"></i></div>';
+  /* いまどの期間か（1行だけ。カードは増やさない＝引き算の原則）。 */
+  h+='<div class="hstat" style="margin-bottom:12px"><span>'
+    +({'new':'新規は 9/18 まで（1日'+PLAN2.perDay+'問）','rev':'間違い直しの期間（〜10/4）',
+       'all':'総復習の期間（10/5〜10/16）','last':'仕上げ'}[ph()])
+    +'</span><span>日曜は通し演習</span></div>';
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
      ホーム画面の案内は一度閉じたら二度出さない（settings.a2hs）。 */
@@ -2081,30 +2111,74 @@ function checkList(){
    ・統計（問48）は素材が無いので入れない＝49問。1点は別枠。
    ・2時間かかるので**閉じても続きから戻れる**（ST.mockRun）。 */
 function mockSet(n){for(var i=0;i<MOCKS.length;i++)if(MOCKS[i].n===n)return MOCKS[i];return null}
+/* **習った範囲だけで組む**（2026-08-22 本人「習ってない範囲やったところで意味ない」）。
+   作り置きの10回分から、**4肢すべて解いたことがある問**だけを集めて最大49問。
+   ・肢は別々の年から組み替えてあるので、習った範囲でも**組み合わせは初見**
+   ・前にやった問は避ける（尽きたら再利用）
+   ・新規が進むほど範囲が自動で広がり、9/18以降は全範囲＝本試験と同じ構成になる */
+function mockLearned(){
+  var used={};
+  (ST.mock||[]).forEach(function(r){(r.qs||[]).forEach(function(q){if(q.k)used[q.k]=1})});
+  var pool=[],i,j;
+  for(i=0;i<MOCKS.length;i++)for(j=0;j<MOCKS[i].qs.length;j++){
+    var q=MOCKS[i].qs[j],ok=true,k;
+    if(q.own){
+      /* オリジナルの回＝根拠にした肢（learn）を全部解いていれば「習った範囲」。 */
+      var lw=q.learn||[];
+      for(k=0;k<lw.length;k++){var l2=BY[lw[k]];if(!l2||att(R(l2.id))===0){ok=false;break}}
+      if(ok)pool.push({q:q,set:0,old:used['orig'+q.no]?1:0});
+      continue;
+    }
+    for(k=0;k<q.ids.length;k++){var it=BY[q.ids[k]];if(!it||att(R(it.id))===0){ok=false;break}}
+    if(ok)pool.push({q:q,set:MOCKS[i].n,old:used[q.ids.join(',')]?1:0});
+  }
+  /* 本試験の配点に近い割合で取る。足りない科目はあるだけ。 */
+  var want={'権利関係':14,'法令上の制限':8,'宅地建物取引業法等':20,'税に関する法令':2,
+            '不動産価格の評定':1,'土地・建物その他の需給':4},out=[],by={};
+  pool.sort(function(x,y){
+    var ox=x.q.own?0:1,oy=y.q.own?0:1;      /* オリジナルを先に出す（答えを覚えていない問） */
+    return (x.old-y.old)||(ox-oy)||(x.set-y.set)||(x.q.no-y.q.no);
+  });
+  pool.forEach(function(r){(by[r.q.big]=by[r.q.big]||[]).push(r)});
+  Object.keys(want).forEach(function(b){(by[b]||[]).slice(0,want[b]).forEach(function(r){out.push(r)})});
+  var ordb={'権利関係':0,'法令上の制限':1,'税に関する法令':2,'不動産価格の評定':3,
+            '宅地建物取引業法等':4,'土地・建物その他の需給':5};
+  out.sort(function(x,y){return (ordb[x.q.big]-ordb[y.q.big])||(x.q.no-y.q.no)});
+  return out.map(function(r,i){
+    var q={},k;for(k in r.q)q[k]=r.q[k];q.no=i+1;return q;
+  });
+}
 /* 次にやる回＝まだ終えていない、いちばん小さい回 */
 function mockNext(){
   var done={};(ST.mock||[]).forEach(function(r){if(r.set)done[r.set]=1});
   for(var i=0;i<MOCKS.length;i++)if(!done[MOCKS[i].n])return MOCKS[i];
   return MOCKS.length?MOCKS[MOCKS.length-1]:null;   /* 全部やったら最後の回をもう一度 */
 }
-function mockItems(q){var a=[],i;for(i=0;i<q.ids.length;i++){var x=BY[q.ids[i]];if(x)a.push(x)}return a}
-function startMock(n){
-  var st=n?mockSet(n):mockNext();
-  if(!st){msg('模試のデータが入っていません');return}
-  S.mock={set:st.n,kind:st.kind,i:0,sel:[],t0:Date.now(),acc:0,done:false};
-  ST.mockRun={set:st.n,kind:st.kind,i:0,sel:[],acc:0,done:false};saveST();
-  S.view='mock';S.mockRev=null;render();
+/* 問の肢を返す。**オリジナルの回**（私が論点から作った肢）は `own` に本文を直接持つので、
+   ITEMS を引かずにそのまま使う（2026-08-22 本人指示「論点からオリジナルを作れ」）。 */
+function mockItems(q){
+  if(q.own)return q.own;
+  var a=[],i;for(i=0;i<q.ids.length;i++){var x=BY[q.ids[i]];if(x)a.push(x)}return a;
 }
+function startMock(n){
+  var qs=mockLearned();
+  if(qs.length<5){msg('習った範囲がまだ足りません（4肢すべて解いた問が5問未満）');return}
+
+  var nx=mockNext(),kind=(nx?nx.kind:'標準');
+  S.mock={set:0,kind:kind,qs:qs,i:0,sel:[],t0:Date.now(),acc:0,done:false};
+  ST.mockRun={set:0,kind:kind,qs:qs,i:0,sel:[],acc:0,done:false};saveST();
+  S.view='mock';S.mockRev=null;render();}
+
 /* 途中の模試に戻る。経過時間は acc（積み上げ）＋いまの続き。 */
 function resumeMock(){
   var r=ST.mockRun;if(!r||r.done)return;
-  S.mock={set:r.set,kind:r.kind,i:r.i||0,sel:r.sel||[],t0:Date.now(),acc:r.acc||0,done:false};
+  S.mock={set:r.set,kind:r.kind,qs:r.qs||[],i:r.i||0,sel:r.sel||[],t0:Date.now(),acc:r.acc||0,done:false};
   S.view='mock';S.mockRev=null;render();
 }
 function mockSec(m){return (m.acc||0)+Math.round((Date.now()-m.t0)/1000)}
 function mockAnswer(k){
   var m=S.mock;if(!m||m.done)return;
-  var st=mockSet(m.set),qs=st.qs;
+  var qs=m.qs||[];        /* 習った範囲で組んだ問（2026-08-22） */
   m.sel[m.i]=k;
   if(m.i+1<qs.length){m.i++}
   else{
@@ -2112,16 +2186,19 @@ function mockAnswer(k){
     var ok=0,det=[];
     qs.forEach(function(q,i){
       var right=(m.sel[i]===q.ans);if(right)ok++;
-      det.push({no:q.no,cat:q.cat,big:q.big,type:q.type,ok:right,sel:m.sel[i],ans:q.ans});
+      det.push({no:q.no,k:(q.own?('orig'+q.no):(q.ids||[]).join(',')),
+                orig:!!q.own,cat:q.cat,big:q.big,type:q.type,
+                ok:right,sel:m.sel[i],ans:q.ans});
     });
     m.ok=ok;
     if(!ST.mock)ST.mock=[];
-    ST.mock.push({at:nowStamp(),set:st.n,kind:st.kind,n:qs.length,ok:ok,sec:m.sec,qs:det});
+    /* 記録には「肢のid」も残す。次の回で同じ問を避けるため（2026-08-22）。 */
+    ST.mock.push({at:nowStamp(),set:m.set||0,kind:m.kind,n:qs.length,ok:ok,sec:m.sec,qs:det});
     ST.mockRun=null;
   }
   /* 1問ごとに保存する（2時間の途中で閉じても消えない） */
   if(!m.done){
-    ST.mockRun={set:m.set,kind:m.kind,i:m.i,sel:m.sel,acc:mockSec(m),done:false};
+    ST.mockRun={set:m.set,kind:m.kind,qs:m.qs,i:m.i,sel:m.sel,acc:mockSec(m),done:false};
     m.acc=ST.mockRun.acc;m.t0=Date.now();
   }
   saveST();
@@ -2131,9 +2208,10 @@ function vMock(){
   var m=S.mock;
   if(!m)return '<div class="wrap"><div class="mini">模試の状態がありません</div></div>';
   if(m.done)return vMockResult();
-  var st=mockSet(m.set),qs=st.qs,q=qs[m.i],a=mockItems(q);
+  var qs=m.qs||[],q=qs[m.i],a=mockItems(q);
   var h='<div class="wrap">';
-  h+='<div class="qhead"><div class="qrow"><span class="qname">模試 第'+st.n+'回</span>'
+  h+='<div class="qhead"><div class="qrow">'
+    +'<span class="qname">通し演習（習った範囲 '+qs.length+'問）</span>'
     +'<span class="qcnt"><span class="num">'+(m.i+1)+'</span><span class="qtot"> / '+qs.length+'</span></span>'
     +'<span class="chip">'+esc(q.cat)+'</span>'
     +(q.type==='個数'?'<span class="chip">個数</span>':'')
@@ -2172,9 +2250,9 @@ var MTGT={'宅地建物取引業法等':[19,14.0],'権利関係':[10,7.8],'法�
           '税に関する法令':[2,1.1],'不動産価格の評定':[1,0.5],'土地・建物その他の需給':[4,3.3]};
 var MLB=['なし','一つ','二つ','三つ','四つ'];
 function vMockResult(){
-  var m=S.mock,st=mockSet(m.set),qs=st.qs,h='<div class="wrap">';
+  var m=S.mock,qs=m.qs||[],h='<div class="wrap">';
   var rate=Math.round(100*m.ok/qs.length);
-  h+='<div class="card"><div class="mini">模試 第'+st.n+'回（'+st.kind+'型）の結果</div>'
+  h+='<div class="card"><div class="mini">通し演習の結果（習った範囲 '+qs.length+'問）</div>'
     +'<div style="font-size:28px;font-weight:600;margin:6px 0">'+m.ok+' / '+qs.length+'問　'+rate+'%</div>'
     +'<div class="mini">かかった時間 '+mmss(m.sec)+'（1問あたり '+mmss(Math.round(m.sec/qs.length))
     +'／本試験は1問2.4分）</div>'
@@ -2219,7 +2297,9 @@ function vMockResult(){
       h+='<div style="margin:8px 0"><div style="line-height:1.7">'
         +'<b>'+(k+1)+'</b>　'+(x.ox?'○':'×')+'　'+esc(x.stem)+'</div>'
         +'<div class="mini" style="margin-top:4px">'+esc(x.exp||'')+'</div>'
-        +'<div class="mini">出典 '+esc(String((x.src||{}).era||''))+' 問'+((x.src||{}).q||'')+'</div></div>';
+        +'<div class="mini">'+(x['根拠']
+            ?('根拠 '+esc(x['根拠'])+'／変えた点 '+esc(x['変えた点']||''))
+            :('出典 '+esc(String((x.src||{}).era||''))+' 問'+((x.src||{}).q||'')))+'</div></div>';
     });
     h+='</div>';
   }
@@ -2232,16 +2312,17 @@ function mockRowHtml(){
   if(!MOCKS.length)return '';
   var r=ST.mockRun;
   if(r&&!r.done){
-    var stt=mockSet(r.set),tot=stt?stt.qs.length:49;
+    var tot=(r.qs||[]).length||49;
     return '<button class="frow" data-act="resumeMock">'
       +'<span>模試 第'+r.set+'回を続ける</span>'
       +'<span class="fst">'+((r.i||0)+1)+' / '+tot+'問'+IC.chev+'</span></button>';
   }
-  var nx=mockNext(),a=ST.mock||[],last=a[a.length-1];
-  return '<button class="frow" data-act="startMock">'
-    +'<span>模試 第'+(nx?nx.n:1)+'回（本試験形式・'+(nx?nx.qs.length:49)+'問）</span>'
+  var a=ST.mock||[],last=a[a.length-1],n2=mockLearned().length;
+  if(!n2)return '';
+  return '<button class="frow'+(isSunday()?'':' yet')+'" data-act="startMock">'
+    +'<span>通し演習（習った範囲 '+n2+'問）</span>'
     +'<span class="fst">'+(last?('前回 '+last.ok+'/'+last.n+'　'):'')
-    +(nx&&nx.kind==='難化'?'難化型':'標準型')+IC.chev+'</span></button>';
+    +(isSunday()?'今日':'日曜')+IC.chev+'</span></button>';
 }
 function checkHtml(){
   var list=checkList();
@@ -2276,9 +2357,13 @@ function flowHtml(){
   /* 動画の行と「続き」の行は出さない（2026-08-16 本人指示「なくしてほしい」）。
      単元学習をメインに据えたので、ホームから動画・章へ入る導線は使っていない。
      科目の解禁は、学習タブで動画を見るか、単元から解けば（S.pendBig）足りる。 */
-  h+='<button class="frow'+(pl.sneak.length?'':' yet')+'" data-act="startSneak">'
-    +'<span>抜き打ち</span><span class="fst">'
-    +(sneakDone()?'今日は済':(pl.sneak.length?n3(pl.sneak.length)+'問':'なし'))+'</span></button>';
+  /* 2026-08-22 抜き打ちを外し、「今日やること」を期間で出す。
+     抜き打ちの役目（思い出し）は、間違えた分の追いと総復習に移した。 */
+  var g2=ph(),lb2={'new':'新規を解く','rev':'間違い直し','all':'総復習（全論点を1肢ずつ）',
+                   'last':'仕上げ'}[g2],rest2=unseenItems().length;
+  h+='<button class="frow'+(rest2?'':' yet')+'" data-act="startNew">'
+    +'<span>'+lb2+'</span><span class="fst">'
+    +(g2==='new'?('残り '+n3(rest2)+'問'):(n3(goal2().n)+'問'))+'</span></button>';
   /* 間違えた問題＝解いたことがあって、間違えて、まだ正解し直していないもの
      （wrongPool＝ng>0 かつ 直近が正解でない）。2026-08-15 本人指定でホームに置いた。 */
   var wp=wrongPool().length;
