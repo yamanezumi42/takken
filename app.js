@@ -730,6 +730,7 @@ function normST(o){
   if(!o.checkDone||typeof o.checkDone!=='object')o.checkDone={};
   if(!Array.isArray(o.mock))o.mock=[];          /* 模試の結果（前提の校正に使う） */
   if(o.mockRun===undefined)o.mockRun=null;      /* 途中の模試（閉じても戻れる） */
+  /* その日にやった思い出しの数（2026-08-22）。ST.days[日].recall に積む。 */
   if(!/^\d{4}-\d{2}-\d{2}$/.test(o.settings.exam||''))o.settings.exam=EXAM_DEFAULT;  /* 試験日 */
   if(typeof o.settings.min!=='number'||o.settings.min<10)o.settings.min=120;         /* 1日の学習時間（分） */
   if(typeof o.settings.vmin!=='number'||o.settings.vmin<0)o.settings.vmin=39;        /* うち動画を見る時間（分） */
@@ -888,6 +889,8 @@ function answer(id,userOx){
   FXST.streak=ST.session.streak||0;
   var d=ST.days[t]||{n:0,ok:0};d.n++;if(ok)d.ok++;
   if(isFirst)d.newq=(d.newq||0)+1;                 /* 今日はじめて解いた問題の数 */
+  /* 思い出しでやった数（2026-08-22）。ホームの「思い出し ◯/20問」に出す。 */
+  if(S.kind==='recall')d.recall=(d.recall||0)+1;
   ST.days[t]=d;
   /* 連続正解が伸びるほど休ませる日数が伸びる（1→3→7→14日）。間違えたら翌日に戻る。 */
   if(ok){
@@ -1908,6 +1911,35 @@ function renderTabs(){
    これで「全部を2〜3周」は1日215問＝2.8時間になり続かない。間違えるのは18%だけなので、
    **1周＋間違えた分＋総復習**にして、総復習を試験直前に置く（批評担当の実測で+6点相当）。 */
 var PLAN2={newEnd:'2026-09-18',allStart:'2026-10-05',allEnd:'2026-10-16',perDay:115};
+/* 思い出し＝**最後に解いてから日が経った順**に20問（2026-08-22 本人が案Bを選択）。
+   ・対象は「一度は正解していて、いま間違えたままではない」問
+     （間違えたままの問は「間違えた問題」の行で別に追うので二重に出さない）
+   ・日が経った順にするのは、直近に解いた問ばかり出ると測っている意味が無いから
+     （実測＝最終解答日が中央値1日前の範囲で95%、文が変わると60%）
+   ・新規の期間（〜9/18）だけ出す。総復習の期間は総復習そのものが思い出しになる */
+var RECALL_N=20;
+function recallPool(){
+  var w={},out=[];
+  wrongPool().forEach(function(it){w[it.id]=1});      /* 間違えたままの問は除く */
+  ITEMS.forEach(function(it){
+    var r=R(it.id);
+    if(!r||!(r.ok||0))return;                        /* 一度も正解していない問は除く */
+    if(w[it.id])return;
+    out.push({it:it,last:r.last||''});
+  });
+  out.sort(function(a,b){return (a.last<b.last?-1:(a.last>b.last?1:0))});  /* 古い順 */
+  return out.map(function(x){return x.it});
+}
+function recallToday(){
+  /* その日にやった思い出しの数。ST.days[today].recall に積む。 */
+  return ((ST.days[today()]||{}).recall)||0;
+}
+/* その日に出す思い出しの列（絞り込みはここで完結させる）。 */
+function recallQueue(){return recallPool().slice(0,recallLeft()||RECALL_N)}
+function recallLeft(){
+  if(ph()!=='new')return 0;
+  return Math.max(0,RECALL_N-recallToday());
+}
 function ph(){
   var t=today();
   if(t<=PLAN2.newEnd)return 'new';
@@ -1948,8 +1980,13 @@ function vHome(){
     +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">'+goal2().lab+'</div>'
     +'<div class="hnum">'+n3(goal2().done)+'<span>/ '+n3(goal2().n)+'問</span></div></div>'
-    +'<div class="hcard">'+flw(17)+'<div class="hlab">今日'+(drev?'・復習 '+n3(drev):'')+'</div>'
-    +'<div class="hnum">'+n3(dn)+'<span>問</span></div></div>'
+    /* 思い出しは「今日」のカードに入れる（カードは4枚のまま＝引き算の原則）。
+       新規の期間は「思い出し ◯/20問」、それ以外は「今日 ◯問」。 */
+    +(ph()==='new'
+      ?('<div class="hcard">'+flw(17)+'<div class="hlab">思い出し</div>'
+        +'<div class="hnum">'+n3(recallToday())+'<span>/ '+n3(RECALL_N)+'問</span></div></div>')
+      :('<div class="hcard">'+flw(17)+'<div class="hlab">今日'+(drev?'・復習 '+n3(drev):'')+'</div>'
+        +'<div class="hnum">'+n3(dn)+'<span>問</span></div></div>'))
     +'<div class="hcard">'+flw(17)+'<div class="hlab">いま</div>'
     /* 分母は分析①と同じ CATQ_TOTAL（49点）。ここだけ 50 とベタ書きすると2画面で食い違う */
     +'<div class="hnum">'+sc0.pts.toFixed(1)+'<span>/ '+sc0.total+'点</span></div></div>'
@@ -2397,6 +2434,13 @@ function flowHtml(){
     +(g2==='new'?('残り '+n3(rest2)+'問'):(n3(goal2().n)+'問'))+'</span></button>';
   /* 間違えた問題＝解いたことがあって、間違えて、まだ正解し直していないもの
      （wrongPool＝ng>0 かつ 直近が正解でない）。2026-08-15 本人指定でホームに置いた。 */
+  /* 思い出しの行（新規の期間だけ）。押すと**最後に解いてから日が経った順**に20問出る。 */
+  if(ph()==='new'){
+    var rl=recallLeft();
+    h+='<button class="frow'+(rl?'':' yet')+'" data-act="startRecall">'
+      +'<span>思い出し</span><span class="fst">'
+      +(rl?(n3(rl)+'問'):'今日は済')+'</span></button>';
+  }
   var wp=wrongPool().length;
   h+='<button class="frow'+(wp?'':' yet')+'" data-act="startWrongAll">'
     +'<span>間違えた問題</span><span class="fst">'+(wp?n3(wp)+'問':'なし')+'</span></button>';
@@ -4721,6 +4765,14 @@ document.addEventListener('click',function(e){
   if(a==='startMock'){startMock(+(t.getAttribute('data-n')||0));return}
   if(a==='resumeMock'){resumeMock();return}
   if(a==='mkstop'){mockStop();return}
+  /* 思い出し＝最後に解いてから日が経った順に20問（2026-08-22）。
+     絞り込みは recallQueue() の中で完結させ、基準の動画は指定しない（科目をまたぐので null）。 */
+  if(a==='startRecall'){
+    if(!recallQueue().length){msg('思い出しに出せる問がありません');return}
+    S.round=0;S.kind='recall';
+    startQueue(recallQueue(),'思い出し',false,null);
+    return;
+  }
   if(a==='mkrev'){S.mockRev=+(t.getAttribute('data-i')||0);render();return}
   if(a==='mkans'){mockAnswer(+(t.getAttribute('data-k')||0));return}
   if(a==='datapull'){dataPull();return}
