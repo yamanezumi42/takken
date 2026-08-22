@@ -2093,6 +2093,9 @@ function checkList(){
     /* 図をあとで貼る回（--nofig-all）は、押して確かめてもらう意味が薄いので出さない。
        動画のリンク先が合っているかは検証担当が字幕を読んで済ませている（2026-08-22 本人指示）。 */
     if(c.nofig_all)continue;
+    /* 本人が確認して「全部OK」と言った回も出さない（2026-08-22）。
+       端末側の ST.checkDone は私からは消せないので、配信するデータ側に印を持たせる。 */
+    if(c.checked)continue;
     out.push({unit:c.unit||'',dataAt:c.dataAt||'',ids:ids});
   }
   return out;
