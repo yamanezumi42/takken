@@ -192,11 +192,16 @@ var IC={
  tnext:svg2('<path d="M14.8 5H17v14h-2.2z"/><path d="M5 5l9 7-9 7z"/>'),
  tplay:svg2('<path d="M8 5l11 7-11 7z"/>'),
  tpause:svg('<path d="M8 5v14M15 5v14"/>'),
- /* 音のアイコン（聞き取り2択）。自作の単色SVG。 */
+ /* 音のアイコン（2択問題）。自作の単色SVG。 */
  sound:svg('<path d="M4 9h3l4-3v12l-4-3H4z"/><path d="M15.5 9.5a4 4 0 010 5"/>'
    +'<path d="M18 7a7 7 0 010 10"/>'),
- game:svg('<circle cx="6" cy="7" r="2.6"/><circle cx="18" cy="17" r="2.6"/>'
-   +'<path d="M8.2 8.4l7.6 7.2"/><circle cx="18" cy="7" r="2.6"/>'),
+ /* ゲームのタブ＝ゲーム機のコントローラー（2026-08-23 本人指示で差し替え）。
+    左に十字キー・右に2つのボタン。自作の単色SVG。 */
+ game:svg('<path d="M8.5 7.2h7a4.8 4.8 0 014.7 3.9l.6 3.8A2.5 2.5 0 0118.4 17.8'
+   +'c-.9 0-1.5-.5-2-1.1l-.8-.9H8.4l-.8.9c-.5.6-1.1 1.1-2 1.1a2.5 2.5 0 01-2.4-2.9'
+   +'l.6-3.8A4.8 4.8 0 018.5 7.2z"/>'
+   +'<path d="M7.4 11.6v2.1M6.4 12.6h2.1"/>'
+   +'<circle cx="15.5" cy="12" r=".95"/><circle cx="17.3" cy="13.8" r=".95"/>'),
  chevL:svg('<path d="M15 5l-7 7 7 7"/>'),      /* 前の問題へ（2026-08-17） */
  down:svg('<path d="M5 9l7 7 7-7"/>'),
  up:svg('<path d="M5 15l7-7 7 7"/>'),
@@ -3715,7 +3720,7 @@ function vDone(){
 }
 
 
-/* ==================== ゲーム（線つなぎ／聞き取り2択） 2026-08-23 ====================
+/* ==================== ゲーム（線つなぎ／2択問題） 2026-08-23 ====================
    ・範囲は復習と同じ絞り込み（filterHtml）を使う。問の**根拠の肢**が全部その範囲に
      入っていれば出す（半分だけ範囲内の問は出さない＝習っていない所を混ぜない）
    ・記録は学習の記録（items）に混ぜない。ST.game に回数と正誤だけ持つ
@@ -3755,7 +3760,7 @@ function vGame(){
     +'<button data-act="gmLink"'+(lp.length?'':' disabled')+'>'+IC.game
     +'<span class="t">線つなぎ</span><span class="s">'+n3(lp.length)+'問</span></button>'
     +'<button data-act="gmDict"'+(dp.length?'':' disabled')+'>'+IC.sound
-    +'<span class="t">聞き取り2択</span><span class="s">'+n3(dp.length)+'問</span></button>'
+    +'<span class="t">2択問題</span><span class="s">'+n3(dp.length)+'問</span></button>'
     +'</div>'
     +'<div class="mini">'+(lp.length||dp.length
       ? '下で範囲を選ぶと出る問が変わります。'
@@ -3907,7 +3912,7 @@ function lkBind(){
   };
   count();
 }
-/* ---------- 聞き取り2択 ---------- */
+/* ---------- 2択問題 ---------- */
 function gmStartDict(){
   var pool=dictPool();
   if(!pool.length){msg('いまの範囲では出せる問がありません');return}
@@ -3983,7 +3988,9 @@ function kkVoiceHtml(st){
 function vDict(){
   if(GM.qi>=GM.qs.length)return vGmDone();
   var q=GM.qs[GM.qi],st=kkSet();
-  var opts=shuf([{v:q.ok,ok:1},{v:q.ng,ok:0}]);
+  /* 並びは**問ごとに固定**（データの order）。読み上げが「Aでしょうか、Bでしょうか」と
+     選択肢そのものを読むので、画面をシャッフルすると音と食い違う（2026-08-23 本人指示）。 */
+  var opts=(q.order===1)?[{v:q.ng,ok:0},{v:q.ok,ok:1}]:[{v:q.ok,ok:1},{v:q.ng,ok:0}];
   var h='<div class="pad'+stag()+'"><div class="panel">'
     +'<div class="lk-head"><span class="n">'+(GM.qi+1)+' / '+GM.qs.length+'</span>'
     +'<span class="n" style="margin-left:auto">正解 '+GM.ok+'</span></div>'
@@ -3994,7 +4001,13 @@ function vDict(){
   opts.forEach(function(o,i){
     h+='<button class="kk-btn" data-ok="'+o.ok+'" id="kk-b'+i+'">'+esc(o.v)+'</button>';
   });
-  h+='</div></div><div class="kk-res" id="kk-res"></div><div id="kk-next"></div>'
+  h+='</div></div><div class="kk-res" id="kk-res"></div>'
+    /* 一時停止／再開は「次へ」の真上に固定（2026-08-23 本人指示）。
+       答える前から同じ場所にあるので、押す位置が動かない。 */
+    +'<div class="kk-row" style="justify-content:center;margin-top:12px">'
+    +'<button class="pz" id="kk-pause" aria-label="'+(GM.paused?'再開':'一時停止')+'">'
+    +(GM.paused?IC.tplay:IC.tpause)+'</button></div>'
+    +'<div id="kk-next"></div>'
     /* 速さと制限＝スライダー（見た目はこちらで作る）。右に値を出す。 */
     +'<div class="kk-row"><span class="lb">速さ</span>'
     +'<input class="sl" type="range" min="0.7" max="2" step="0.05" value="'+st.rate+'" id="kk-rate">'
@@ -4009,16 +4022,7 @@ function vDict(){
     +'<span class="mini" style="flex:1">声の設定（'+esc(kkName(st.voice))+'）</span>'
     +(S.openVoice?IC.up:IC.down)+'</button>'
     +(S.openVoice?kkVoiceHtml(st):'')
-    /* 操作は音楽プレイヤーの形（2026-08-23 本人指示。Focus の作りを流用）。
-       左＝もう一度聞く／中央＝一時停止・再開／右＝解説を飛ばして次へ。 */
-    +'<div class="tp">'
-    +'<button class="tb" id="kk-replay" aria-label="もう一度聞く">'+IC.tprev+'</button>'
-    +'<button class="main" id="kk-pause" aria-label="'+(GM.paused?'再開':'一時停止')+'">'
-    +(GM.paused?IC.tplay:IC.tpause)+'</button>'
-    +'<button class="tb" id="kk-skip" aria-label="次へ"'+(GM.answered?'':' disabled')+'>'
-    +IC.tnext+'</button></div>'
-    +'<div class="tp-lab"><span>もう一度</span><span>'+(GM.paused?'再開':'一時停止')
-    +'</span><span>次へ</span></div>'
+
     +'<div class="kk-row" style="justify-content:center;margin-top:10px">'
     +'<button class="btn sm" data-act="gmQuit" style="width:auto;padding:0 14px">やめる</button></div>'
     +'</div><div class="gm-cred">VOICEVOX</div></div>';
@@ -4032,19 +4036,35 @@ var AQ={list:[], cur:null, after:null, paused:false};
 function aClear(){
   if(AQ.cur){try{AQ.cur.pause()}catch(e){}}
   AQ.cur=null;AQ.list=[];AQ.after=null;AQ.paused=false;
+  /* 要素そのものは捨てない（捨てると次の再生でまた許可が要る）。 */
+}
+/* 音の要素は**1つを使い回す**（2026-08-23 本人報告「読み上げてくれる時とくれない時がある」）。
+   iPhone は操作から離れた再生を止めるので、毎回 new Audio すると自動で進んだ問で無音になる。
+   1つを使い回せば、最初の操作で許可された要素がそのまま使える。 */
+var AEL=null;
+function ael(){
+  if(!AEL){
+    AEL=new Audio();
+    AEL.preload='auto';
+    AEL.addEventListener('ended',function(){AQ.cur=null;aRun()});
+    AEL.addEventListener('error',function(){AQ.cur=null;aRun()});
+  }
+  return AEL;
 }
 function aRun(){
   if(AQ.paused)return;
   if(AQ.cur)return;                       /* まだ鳴っている＝重ねない */
   if(!AQ.list.length){var f=AQ.after;AQ.after=null;if(f)f();return}
   var it=AQ.list.shift();
-  var a=new Audio(it.src);
+  var a=ael();
   a.volume=(it.vol===undefined)?1:it.vol;
+  a.src=it.src;
   a.playbackRate=it.rate||1;
   AQ.cur=a;
-  a.onended=function(){AQ.cur=null;aRun()};
   var pr=a.play();
   if(pr&&pr.catch)pr.catch(function(){AQ.cur=null;aRun()});
+  /* 速さは src を入れ替えると戻ることがあるので、鳴り始めに入れ直す */
+  try{a.onplaying=function(){a.playbackRate=it.rate||1}}catch(e){}
 }
 function aQueue(items,after){
   aClear();
@@ -4087,14 +4107,8 @@ function kkBind(){
     document.getElementById('kk-lv').textContent=l+'秒';
     ST.settings.kkLim=l;saveST();
   };
-  document.getElementById('kk-replay').onclick=function(){kkSay(q)};
-  /* 飛ばす＝音を止めてすぐ次へ。一時停止中でも押せる（止まったまま詰まらないように）。 */
-  document.getElementById('kk-skip').onclick=function(){
-    if(!GM.answered)return;
-    clearInterval(KKT);KKT=null;
-    GM.paused=false;GM.expDone=true;
-    kkGo();                                   /* 解説も猶予も飛ばしてすぐ次へ */
-  };
+  /* 「もう一度」と「次へ」のアイコンは撤去した（2026-08-23 本人指示）。
+     次へは猶予のボタン（kk-next の中）だけにする。 */
   /* 一時停止＝**段ごとに決まった止め方・戻し方**（2026-08-23 本人が定義）。
        read  … 止めた時点で音を止める。再開は**問文を最初から読み直し**、読み終わってから数え直す
        count … 数えるのを止める。再開は**残り秒から**続ける
@@ -4102,10 +4116,8 @@ function kkBind(){
   document.getElementById('kk-pause').onclick=function(){
     GM.paused=!GM.paused;
     /* アイコンと下の字を入れ替える（描き直さない＝音が途切れない） */
-    this.innerHTML=GM.paused?IC.tplay:IC.tpause;
+    this.innerHTML=(GM.paused?IC.tplay:IC.tpause);
     this.setAttribute('aria-label',GM.paused?'再開':'一時停止');
-    var lb=document.querySelectorAll('.tp-lab span')[1];
-    if(lb)lb.textContent=GM.paused?'再開':'一時停止';
     if(GM.paused){
       aPause();                                /* いま鳴っている1本を止めて行列は保つ */
       clearInterval(KKT);KKT=null;
@@ -4153,7 +4165,10 @@ function kkCount(sec){
     if(GM.paused)return;
     var left=sec-(Date.now()-t0)/1000;
     GM.remain=left;
-    var b=document.getElementById('kk-bar');if(b)b.style.width=Math.max(0,left/lim*100)+'%';
+    /* 左から右へ伸ばす（2026-08-23 本人指示）。経過の割合で幅を出す＝
+       猶予のゲージと動く向きが揃う（前は残りの割合で、右端が左へ縮んでいた）。 */
+    var b=document.getElementById('kk-bar');
+    if(b)b.style.width=Math.min(100,Math.max(0,(1-left/lim)*100))+'%';
     var n=Math.ceil(left);
     if(n>0&&n!==shown&&n<=5){
       shown=n;
@@ -4192,14 +4207,14 @@ function kkTimeout(){
     +(q.ngsay?('<div class="exng">'+esc(q.ngsay)+'</div>'):'')
     +'<div class="src">根拠 '+esc(q.src)+'</div>';
   gmRec(false);
-  var sk2=document.getElementById('kk-skip');if(sk2)sk2.disabled=false;
   playFx(false,'badLite');
   kkAnsColor(q);
   GM.phase='exp';GM.expDone=false;
   var r2=kkSet().rate;
   kkHold(false);
-  aQueue([sItem('ng'), vItem('v_ng',r2), vItem(q.id+'_e',r2)],
-    function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
+  var seq2=[sItem('ng'), vItem('v_ng',r2), vItem(q.id+'_e',r2)];
+  if(q.ngsay)seq2.push(vItem(q.id+'_n',r2));
+  aQueue(seq2,function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
 }
 function kkPick(okq,btn,q){
   if(GM.answered)return;
@@ -4210,15 +4225,18 @@ function kkPick(okq,btn,q){
   /* 解説＝①正解の説明 ②**選ばなかった側がどんな時に正しくなるか** ③根拠
      （2026-08-23 本人指示「選択肢に対しての解説なんだから、違う選択肢の場合は
        こういう時ですみたいな解説が望ましい」）。 */
+  /* 図は**答えたあと**に出す（問題と一緒に出すと図が答えを示してしまう）。
+     図は肢に付いているものをそのまま使う（2026-08-23 本人指示）。 */
   var ex='<div class="ex">'+esc(q.say||'')+'</div>'
     +(q.ngsay?('<div class="exng">'+esc(q.ngsay)+'</div>'):'')
-    +'<div class="src">根拠 '+esc(q.src)+'</div>';
+    +((q.figs&&q.figs.length)
+       ?('<img class="kk-fig" src="'+figSrc(q.figs[0])+'" alt="図">'):'')
+    +'<div class="src">根拠 '+esc(q.src)+(q.from?('・'+esc(q.from)):'')+'</div>';
   if(okq){GM.ok++;document.getElementById('kk-res').innerHTML='<b class="o">正解</b>'+ex}
   else{GM.ng++;GM.wrongs.push(q);
     document.getElementById('kk-res').innerHTML='<b class="x">誤り</b>　正しくは <b>'
       +esc(q.ok)+'</b>'+ex}
   gmRec(okq);
-  var sk=document.getElementById('kk-skip');if(sk)sk.disabled=false;
   playFx(okq,okq?'lite':'badLite');
   kkAnsColor(q);
   GM.phase='exp';GM.expDone=false;
@@ -4226,8 +4244,10 @@ function kkPick(okq,btn,q){
      （2026-08-23 本人指示「アクションに合わせる感じ」）。同時には鳴らない。 */
   var r=kkSet().rate;
   kkHold(false);                        /* 解説の段階から「次へ」を出す（押せる） */
-  aQueue([sItem(okq?'ok':'ng'), vItem(okq?'v_ok':'v_ng',r), vItem(q.id+'_e',r)],
-    function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
+  /* 注釈（誤りの選択肢の説明）も読み上げる（2026-08-23 本人指示）。 */
+  var seq=[sItem(okq?'ok':'ng'), vItem(okq?'v_ok':'v_ng',r), vItem(q.id+'_e',r)];
+  if(q.ngsay)seq.push(vItem(q.id+'_n',r));
+  aQueue(seq,function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
 }
 /* 次の問題へ。**一時停止中は進まない**（2026-08-23 本人指示）。 */
 /* 解説のあとの猶予。ゲージが満ちたら次へ。押せばすぐ次へ。止めれば留まる。
@@ -4237,6 +4257,7 @@ var HOLD_MS=3000, HOLDT=null;   /* 5秒は長い（2026-08-23 本人指摘）→
    run=true  … ゲージを走らせる（3秒で自動）。解説を読み終わったときに呼ぶ。 */
 function kkHold(run){
   if(!GM)return;
+  if(GM.noauto)run=false;           /* 報告した問は自動で進めない */
   clearTimeout(HOLDT);HOLDT=null;
   GM.holding=true;
   var box=document.getElementById('kk-next');
@@ -4276,7 +4297,7 @@ function kkHoldStop(){
 function kkGo(){
   clearTimeout(HOLDT);HOLDT=null;
   if(!GM)return;
-  GM.holding=false;
+  GM.holding=false;GM.noauto=false;   /* 次の問では自動で進む形に戻す */
   aClear();
   GM.qi++;
   if(ST.settings.kkRnd)GM.voice=null;
@@ -4287,6 +4308,10 @@ function kkGo(){
 var GREPS=['問題文がおかしい','答えが違う','解説が変','読み上げが変','その他'];
 function kkRepOpen(){
   kkHoldStop();                     /* 報告している間に次へ行かせない */
+  /* この問では**もう自動で進まない**（2026-08-23 本人報告
+     「おかしいを押したときは次の問題に自動的に行くのはおかしい」）。
+     以前は解説を読み終わったところで猶予が再開して、勝手に進んでいた。 */
+  GM.noauto=true;
   var q=GM.qs[GM.qi], box=document.getElementById('kk-repbox');
   if(!box)return;
   var d=(ST.greports||{})[q.id]||{tags:[],memo:''};
@@ -4332,7 +4357,7 @@ function kkAnsColor(q){
 function vGmDone(){
   var sec=Math.round((Date.now()-GM.t0)/1000),n=GM.ok+GM.ng+(GM.to||0);
   var h='<div class="pad'+stag()+'"><div class="panel"><div class="gm-done">'
-    +'<div class="mini">'+(GM.kind==='link'?'線つなぎ':'聞き取り2択')+' おわり</div>'
+    +'<div class="mini">'+(GM.kind==='link'?'線つなぎ':'2択問題')+' おわり</div>'
     +'<div class="big">'+GM.ok+' / '+n+'</div>'
     +'<div class="mini">'+(GM.to?('時間切れ '+GM.to+'／'):'')+'かかった時間 '+mmss(sec)+'</div>';
   if(GM.kind==='dict'&&GM.wrongs&&GM.wrongs.length)

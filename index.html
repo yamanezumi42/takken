@@ -997,7 +997,7 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .frow.yet{opacity:.55}
 .hbtns .btn{min-height:52px}
 
-/* ---- ゲーム（線つなぎ・聞き取り2択） 2026-08-23 ---- */
+/* ---- ゲーム（線つなぎ・2択問題） 2026-08-23 ---- */
 .gm-pick{display:flex;gap:10px;margin-bottom:12px}
 .gm-pick button{flex:1;min-height:76px;border-radius:14px;border:1px solid var(--line);
   background:var(--panel);font-family:inherit;color:var(--fg);cursor:pointer;padding:10px 8px;
@@ -1036,7 +1036,7 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 @keyframes lkdraw{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
 .lk-fix{font-size:10px;color:#b4483d;margin-top:3px;line-height:1.35}
 .lk-note{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.5}
-/* 聞き取り2択 */
+/* 2択問題 */
 .kk-bar{position:fixed;left:0;top:0;height:3px;background:var(--acc);width:0;z-index:60;
   transition:width .1s linear}
 .kk-ask{font-size:16px;font-weight:700;line-height:1.6;min-height:52px;margin:6px 0 4px}
@@ -1085,22 +1085,12 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-seg button{font-size:11px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);
   background:var(--panel);color:var(--muted);font-family:inherit;cursor:pointer}
 .kk-seg button.on{background:var(--chipbg);color:var(--chipfg);border-color:#bfe0d1}
-/* 操作列（Focus のコンパクトプレイヤーの作りを流用。色は宅建の桜鼠に合わせる）。 */
-.tp{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:14px}
-.tp .tb{background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;
-  display:flex;align-items:center;justify-content:center;border-radius:99px;
-  transition:color .12s var(--easeOut),transform .12s var(--easeOut)}
-.tp .tb svg{width:20px;height:20px;display:block}
-.tp .tb:active{transform:scale(1.1)}
-.tp .tb:disabled{opacity:.3;cursor:default}
-.tp .tb.on{color:var(--acc)}
-.tp .main{width:46px;height:46px;border-radius:50%;background:var(--acc);color:#fff;
-  border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;
-  box-shadow:0 2px 8px rgba(0,0,0,.14);transition:transform .12s var(--easeOut)}
-.tp .main svg{width:19px;height:19px;display:block}
-.tp .main:active{transform:scale(.96)}
-.tp-lab{display:flex;justify-content:center;gap:22px;margin-top:4px}
-.tp-lab span{font-size:9.5px;color:var(--muted);width:56px;text-align:center}
+/* 一時停止／再開（アイコンだけ・大きめ）。押しやすさのため48px。2026-08-23 */
+.pz{width:48px;height:48px;border-radius:50%;border:1px solid var(--line);background:var(--panel);
+  color:var(--acc);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:transform .1s var(--easeOut)}
+.pz svg{width:22px;height:22px;display:block}
+.pz:active{transform:scale(.95)}
 /* 次へのゲージ（NETFLIX の「オープニングをスキップ」の形）。中が満ちたら自動で進む。 */
 .nx{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;
   gap:8px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel);
@@ -1117,6 +1107,7 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-res .ex{font-size:12.5px;color:var(--fg);margin-top:5px;line-height:1.75}
 .kk-res .exng{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.7}
 .kk-res .src{font-size:10px;color:var(--muted);margin-top:4px}
+.kk-fig{display:block;width:100%;margin-top:8px;border-radius:10px;border:1px solid var(--line)}
 .kk-res b.o{color:#3f8a62}
 .kk-res b.x{color:#b4483d}
 .kk-stage{position:relative}
@@ -1369,7 +1360,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 本番データ（別担当が生成）。存在しない場合はブラウザが無視するだけで、fetchは一切使わない。 -->
 <!-- あこ課長の動画の通し番号（need_seq の基準）。data/curriculum.json を
      window.TAKKEN_CURRICULUM に入れたもの。無い場合は chapters.js の seq を見る。 -->
-<!-- ゲーム（線つなぎ・聞き取り2択）と早見表のデータ。2026-08-23 -->
+<!-- ゲーム（線つなぎ・2択問題）と早見表のデータ。2026-08-23 -->
 <!-- 使える声の一覧（VOICEVOX。make_voice.py が書く） -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
@@ -1394,7 +1385,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='245c2065';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='36373375';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
