@@ -119,6 +119,13 @@ svg{display:block}
 .tog{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:0 11px;border-radius:12px;
   border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12px;font-family:var(--font);cursor:pointer}
 .tog.on{background:var(--chipbg);color:var(--chipfg);border-color:#bfe0d1}
+/* 条件のチップは1段小さい（2026-08-23 本人「もう少しコンパクトにできないの？」）。
+   10個の条件が4〜5行に折り返して画面を食っていた。行の頭に種類の名前を置くので、
+   チップ側の文字は短くできる。指で押せる高さ（28px）は残す。 */
+.tog.xs{min-height:28px;padding:0 9px;border-radius:10px;font-size:11px;gap:4px}
+.frow2{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.frow2>.lb{font-size:11px;color:var(--muted);flex:none;width:44px}
+.frow2>.bs{display:flex;flex-wrap:wrap;gap:6px;flex:1}
 .hr{height:1px;background:var(--line);margin:12px 0}
 .mini{font-size:11px;color:var(--muted)}
 a{color:var(--chipfg)}
@@ -322,7 +329,7 @@ a{color:var(--chipfg)}
 /* 誤答理由の4色（帯と点） */
 .band i.w0{background:#8fb9a8}.band i.w1{background:#e0c98a}
 .band i.w2{background:#d99a8f}.band i.w3{background:#9aa8c4}
-/* 学習時間の内訳（動画／新規／復習／抜き打ち）＝細い帯1本 */
+/* 学習時間の内訳（動画／新規／復習）＝細い帯1本 */
 .band i.t0{background:#7fb3a4}.band i.t1{background:#a8c6e0}
 .band i.t2{background:#e0c98a}.band i.t3{background:#d99a8f}
 .wdot.t0{background:#7fb3a4}.wdot.t1{background:#a8c6e0}
@@ -1243,7 +1250,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='74555f9b';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='7cfc57d8';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
