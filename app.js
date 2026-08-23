@@ -2482,9 +2482,13 @@ function flowHtml(){
                        st:(last?('前回 '+last.ok+'/'+last.n+'　'):'')+'今日',done:false});
     }else{
       var on=ml.filter(function(q){return !!q.own}).length,od=mockToday();
-      if(on)rows.push({act:'startMock',adata:Math.min(5,on),
+      /* 1周が終わるまでは**1問**（2026-08-23 本人指示）。新規だけで1日187問あるので、
+         5問（＝20肢）を足すと明らかに超える。型を切らさないための1問に留める。
+         未着手が0になったら5問に上げる。 */
+      var oN=Math.min(restAll?1:5,on);
+      if(on)rows.push({act:'startMock',adata:oN,
                        lab:'4択（オリジナル）',
-                       st:(od?'今日は済':(Math.min(5,on)+'問')),done:!!od});
+                       st:(od?'今日は済':(oN+'問')),done:!!od});
     }
   }
   /* 濃くするのは「済んでいない最初の1行」だけ。 */
