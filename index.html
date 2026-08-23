@@ -997,6 +997,80 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .frow.yet{opacity:.55}
 .hbtns .btn{min-height:52px}
 
+/* ---- ゲーム（線つなぎ・聞き取り2択） 2026-08-23 ---- */
+.gm-pick{display:flex;gap:10px;margin-bottom:12px}
+.gm-pick button{flex:1;min-height:76px;border-radius:14px;border:1px solid var(--line);
+  background:var(--panel);font-family:inherit;color:var(--fg);cursor:pointer;padding:10px 8px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.gm-pick button.on{background:var(--chipbg);border-color:#bfe0d1}
+.gm-pick .t{font-size:12.5px;font-weight:600}
+.gm-pick .s{font-size:10px;color:var(--muted)}
+/* 線つなぎ */
+.lk-head{display:flex;align-items:baseline;gap:10px;margin-bottom:2px}
+.lk-head .n{font-size:11px;color:var(--muted)}
+.lk-ask{font-size:13.5px;font-weight:700;line-height:1.5;margin:4px 0 10px}
+.lk-wrap{position:relative}
+.lk-svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.lk-cols{display:flex;gap:30px;position:relative}
+.lk-col{flex:1;display:flex;flex-direction:column;gap:8px}
+.lk-card{min-height:46px;display:flex;align-items:center;padding:7px 9px;border-radius:11px;
+  border:1px solid var(--line);background:var(--panel);font-size:11px;line-height:1.35;
+  cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;position:relative}
+.lk-card.l{background:rgba(201,139,155,.12);font-weight:600}
+.lk-card.r{background:rgba(90,140,170,.10);justify-content:flex-end;text-align:right}
+.lk-card.on{outline:2px solid var(--acc);outline-offset:1px}
+.lk-card.ok{background:rgba(90,170,120,.18);border-color:#bfe0d1;animation:lkpop 457ms var(--easeOut) 1}
+.lk-card.ng{background:rgba(200,90,80,.14);border-color:#e0bfbf;animation:lkbump 429ms var(--easeOut) 1}
+.lk-card .dot{position:absolute;width:9px;height:9px;border-radius:99px;background:var(--acc);
+  top:50%;margin-top:-4.5px}
+.lk-card.l .dot{right:-5px}
+.lk-card.r .dot{left:-5px}
+.lk-card.ok::after,.lk-card.ng::after{content:'';position:absolute;inset:-3px;border-radius:13px;
+  opacity:0;animation:lkglow 886ms var(--easeOut) 1;pointer-events:none}
+.lk-card.ok::after{border:2px solid #4a9e72}
+.lk-card.ng::after{border:2px solid #c1584e}
+@keyframes lkpop{0%{transform:scale(1)}38%{transform:scale(1.06)}100%{transform:scale(1)}}
+@keyframes lkbump{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}
+  45%{transform:translateX(4px)}70%{transform:translateX(-2px)}}
+@keyframes lkglow{0%{opacity:0;transform:scale(.9)}40%{opacity:1}100%{opacity:0;transform:scale(1.15)}}
+@keyframes lkdraw{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
+.lk-fix{font-size:10px;color:#b4483d;margin-top:3px;line-height:1.35}
+.lk-note{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+/* 聞き取り2択 */
+.kk-bar{position:fixed;left:0;top:0;height:3px;background:var(--acc);width:0;z-index:60;
+  transition:width .1s linear}
+.kk-ask{font-size:16px;font-weight:700;line-height:1.6;min-height:52px;margin:6px 0 4px}
+.kk-ask .bl{color:var(--acc)}
+.kk-btns{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.kk-btn{min-height:56px;border-radius:14px;border:1px solid var(--line);background:var(--panel);
+  font-size:14px;font-family:inherit;color:var(--fg);cursor:pointer;padding:8px 12px}
+.kk-btn.ok{background:rgba(90,170,120,.20);border-color:#bfe0d1}
+.kk-btn.ng{background:rgba(200,90,80,.16);border-color:#e0bfbf}
+.kk-row{display:flex;align-items:center;gap:8px;margin-top:12px}
+.kk-row .lb{font-size:10.5px;color:var(--muted);width:38px}
+.kk-row input[type=range]{flex:1}
+.kk-seg{display:flex;gap:6px}
+.kk-seg button{font-size:11px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);
+  background:var(--panel);color:var(--muted);font-family:inherit;cursor:pointer}
+.kk-seg button.on{background:var(--chipbg);color:var(--chipfg);border-color:#bfe0d1}
+.kk-res{font-size:12px;min-height:34px;margin-top:8px;line-height:1.5}
+.kk-res b.o{color:#3f8a62}
+.kk-res b.x{color:#b4483d}
+.kk-stage{position:relative}
+.kk-cd{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);pointer-events:none;
+  font-family:var(--num);font-size:96px;font-weight:700;color:var(--acc);opacity:0;z-index:5;
+  font-variant-numeric:tabular-nums}
+.kk-cd.go{animation:kkcd 900ms var(--easeOut) 1}
+@keyframes kkcd{0%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}
+  22%{opacity:.30}100%{opacity:0;transform:translate(-50%,-50%) scale(.86)}}
+.kk-cd.last{color:#b4483d}
+@media (prefers-reduced-motion:reduce){.kk-cd.go{animation:none;opacity:.22}
+  .lk-card.ok,.lk-card.ng{animation:none}}
+.gm-done{text-align:center;padding:16px 6px}
+.gm-done .big{font-size:30px;font-weight:700}
+.gm-cred{font-size:10px;color:var(--muted);margin-top:14px;text-align:center}
+
+
 /* ---- 出題（A2＝章名の下に一本線／B1＝面は文章の高さに合わせて上に寄せる） ---- */
 .qhead{margin-bottom:14px}
 .qhead .qrow{display:flex;align-items:center;gap:9px;margin-bottom:8px}
@@ -1160,6 +1234,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <nav id="tabs"></nav>
 <!-- 演出オーバーレイ。#view の外に置く（＝彩度変化のフィルタ対象外・レイアウトに影響しない） -->
 <div id="fx" hidden></div>
+<div class="kk-bar" id="kk-bar"></div>
 <!-- M1：遷移の連続性（FLIP）用のオーバーレイ。position:fixed は使わずドキュメント座標で置く -->
 <div id="m1fx"></div>
 <div id="modal" hidden></div>
@@ -1231,6 +1306,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 本番データ（別担当が生成）。存在しない場合はブラウザが無視するだけで、fetchは一切使わない。 -->
 <!-- あこ課長の動画の通し番号（need_seq の基準）。data/curriculum.json を
      window.TAKKEN_CURRICULUM に入れたもの。無い場合は chapters.js の seq を見る。 -->
+<!-- ゲーム（線つなぎ・聞き取り2択）と早見表のデータ。2026-08-23 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1254,7 +1330,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='5b3636df';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='6c309661';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1296,14 +1372,19 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   }
   /* parts（ファイルごとの中身）から、アプリが読む形に組み立てる。 */
   function assemble(rec){
-    var idx=rec.parts['items_index.json']||[],items=[],figs={};
+    var idx=rec.parts['items_index.json']||[],items=[],figs={},media={};
     idx.forEach(function(r){var a=rec.parts[r.file];if(a&&a.length)items=items.concat(a)});
     Object.keys(rec.parts).forEach(function(p){
       if(p.indexOf('figs/')===0){var o=rec.parts[p];for(var k in o)figs[k]=o[k]}
+      /* 音声（voice/）と効果音（se/）も同じ形で束になっている（2026-08-23） */
+      if(p.indexOf('media/')===0){var m=rec.parts[p];for(var k2 in m)media[k2]=m[k2]}
     });
     return {items:items,chapters:rec.parts['chapters.json']||{},
-            curriculum:rec.parts['curriculum.json']||null,figs:figs,
-            mocks:rec.parts['mocks.json']||null};
+            curriculum:rec.parts['curriculum.json']||null,figs:figs,media:media,
+            mocks:rec.parts['mocks.json']||null,
+            linkq:rec.parts['link_q.json']||null,
+            dictq:rec.parts['dict_q.json']||null,
+            tables:rec.parts['tables.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1386,6 +1467,10 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_CURRICULUM=d.curriculum||null;
     window.TAKKEN_MOCKS=d.mocks||null;          /* 模試（本試験形式49問×10回） */
     window.TAKKEN_FIGS=d.figs||{};
+    window.TAKKEN_MEDIA=d.media||{};            /* 音声・効果音（data URI） */
+    window.TAKKEN_LINKQ=d.linkq||[];            /* 線つなぎ */
+    window.TAKKEN_DICTQ=d.dictq||[];            /* 聞き取り2択 */
+    window.TAKKEN_TABLES=d.tables||[];          /* 早見表 */
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
      console に出すだけで画面には出さない（引き算の原則）。 */

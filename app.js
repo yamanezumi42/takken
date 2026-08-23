@@ -10,6 +10,12 @@ var LSK='takken_v1';
 var RAW=window.TAKKEN_ITEMS||[];
 var CHAP=window.TAKKEN_CHAPTERS||{};
 var MOCKS=(window.TAKKEN_MOCKS&&window.TAKKEN_MOCKS.sets)||[];
+/* ゲームと早見表のデータ（無くても落ちないように既定は空） */
+var LINKQ=window.TAKKEN_LINKQ||[], DICTQ=window.TAKKEN_DICTQ||[], TABLES=window.TAKKEN_TABLES||[];
+/* 殻（端末）では data ブランチから来た中身が後から入るので、その時に読み直す。 */
+try{window.addEventListener('takken-data',function(){
+  LINKQ=window.TAKKEN_LINKQ||LINKQ;DICTQ=window.TAKKEN_DICTQ||DICTQ;TABLES=window.TAKKEN_TABLES||TABLES;
+})}catch(e){}
 var EXCL=['要確認','省略','解説なし'];
 var ITEMS=RAW.filter(function(it){var f=it.flags||[];for(var i=0;i<f.length;i++){if(EXCL.indexOf(f[i])>=0)return false}return true});
 var NEXCL=RAW.length-ITEMS.length;
@@ -175,6 +181,12 @@ var IC={
  play:svg('<circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.6l5 3.4-5 3.4z"/>'),
  check:svg('<path d="M4.5 12.5l4.5 4.5L19.5 6.5"/>',2),
  chev:svg('<path d="M9 5l7 7-7 7"/>'),
+ /* ゲームのタブのアイコン＝2つの丸を線でつないだ形（線つなぎの絵）。2026-08-23 */
+ /* 音のアイコン（聞き取り2択）。自作の単色SVG。 */
+ sound:svg('<path d="M4 9h3l4-3v12l-4-3H4z"/><path d="M15.5 9.5a4 4 0 010 5"/>'
+   +'<path d="M18 7a7 7 0 010 10"/>'),
+ game:svg('<circle cx="6" cy="7" r="2.6"/><circle cx="18" cy="17" r="2.6"/>'
+   +'<path d="M8.2 8.4l7.6 7.2"/><circle cx="18" cy="7" r="2.6"/>'),
  chevL:svg('<path d="M15 5l-7 7 7 7"/>'),      /* 前の問題へ（2026-08-17） */
  down:svg('<path d="M5 9l7 7 7-7"/>'),
  up:svg('<path d="M5 15l7-7 7 7"/>'),
@@ -663,6 +675,9 @@ function vurl(vid,sec){return 'https://youtu.be/'+vid+'?t='+(sec||0)}
 /* 図表：単一ファイル版では build.py が window.TAKKEN_FIGS に data URI を埋め込む。
    開発用の app.html では figs/ の相対パスをそのまま使う。 */
 function figSrc(p){var m=window.TAKKEN_FIGS;return (m&&m[p])?m[p]:p}
+/* 音（voice/・se/）も図と同じ。端末では data URI、開発用の app.html では相対パス。
+   ここを通さないと、端末で音が404になる（2026-08-23）。 */
+function mediaSrc(p){var m=window.TAKKEN_MEDIA;return (m&&m[p])?m[p]:p}
 function mmss(s){s=Math.max(0,Math.round(s||0));return Math.floor(s/60)+':'+pad(s%60)}
 
 /* ---------- 日付 ---------- */
@@ -1765,6 +1780,9 @@ function cssEsc(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/"/
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function pct(x,d){return x===null||x===undefined?'—':(x*100).toFixed(d===undefined?1:d)+'%'}
 /* 3桁区切り（件数・問題数は必ずこれを通す） */
+/* 並びを混ぜる（ゲームで使う）。2026-08-23 */
+function shuf(a){var i,j,t;for(i=a.length-1;i>0;i--){j=Math.floor(Math.random()*(i+1));
+  t=a[i];a[i]=a[j];a[j]=t}return a}
 function n3(n){return String(n==null?0:n).replace(/\B(?=(\d{3})+(?!\d))/g,',')}
 function srcLabel(it){
   var s=it.src||{},raw=s.raw||((s.era||'')+(s.month?s.month+'月':'')+' 問'+(s.q||''));
@@ -1815,10 +1833,16 @@ function render(){
   else if(S.view==='quiz')h=vQuiz();
   else if(S.view==='mock')h=vMock();
   else if(S.view==='review')h=vReview();
+  else if(S.view==='game')h=vGame();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* 出題中と通し演習のときだけ時計を回す（他の画面では止める＝無駄に動かさない）。 */
   if(S.view==='quiz'||S.view==='mock')qtStart();else qtStop();
+  /* ゲームは描いたあとに当たり判定を付ける（SVGの座標を実測するので描画後でないと測れない）。 */
+  if(S.view==='game'&&GM&&GM.qi<GM.qs.length){
+    if(GM.kind==='link')lkBind();else kkBind();
+  }
+  if(S.view!=='game')kkStop();
   /* クラスを外す→強制リフロー→付け直す。これをしないと innerHTML の作り直しでも
      クラスが付いたままになり、アニメーションが再生されない（今回の指摘6の原因）。 */
   if(ANIMON){
@@ -1869,7 +1893,8 @@ function render(){
 var LASTVIEW=null,ANIMON=false;
 /* 段差クラス（入場時だけ付ける） */
 function stag(){return ANIMON?' stag':''}
-var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
+/* タブは5つ。ゲームは**復習と分析の間**（2026-08-23 本人指示）。 */
+var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['game','ゲーム',IC.game],['analysis','分析',IC.chart]];
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
 function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':'動画学習'):x[1]}
@@ -2475,17 +2500,20 @@ function flowHtml(){
   var restAll=unseenItems(true).length,restNow=unseenItems().length;
   var newLeft=Math.max(0,g.n-g.done);
   if(g.lab==='新規'){
-    /* 出せる新規が尽きたら、次にやることは**動画を見る**こと（2026-08-23 本人指示）。
-       ここで「出せる分はここまで」と書いて終わりにすると、次の一手が画面から消える。 */
-    if(!restNow&&restAll){
-      var nv=nextAkoVid();      /* 学習タブの一覧と同じ1本（あこ課長） */
-      rows.push({act:(nv?'gonextvid':'gofields'),
-                 /* 名前は学習タブのカード（nextCardHtml）と同じ書き方＝「#2 宅地」。
-                    番号を落とすと一覧のどの行か分からない（2026-08-23）。 */
-                 lab:'次の動画を見る'+(nv?('（'+(vno(nv)===null?'':'#'+vno(nv)+' ')
-                                            +(vlab(nv)||nv)+'）'):''),
-                 st:'見てから解く',done:false,vid:nv||''});
+    /* 新規は**動画から始める**（2026-08-23 本人指摘「今日の新規は動画学習に飛んで欲しい。
+       そこの次にやる単元から」）。押すと学習タブの「次にやる単元（あこ課長の次の1本）」の
+       ページへ飛ぶ。そのページに章の一覧と「残り／全」の解くボタンがあるので、
+       見てからそのまま解ける。行の数字は「今日やる分の残り」＝押して終わらせる数。
+       前の版は「出せる新規が0のときだけ」飛ばしていて、本人の狙いに足りていなかった。 */
+    var nv=nextAkoVid();      /* 学習タブの一覧と同じ1本（あこ課長） */
+    if(nv){
+      rows.push({act:'gonextvid',
+                 lab:'今日の新規'+(vno(nv)===null?'':'（#'+vno(nv)+' '+(vlab(nv)||'')+'）'),
+                 st:((!restNow&&restAll)?'動画を見てから'
+                     :((newLeft?n3(newLeft)+'問':'今日は済')+'　動画から')),
+                 done:(newLeft===0&&restNow>0),vid:nv});
     }else{
+      /* 動画が全部終わっている＝飛ぶ先が無いので、その場で出題を始める。 */
       rows.push({act:'startNew',lab:'今日の新規',
                  st:(newLeft?n3(newLeft)+'問':'今日は済'),
                  done:(newLeft===0)});
@@ -3676,6 +3704,384 @@ function vDone(){
   return h;
 }
 
+
+/* ==================== ゲーム（線つなぎ／聞き取り2択） 2026-08-23 ====================
+   ・範囲は復習と同じ絞り込み（filterHtml）を使う。問の**根拠の肢**が全部その範囲に
+     入っていれば出す（半分だけ範囲内の問は出さない＝習っていない所を混ぜない）
+   ・記録は学習の記録（items）に混ぜない。ST.game に回数と正誤だけ持つ
+     （肢を解いたわけではないので正答率を汚さない）
+   ・音声＝VOICEVOX 春日部つむぎ。voice/<id>.m4a を鳴らす（PCで作って配る）
+   ==================================================================== */
+var GM=null;                     /* いま動いているゲーム（null＝入口の画面） */
+function gmRec(ok){
+  if(!ST.game)ST.game={n:0,ok:0,at:''};
+  ST.game.n++;if(ok)ST.game.ok++;ST.game.at=today();saveST();
+}
+/* 範囲に入っているか＝根拠の肢が全部 filtered() の中にあるか */
+function gmIn(srcs){
+  var set={},i;
+  filtered().forEach(function(it){set[it.id]=1});
+  for(i=0;i<srcs.length;i++)if(!set[srcs[i]])return false;
+  return srcs.length>0;
+}
+function linkPool(){
+  return LINKQ.filter(function(q){
+    var ss=q.pairs.map(function(x){return x.src});
+    return gmIn(ss);
+  });
+}
+function dictPool(){
+  return DICTQ.filter(function(q){return gmIn([q.src])});
+}
+/* ---------- 入口 ---------- */
+function vGame(){
+  if(GM)return (GM.kind==='link')?vLink():vDict();
+  var lp=linkPool(),dp=dictPool();
+  var h='<div class="pad'+stag()+'">';
+  h+='<div class="panel"><div class="h">ゲーム</div>'
+    +'<div class="mini" style="margin-bottom:10px">覚えたことを手と耳で確かめます。'
+    +'記録は学習の記録には混ぜません。</div>'
+    +'<div class="gm-pick">'
+    +'<button data-act="gmLink"'+(lp.length?'':' disabled')+'>'+IC.game
+    +'<span class="t">線つなぎ</span><span class="s">'+n3(lp.length)+'問</span></button>'
+    +'<button data-act="gmDict"'+(dp.length?'':' disabled')+'>'+IC.sound
+    +'<span class="t">聞き取り2択</span><span class="s">'+n3(dp.length)+'問</span></button>'
+    +'</div>'
+    +'<div class="mini">'+(lp.length||dp.length
+      ? '下で範囲を選ぶと出る問が変わります。'
+      : 'いまの範囲では出せる問がありません。下で範囲を広げてください。')+'</div></div>';
+  h+=filterHtml({chapsOnly:true});
+  h+='<div class="gm-cred">VOICEVOX:春日部つむぎ</div>';
+  return h+'</div>';
+}
+/* ---------- 線つなぎ ---------- */
+function gmStartLink(){
+  var pool=linkPool();
+  if(!pool.length){msg('いまの範囲では出せる問がありません');return}
+  GM={kind:'link',qs:pool,qi:0,ties:{},checked:false,again:null,ok:0,ng:0,t0:Date.now()};
+  S.view='game';render();
+}
+function lkCur(){
+  var q=GM.qs[GM.qi];
+  if(!GM.again)return {q:q,pairs:q.pairs,retry:false};
+  return {q:q,pairs:GM.again,retry:true};
+}
+function lkRights(c){
+  var seen={},out=[];
+  c.pairs.forEach(function(p){if(!seen[p.r]){seen[p.r]=1;out.push({v:p.r,d:null})}});
+  (c.q.dummies||[]).forEach(function(d){if(!seen[d.r]){seen[d.r]=1;out.push({v:d.r,d:d})}});
+  return shuf(out);
+}
+function vLink(){
+  if(GM.qi>=GM.qs.length)return vGmDone();
+  var c=lkCur(),R=lkRights(c);
+  GM.R=R;GM.ties={};GM.checked=false;GM.sel=null;
+  var h='<div class="pad'+stag()+'"><div class="panel">'
+    +'<div class="lk-head"><span class="n">'+(GM.qi+1)+' / '+GM.qs.length+'（'+esc(c.q.kind)+'）</span>'
+    +'<span class="n" id="lk-time">0:00</span>'
+    +'<span class="n" style="margin-left:auto" id="lk-left">残り '+c.pairs.length+'本</span></div>'
+    +'<div class="lk-ask">'+(c.retry?'【もう一度】':'')+esc(c.q.ask)+'</div>'
+    +'<div class="lk-wrap"><svg class="lk-svg" id="lk-svg"></svg><div class="lk-cols"><div class="lk-col">';
+  c.pairs.forEach(function(pr,i){
+    h+='<div class="lk-card l" data-i="'+i+'" id="L'+i+'">'+esc(pr.l)
+      +'<span class="dot"></span><span id="fix'+i+'"></span></div>';
+  });
+  h+='</div><div class="lk-col">';
+  R.forEach(function(r,j){
+    h+='<div class="lk-card r" data-j="'+j+'" id="R'+j+'"><span class="dot"></span>'+esc(r.v)+'</div>';
+  });
+  h+='</div></div></div>'
+    +'<button class="btn pri" style="margin-top:12px" id="lk-check" disabled>答え合わせ</button>'
+    +'<div class="lk-note" id="lk-note">左のカードから右へ線を引く。引いた左カードをもう一度押すと外せる。'
+    +'同じ値に何本つないでも構いません。</div>'
+    +'<button class="btn sm" style="margin-top:10px;width:auto;padding:0 12px" data-act="gmQuit">やめる</button>'
+    +'</div></div>';
+  return h;
+}
+/* 線つなぎの当たり判定と描画（描き直しではなくSVGを直接触る＝カードの座標を動かさない） */
+function lkBind(){
+  var v=document.getElementById('view');
+  var c=lkCur();
+  function org(){return document.getElementById('lk-svg').getBoundingClientRect()}
+  function anc(id,side){
+    var r=document.getElementById(id).getBoundingClientRect(),o=org();
+    return {x:(side==='L'?r.right:r.left)-o.left,y:r.top+r.height/2-o.top};
+  }
+  function seg(a,b,col,id,anim){
+    var sv=document.getElementById('lk-svg');
+    var p=document.createElementNS('http://www.w3.org/2000/svg','line');
+    p.setAttribute('x1',a.x);p.setAttribute('y1',a.y);p.setAttribute('x2',b.x);p.setAttribute('y2',b.y);
+    p.setAttribute('stroke',col);p.setAttribute('stroke-width','2.5');p.setAttribute('stroke-linecap','round');
+    if(id)p.setAttribute('id',id);
+    if(anim){
+      var len=Math.sqrt((b.x-a.x)*(b.x-a.x)+(b.y-a.y)*(b.y-a.y));
+      p.style.strokeDasharray=len;p.style.setProperty('--len',len);
+      p.style.animation='lkdraw 514ms var(--easeOut) 1 both';
+    }
+    sv.appendChild(p);
+  }
+  function redraw(){
+    var sv=document.getElementById('lk-svg');while(sv.firstChild)sv.removeChild(sv.firstChild);
+    Object.keys(GM.ties).forEach(function(i){seg(anc('L'+i,'L'),anc('R'+GM.ties[i],'R'),'#c98b9b')});
+  }
+  function count(){
+    var n=Object.keys(GM.ties).length;
+    document.getElementById('lk-left').textContent='残り '+(c.pairs.length-n)+'本';
+    document.getElementById('lk-check').disabled=(n<c.pairs.length);
+  }
+  function tie(L,R){
+    GM.ties[L.getAttribute('data-i')]=R.getAttribute('data-j');
+    L.classList.remove('on');GM.sel=null;redraw();count();
+  }
+  Array.prototype.forEach.call(v.querySelectorAll('.lk-card'),function(card){
+    card.addEventListener('pointerdown',function(ev){
+      ev.preventDefault();
+      if(GM.checked)return;
+      if(card.classList.contains('l')){
+        var i=card.getAttribute('data-i');
+        if(GM.ties[i]!==undefined){delete GM.ties[i];redraw();count();return}
+        if(GM.sel)GM.sel.classList.remove('on');
+        GM.sel=card;card.classList.add('on');
+      }else if(GM.sel){tie(GM.sel,card)}
+    });
+  });
+  v.addEventListener('pointermove',function(ev){
+    if(!GM.sel||GM.checked)return;
+    var old=document.getElementById('lk-tmp');if(old)old.remove();
+    var o=org();
+    seg(anc(GM.sel.id,'L'),{x:ev.clientX-o.left,y:ev.clientY-o.top},'#c98b9b','lk-tmp');
+  });
+  v.addEventListener('pointerup',function(ev){
+    var old=document.getElementById('lk-tmp');if(old)old.remove();
+    if(!GM.sel||GM.checked)return;
+    var t=document.elementFromPoint(ev.clientX,ev.clientY);
+    var card=t&&t.closest?t.closest('.lk-card'):null;
+    if(card&&card.classList.contains('r'))tie(GM.sel,card);
+  });
+  document.getElementById('lk-check').onclick=function(){
+    GM.checked=true;
+    var sv=document.getElementById('lk-svg');while(sv.firstChild)sv.removeChild(sv.firstChild);
+    var wrong=[];
+    c.pairs.forEach(function(pr,i){
+      var j=GM.ties[i],rv=GM.R[j],okq=(rv&&rv.v===pr.r);
+      setTimeout(function(){
+        document.getElementById('L'+i).classList.add(okq?'ok':'ng');
+        document.getElementById('R'+j).classList.add(okq?'ok':'ng');
+        seg(anc('L'+i,'L'),anc('R'+j,'R'),okq?'#4a9e72':'#c1584e',null,true);
+        /* 1本ごとに鳴らすと連続でうるさいので、線は音なし。音は最後に1回だけ。 */
+      },i*229);
+      if(okq){GM.ok++}
+      else{
+        GM.ng++;wrong.push(pr);
+        var m='正しくは <b>'+esc(pr.r)+'</b>（根拠 '+esc(pr.src)+'）';
+        if(rv&&rv.d)m+='<br>選んだ「'+esc(rv.v)+'」は '+esc(rv.d.era)+' 問'+rv.d.q+' が誤りとして出した数字';
+        document.getElementById('fix'+i).innerHTML='<div class="lk-fix">'+m+'</div>';
+      }
+    });
+    document.getElementById('lk-note').textContent=
+      '正解 '+(c.pairs.length-wrong.length)+' / '+c.pairs.length;
+    gmRec(wrong.length===0);
+    /* 線を見せ終わってから、本体と同じ○×を出す */
+    setTimeout(function(){
+      se(wrong.length?'ng':'clear');
+      playFx(wrong.length===0,wrong.length?'badLite':'lite');
+    },c.pairs.length*229+260);
+    var b=document.getElementById('lk-check');
+    if(wrong.length){
+      b.textContent='間違えた '+wrong.length+'本をもう一度';b.disabled=false;
+      b.onclick=function(){GM.again=wrong;render()};
+    }else{
+      b.textContent=(GM.qi+1<GM.qs.length)?'次の問題へ':'おわり';b.disabled=false;
+      b.onclick=function(){GM.again=null;GM.qi++;render()};
+    }
+  };
+  count();
+}
+/* ---------- 聞き取り2択 ---------- */
+function gmStartDict(){
+  var pool=dictPool();
+  if(!pool.length){msg('いまの範囲では出せる問がありません');return}
+  GM={kind:'dict',qs:shuf(pool.slice()),qi:0,ok:0,ng:0,to:0,wrongs:[],t0:Date.now(),
+      paused:false,answered:false};
+  S.view='game';render();
+}
+/* 速さは3段（0.8／1.0／1.25）。前のスライダー時代の値（1.1など）が残っていても、
+   いちばん近い段に寄せる＝どのボタンも選ばれていない状態を作らない（2026-08-23）。 */
+var KKRATES=[0.8,1.0,1.25];
+function kkSet(){
+  var o=ST.settings||{},r=o.kkRate||1.0,best=KKRATES[0],i;
+  for(i=0;i<KKRATES.length;i++)if(Math.abs(KKRATES[i]-r)<Math.abs(best-r))best=KKRATES[i];
+  return {lim:o.kkLim||5,rate:best};
+}
+function kkSave(lim,rate){
+  ST.settings.kkLim=lim;ST.settings.kkRate=rate;saveST();
+}
+function vDict(){
+  if(GM.qi>=GM.qs.length)return vGmDone();
+  var q=GM.qs[GM.qi],st=kkSet();
+  var opts=shuf([{v:q.ok,ok:1},{v:q.ng,ok:0}]);
+  var h='<div class="pad'+stag()+'"><div class="panel">'
+    +'<div class="lk-head"><span class="n">'+(GM.qi+1)+' / '+GM.qs.length+'</span>'
+    +'<span class="n" style="margin-left:auto">正解 '+GM.ok+'</span></div>'
+    +'<div class="kk-stage">'
+    +'<div class="kk-ask" id="kk-ask">'+esc(q.ask)+'<span class="bl"> ○○</span></div>'
+    +'<div class="kk-cd" id="kk-num"></div>'
+    +'<div class="kk-btns">';
+  opts.forEach(function(o,i){
+    h+='<button class="kk-btn" data-ok="'+o.ok+'" id="kk-b'+i+'">'+esc(o.v)+'</button>';
+  });
+  h+='</div></div><div class="kk-res" id="kk-res"></div>'
+    /* 速さはタップの3段（2026-08-23 本人「スライダーがダサい」）。 */
+    +'<div class="kk-row"><span class="lb">速さ</span><span class="kk-seg" id="kk-rseg">'
+    +[[0.8,'ゆっくり'],[1.0,'ふつう'],[1.25,'速い']].map(function(x){
+        return '<button data-r="'+x[0]+'"'+(Math.abs(st.rate-x[0])<0.01?' class="on"':'')
+          +'>'+x[1]+'</button>'}).join('')+'</span></div>'
+    +'<div class="kk-row"><span class="lb">制限</span><span class="kk-seg" id="kk-seg">'
+    +[5,10,15].map(function(x){return '<button data-s="'+x+'"'
+      +(x===st.lim?' class="on"':'')+'>'+x+'秒</button>'}).join('')+'</span></div>'
+    +'<div class="kk-row"><button class="btn sm" id="kk-replay" style="width:auto;padding:0 12px">'
+    +'もう一度聞く</button>'
+    +'<button class="btn sm" id="kk-pause" style="width:auto;padding:0 12px">一時停止</button>'
+    +'<button class="btn sm" data-act="gmQuit" style="width:auto;padding:0 12px">やめる</button></div>'
+    +'</div><div class="gm-cred">VOICEVOX:春日部つむぎ</div></div>';
+  return h;
+}
+var KKA=null,KKT=null,KKN=null;
+function kkStop(){
+  if(KKA){try{KKA.pause()}catch(e){}KKA=null}
+  clearInterval(KKT);KKT=null;
+  if(KKN){try{KKN.pause()}catch(e){}KKN=null}
+  var b=document.getElementById('kk-bar');if(b)b.style.width='0';
+}
+function kkPlay(name,rate,after){
+  var a=new Audio(mediaSrc('voice/'+name+'.m4a'));
+  a.playbackRate=rate||1;
+  a.onended=function(){if(after)after()};
+  var p=a.play();
+  if(p&&p.catch)p.catch(function(){if(after)after()});
+  return a;
+}
+function kkBind(){
+  var q=GM.qs[GM.qi],st=kkSet();
+  GM.answered=false;GM.paused=false;
+  Array.prototype.forEach.call(document.getElementById('kk-rseg').querySelectorAll('button'),
+    function(b){
+      b.onclick=function(){
+        var r=+b.getAttribute('data-r');
+        if(KKA)KKA.playbackRate=r;kkSave(kkSet().lim,r);
+        Array.prototype.forEach.call(document.getElementById('kk-rseg').querySelectorAll('button'),
+          function(x){x.className=''});
+        b.className='on';
+      };
+    });
+  Array.prototype.forEach.call(document.getElementById('kk-seg').querySelectorAll('button'),function(b){
+    b.onclick=function(){
+      kkSave(+b.getAttribute('data-s'),kkSet().rate);
+      Array.prototype.forEach.call(document.getElementById('kk-seg').querySelectorAll('button'),
+        function(x){x.className=''});
+      b.className='on';
+    };
+  });
+  document.getElementById('kk-replay').onclick=function(){kkSay(q)};
+  /* 一時停止＝音も時計も止める（2026-08-23 本人指示） */
+  document.getElementById('kk-pause').onclick=function(){
+    GM.paused=!GM.paused;
+    this.textContent=GM.paused?'続ける':'一時停止';
+    if(GM.paused){if(KKA)KKA.pause();clearInterval(KKT);KKT=null}
+    else{if(KKA&&KKA.paused&&!GM.answered)KKA.play();if(!KKT&&GM.left!=null)kkCount(GM.left)}
+  };
+  [0,1].forEach(function(i){
+    var b=document.getElementById('kk-b'+i);
+    if(b)b.onclick=function(){kkPick(b.getAttribute('data-ok')==='1',b,q)};
+  });
+  kkSay(q);
+}
+function kkSay(q){
+  kkStop();
+  KKA=kkPlay(q.id,kkSet().rate,function(){if(!GM.answered&&!GM.paused)kkCount(kkSet().lim)});
+}
+/* カウントダウン＝中央に数字を出しつつ**その数字を読み上げる**（2026-08-23 本人指示）。 */
+function kkCount(sec){
+  clearInterval(KKT);
+  GM.left=sec;
+  var t0=Date.now(),shown=null,lim=kkSet().lim;
+  KKT=setInterval(function(){
+    if(GM.paused)return;
+    var left=sec-(Date.now()-t0)/1000;
+    GM.left=left;
+    var b=document.getElementById('kk-bar');if(b)b.style.width=Math.max(0,left/lim*100)+'%';
+    var n=Math.ceil(left);
+    if(n>0&&n!==shown&&n<=5){
+      shown=n;
+      var e=document.getElementById('kk-num');
+      if(e){e.className='kk-cd';e.textContent=n;void e.offsetWidth;
+            e.className='kk-cd go'+(n<=3?' last':'')}
+      kkTick(n<=3);                    /* 数字の読み上げはやめ、**小さい効果音**にした
+                                          （2026-08-23 本人「うるさくて集中できない」）。
+                                          残り3秒からは少し高い音にして、気づけるようにする。 */
+    }
+    if(left<=0){clearInterval(KKT);KKT=null;kkTimeout()}
+  },80);
+}
+/* ゲームの音＝本人の素材（Desktop\動画素材\SE）から se/ に取り込んだもの。
+   音量は控えめ（2026-08-23 本人「うるさくて集中できないから効果音で小さく」）。
+   ここは**公開しない**素材なので、殻（pwa）には入れず問題データ側で配る。 */
+var SEV={tick:0.30,tick_hi:0.35,ok:0.55,ng:0.50,clear:0.55};
+function se(name){
+  try{
+    var a=new Audio(mediaSrc('se/'+name+'.mp3'));
+    a.volume=SEV[name]||0.4;
+    a.play();
+  }catch(e){}
+}
+function kkTick(hi){se(hi?'tick_hi':'tick')}
+function kkTimeout(){
+  if(GM.answered)return;
+  GM.answered=true;GM.to++;GM.wrongs.push(GM.qs[GM.qi]);
+  var q=GM.qs[GM.qi];
+  document.getElementById('kk-res').innerHTML='<b class="x">時間切れ</b>　正しくは <b>'
+    +esc(q.ok)+'</b><div class="mini" style="margin-top:4px">'+esc(q.say||'')
+    +'<br>根拠 '+esc(q.src)+'</div>';
+  gmRec(false);
+  se('ng');
+  playFx(false,'badLite');
+  kkPlay('v_ng',kkSet().rate,function(){kkPlay(q.id+'_e',kkSet().rate,kkNext)});
+}
+function kkPick(okq,btn,q){
+  if(GM.answered)return;
+  GM.answered=true;clearInterval(KKT);KKT=null;
+  var b=document.getElementById('kk-bar');if(b)b.style.width='0';
+  btn.classList.add(okq?'ok':'ng');
+  /* 解説は**文章として画面にも出す**（2026-08-23 本人指示。読み上げだけにしない） */
+  var ex='<div class="mini" style="margin-top:4px">'+esc(q.say||'')
+    +'<br>根拠 '+esc(q.src)+'</div>';
+  if(okq){GM.ok++;document.getElementById('kk-res').innerHTML='<b class="o">正解</b>'+ex}
+  else{GM.ng++;GM.wrongs.push(q);
+    document.getElementById('kk-res').innerHTML='<b class="x">誤り</b>　正しくは <b>'
+      +esc(q.ok)+'</b>'+ex}
+  gmRec(okq);
+  se(okq?'ok':'ng');
+  playFx(okq,okq?'lite':'badLite');
+  /* 正誤を読み上げ → 正解のときは解説も読み上げる（2026-08-23 本人指示） */
+  kkPlay(okq?'v_ok':'v_ng',kkSet().rate,function(){
+    kkPlay(q.id+'_e',kkSet().rate,kkNext);
+  });
+}
+function kkNext(){setTimeout(function(){if(!GM)return;GM.qi++;render()},1100)}
+/* ---------- 終わり ---------- */
+function vGmDone(){
+  var sec=Math.round((Date.now()-GM.t0)/1000),n=GM.ok+GM.ng+(GM.to||0);
+  var h='<div class="pad'+stag()+'"><div class="panel"><div class="gm-done">'
+    +'<div class="mini">'+(GM.kind==='link'?'線つなぎ':'聞き取り2択')+' おわり</div>'
+    +'<div class="big">'+GM.ok+' / '+n+'</div>'
+    +'<div class="mini">'+(GM.to?('時間切れ '+GM.to+'／'):'')+'かかった時間 '+mmss(sec)+'</div>';
+  if(GM.kind==='dict'&&GM.wrongs&&GM.wrongs.length)
+    h+='<button class="btn pri" style="margin-top:14px" data-act="gmWrong">間違えた '
+      +GM.wrongs.length+'問をやる</button>';
+  h+='<button class="btn sm" style="margin-top:10px;width:auto;padding:0 14px" data-act="gmQuit">'
+    +'ゲームに戻る</button></div></div></div>';
+  return h;
+}
 /* ---------- 復習（①復習20問＝日が経った順 ②今日の間違い ③間違い全部
    ④章ごとに1問 ⑤絞り込み ⑥重症リスト。2026-08-23 本人指示で抜き打ちを外した） ---------- */
 /* 章の総数（小分類×章）。画面に出す数字はここ1か所から取る＝2画面で食い違わない。 */
@@ -3735,24 +4141,19 @@ function chapOnePool(scope){
   });
   return sortQ(out);      /* 並びは講義の順（新規と同じ規則）＝飛び飛びにならない */
 }
-function vReview(){
-  var fl=filtered(),sev=severeTopics(),pl=plan();
-  var wt=wrongToday();
-  var h='<div class="pad'+stag()+'">';
-  /* 抜き打ちは 2026-08-22 に廃止（役目は「復習20問」＝最後に解いてから日が経った順に移した）。
-     ホームからは外したのに、この画面には行が残っていて「88問」と出ていた（2026-08-23 本人指摘）。
-     機能を外すときは**導線を全部**消す＝検査を check_spec.py に足した。 */
-  h+='<div class="panel">'
-    +rline('復習（日が経った順）',recallLeft(),'startRecall',true)
-    +rline('今日の間違い',wt.length,'startWrong',false)
-    +rline('間違い',pl.wrong,'startWrongAll',false)
-    +'</div>';
+/* 範囲の選び方（条件のチップ＋大分類→小分類→章＋この範囲で）。
+   復習タブとゲームタブで**同じ部品**を使う（2026-08-23 本人指示「復習の絞り込みと同じ仕様」）。
+   2か所に同じUIを書くと、片方だけ直して食い違う。 */
+function filterHtml(opt){
+  /* opt.chapsOnly=true で**章の一覧だけ**にする（ゲームタブ）。
+     条件のチップ（間違え・いつ・正解率・難易度）と「そのまま解く／この範囲で」は出さない。 */
+  var fl=filtered(),h='',chapsOnly=!!(opt&&opt.chapsOnly);
   h+='<div class="panel"><button class="tapline" data-act="togFilter"><span style="flex:1;font-weight:600">範囲を選ぶ</span>'
     +'<span class="badge">'+n3(fl.length)+'問</span>'+(S.openFilter?IC.up:IC.down)+'</button>';
   if(S.openFilter){
     /* 種類ごとに1行（2026-08-23 本人指摘でコンパクトに）。
        行の頭に種類を書くので、チップは「あり」「2回＋」のように短くできる。 */
-    h+='<div class="hr"></div>'
+    if(!chapsOnly)h+='<div class="hr"></div>'
       +'<div class="frow2"><span class="lb">間違え</span><span class="bs">'
       +tg('wrong','あり',F.wrong,1)
       +tg2('ngMin',2,'2回＋',F.ngMin===2,1)
@@ -3770,7 +4171,7 @@ function vReview(){
       +tg('unseen','未出題',F.unseen,1)
       +'</span></div>';
     /* 難易度の絞り込み＝3段階の3チップ（易＝A・B／普＝C／難＝D・E。未評価は該当しない） */
-    h+='<div class="frow2"><span class="lb">難易度</span><span class="bs">'
+    if(!chapsOnly)h+='<div class="frow2"><span class="lb">難易度</span><span class="bs">'
       +D3.map(function(d){return '<button class="tog xs'+(F.difs.indexOf(d)>=0?' on':'')
         +'" data-act="fdif" data-d="'+d+'">'+d+'</button>'}).join('')
       +'</span></div>';
@@ -3827,12 +4228,14 @@ function vReview(){
     h+='<div class="hr"></div><div class="spread"><span class="mini">該当 <b class="num">'+n3(fl.length)+'</b> 問'
       +(fActive()?'':'（条件なし＝全問）')+'</span>'
       +'<button class="btn sm" data-act="fclear">条件クリア</button></div>'
-      +'<button class="btn pri" style="margin-top:10px" data-act="startFilter"'+(fl.length?'':' disabled')+'>そのまま解く</button>';
+      +(chapsOnly?'':'<button class="btn pri" style="margin-top:10px" data-act="startFilter"'
+        +(fl.length?'':' disabled')+'>そのまま解く</button>');
     /* 「章ごとに1問」「数字だけ」は**範囲のすぐ下**に置く（2026-08-23 本人指摘
        「絞り込みと章ごとに一問が離れすぎてる」）。範囲を選ぶ→出す が1か所で終わる。
        条件を選んでいなければ対象は**習った範囲**（解いたことがある肢）。 */
-    var c1=chapOnePool(fActive()?'filter':'learned'),np=numPool(fActive());
-    h+='<div class="hr"></div>'
+    var c1=chapsOnly?[]:chapOnePool(fActive()?'filter':'learned'),
+        np=chapsOnly?[]:numPool(fActive());
+    if(!chapsOnly)h+='<div class="hr"></div>'
       +'<div class="mini" style="margin-bottom:6px">この範囲で</div>'
       +'<div class="rowx" style="gap:8px">'
       +'<button class="btn sm" data-act="startChapOne" style="flex:1"'+(c1.length?'':' disabled')+'>'
@@ -3846,6 +4249,21 @@ function vReview(){
   }
   h+='</div>';
 
+  return h;
+}
+function vReview(){
+  var fl=filtered(),sev=severeTopics(),pl=plan();
+  var wt=wrongToday();
+  var h='<div class="pad'+stag()+'">';
+  /* 抜き打ちは 2026-08-22 に廃止（役目は「復習20問」＝最後に解いてから日が経った順に移した）。
+     ホームからは外したのに、この画面には行が残っていて「88問」と出ていた（2026-08-23 本人指摘）。
+     機能を外すときは**導線を全部**消す＝検査を check_spec.py に足した。 */
+  h+='<div class="panel">'
+    +rline('復習（日が経った順）',recallLeft(),'startRecall',true)
+    +rline('今日の間違い',wt.length,'startWrong',false)
+    +rline('間違い',pl.wrong,'startWrongAll',false)
+    +'</div>';
+  h+=filterHtml();
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
   if(!sev.length)h+='<div class="mini">5問以上解いて誤答が35%以上の章、または誤答3回の問題が2つ以上ある章が出ます。今はありません。</div>';
   sev.forEach(function(x){
@@ -4911,7 +5329,16 @@ document.addEventListener('click',function(e){
   if(a==='fclear'){F.wrong=false;F.ngMin=0;F.recent=0;F.star=false;F.unseen=false;F.rateMax=null;F.difs=[];F.cats=[];F.topics=[];render();return}
   if(a==='togFilter'){S.openFilter=!S.openFilter;render();return}
   if(a==='togchaps'){S.openChaps=!S.openChaps;render();return}
-  if(a==='togsc'){S.openSc=!S.openSc;render();return}   /* 得点の式と内訳（既定は畳む） */
+  if(a==='togsc'){S.openSc=!S.openSc;render();return}
+  /* ゲーム（2026-08-23） */
+  if(a==='gmLink'){gmStartLink();return}
+  if(a==='gmDict'){gmStartDict();return}
+  if(a==='gmQuit'){kkStop();GM=null;S.view='game';render();return}
+  if(a==='gmWrong'){
+    GM={kind:'dict',qs:GM.wrongs.slice(),qi:0,ok:0,ng:0,to:0,wrongs:[],t0:Date.now(),
+        paused:false,answered:false};
+    render();return;
+  }   /* 得点の式と内訳（既定は畳む） */
   if(a==='togsrc'){srcSheet(S.queue[S.qi]);return}
   if(a==='sort'){var so=t.getAttribute('data-s');
     m6FlipRender(function(){S.sort=so;S.enter=false;render()});return}
