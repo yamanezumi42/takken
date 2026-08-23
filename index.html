@@ -1386,7 +1386,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='55902fb6';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='4bb488de';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1426,6 +1426,42 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     if(window.TAKKEN_SRC)window.TAKKEN_SRC.at=at;
     try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
   }
+  /* ファイル1件ごとの鍵。全部を1件に詰めると、1件落とすたびに全部を書き直すことになる
+     （2026-08-24 それで IndexedDB が落ちた）。 */
+  function pkey(p){return 'p:'+p}
+  /* 版の情報だけを持つ小さな記録。parts は持たない。 */
+  function getMeta(){
+    return get(KEY2).then(function(r){
+      if(!r)return {man:{files:{}},at:''};
+      return r;
+    });
+  }
+  /* 版の情報にある全ファイルを、1件ずつ読み集める。 */
+  function loadParts(man){
+    var names=Object.keys((man&&man.files)||{}),out={},i=0;
+    function step(){
+      if(i>=names.length)return Promise.resolve(out);
+      var p=names[i++];
+      return get(pkey(p)).then(function(o){
+        if(o!==null&&o!==undefined)out[p]=o;
+        return step();
+      },function(){return step()});
+    }
+    return step();
+  }
+  /* 古い形（1件に parts を抱えている）を、1件ずつの形へ移す。
+     読めない・書けないときは false を返す＝取り直す。 */
+  function migrate(rec){
+    var names=Object.keys(rec.parts||{}),i=0;
+    function step(){
+      if(i>=names.length){
+        return put({man:rec.man||{files:{}},at:rec.at||''},KEY2).then(function(){return true});
+      }
+      var p=names[i++];
+      return put(rec.parts[p],pkey(p)).then(step);
+    }
+    return step().catch(function(){return false});
+  }
   /* parts（ファイルごとの中身）から、アプリが読む形に組み立てる。 */
   function assemble(rec){
     var idx=rec.parts['items_index.json']||[],items=[],figs={},media={};
@@ -1452,7 +1488,16 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     var say=onStat||function(){};
     say('版を確認しています…');
     return get(KEY2).then(function(r){
-      rec=r||{man:{files:{}},parts:{}};
+      /* 古い形（parts を1件に抱えている）は、1件ずつの形へ移してから進む。
+         移せなければ捨てて取り直す（2026-08-24 IndexedDB が落ちた件の後片付け）。 */
+      if(r&&r.parts&&Object.keys(r.parts).length){
+        say('保存の形を新しくしています…');
+        return migrate(r).then(function(ok){
+          rec=ok?{man:r.man||{files:{}},at:r.at||''}:{man:{files:{}},at:''};
+          return ghGet('manifest.json');
+        });
+      }
+      rec=r||{man:{files:{}},at:''};
       return ghGet('manifest.json');
     }).then(function(man){
       var have=(rec.man&&rec.man.files)||{},todo=[];
@@ -1464,7 +1509,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         /* 落とすものが無くても**確認した時刻は刻む**。刻まないと版がいつまでも
            「未取得」のままで、チェックのボタンが出ない（2026-08-18 実機）。 */
         say('最新です（'+(man.builtAt||'')+'）');rec.man=man;rec.at=stamp();
-        return put(rec,KEY2).then(function(){srcAt(man.builtAt||rec.at);return 0});
+        return put({man:man,at:stamp()},KEY2)
+          .then(function(){srcAt(man.builtAt||stamp());return 0});
       }
       var mb=todo.reduce(function(a,p){return a+man.files[p].bytes},0)/1048576;
       var i=0;
@@ -1474,26 +1520,34 @@ body{overflow-x:clip;overscroll-behavior-x:none}
          版（sha）もファイル単位で控えるので、次に押すと**続きから**になる。 */
       function step(){
         if(i>=todo.length){
-          rec.man=man;                       /* 最後に版をそろえる（消えたファイルの掃除もここ） */
-          rec.at=stamp();
-          return put(rec,KEY2).then(function(){srcAt(man.builtAt||rec.at);return todo.length});
+          /* 最後に版をそろえる（消えたファイルの掃除もここ） */
+          return put({man:man,at:stamp()},KEY2)
+            .then(function(){srcAt(man.builtAt||stamp());return todo.length});
         }
         var p=todo[i];
         say('取り込み中 '+(i+1)+'/'+todo.length+'（残り '+mb.toFixed(1)+'MB）');
         return ghGet(p).then(function(o){
-          rec.parts[p]=o;
-          if(!rec.man)rec.man={files:{}};
-          if(!rec.man.files)rec.man.files={};
-          rec.man.files[p]=man.files[p];     /* この1件は取り終えた、と控える */
-          mb-=man.files[p].bytes/1048576; if(mb<0)mb=0;
-          i++;
-          return put(rec,KEY2).then(step);   /* ここで保存＝途中で切れても残る */
+          /* ★このファイルだけを保存する。以前は溜めた全部を書き直していたので、
+             280件で累計40GB近い書き込みになり IndexedDB が落ちた（2026-08-24）。 */
+          return put(o,pkey(p)).then(function(){
+            if(!rec.man)rec.man={files:{}};
+            if(!rec.man.files)rec.man.files={};
+            rec.man.files[p]=man.files[p];   /* この1件は取り終えた、と控える */
+            mb-=man.files[p].bytes/1048576; if(mb<0)mb=0;
+            i++;
+            /* 控えは小さいので毎回書いてよい＝途中で切れても続きから */
+            return put({man:rec.man,at:stamp()},KEY2).then(step);
+          });
         });
       }
       return step();
     });
   }
   window.TAKKEN_SYNC=ghSync;
+  /* 試験用の取り出し口（2026-08-24）。保存の仕掛けを**本物の関数のまま**外から試せるようにする。
+     取り込みはトークンが要るので手元で通せない＝ここだけは外に出して確かめる。 */
+  window.TAKKEN_IDB={pkey:pkey,get:get,put:put,loadParts:loadParts,migrate:migrate,
+                     assemble:assemble,KEY2:KEY2};
   /* ---------- 版の情報（2026-08-18） ----------
      出どころが3つ（手渡しの34MB・リポジトリ・保存領域）あるのに画面に何も出ておらず、
      「どれが動いているか」を毎回本人に聞くことになっていた（いたちごっこの原因）。
@@ -1620,21 +1674,31 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   /* v2（非公開リポジトリから取り込んだ分）を優先。無ければ v1（手渡しの34MB）で起動する
      ＝トークンが無くても今まで通り動く。 */
   get(KEY2).then(function(r2){
-    if(r2&&r2.parts&&r2.parts['items_index.json']&&!force){
-      var d2=assemble(r2);
-      if(d2.items.length){
-        window.TAKKEN_SRC.src='リポジトリ';
-        window.TAKKEN_SRC.n=d2.items.length;
-        window.TAKKEN_SRC.files=Object.keys((r2.man&&r2.man.files)||{}).length;
-        /* 端末が持っている図の枚数。round5で「図が入ってない」が起きたのに、
-           配信データには入っていた＝端末側に届いていない疑いを、次は1回で見分けるため。 */
-        window.TAKKEN_SRC.figs=Object.keys(d2.figs||{}).length;
-        /* 版の時刻は**データ自身の builtAt**（サーバ側の事実）を正とする。
-           端末側で書く rec.at は、書けなかったときに空になる（2026-08-18 実機）。 */
-        window.TAKKEN_SRC.at=((r2.man&&r2.man.builtAt)||r2.at||'');
-        apply(d2);boot();autoSync();return null;
-      }
-    }
+    if(force||!r2)return null;
+    /* ①いまの形＝ファイル1件ごとに別の鍵。版の情報から名前を引いて読み集める。
+       ②古い形＝1件に parts を抱えている（2026-08-24 より前）。そのまま読めるので使う。 */
+    var pre=(r2.parts&&r2.parts['items_index.json'])
+      ? Promise.resolve({parts:r2.parts,man:r2.man,at:r2.at})
+      : ((r2.man&&r2.man.files&&r2.man.files['items_index.json'])
+          ? loadParts(r2.man).then(function(ps){return {parts:ps,man:r2.man,at:r2.at}})
+          : Promise.resolve(null));
+    return pre.then(function(rec){
+      if(!rec||!rec.parts||!rec.parts['items_index.json'])return null;
+      var d2=assemble(rec);
+      if(!d2.items.length)return null;
+      window.TAKKEN_SRC.src='リポジトリ';
+      window.TAKKEN_SRC.n=d2.items.length;
+      window.TAKKEN_SRC.files=Object.keys((rec.man&&rec.man.files)||{}).length;
+      /* 端末が持っている図の枚数。round5で「図が入ってない」が起きたのに、
+         配信データには入っていた＝端末側に届いていない疑いを、次は1回で見分けるため。 */
+      window.TAKKEN_SRC.figs=Object.keys(d2.figs||{}).length;
+      /* 版の時刻は**データ自身の builtAt**（サーバ側の事実）を正とする。
+         端末側で書く rec.at は、書けなかったときに空になる（2026-08-18 実機）。 */
+      window.TAKKEN_SRC.at=((rec.man&&rec.man.builtAt)||rec.at||'');
+      apply(d2);boot();autoSync();return 'ok';
+    });
+  }).then(function(done){
+    if(done==='ok')return null;
     return get(KEY).then(function(d){
       if(d&&d.items&&d.items.length&&!force){
         window.TAKKEN_SRC.src='手渡しの34MB';
