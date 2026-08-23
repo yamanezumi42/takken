@@ -12,8 +12,9 @@ var CHAP=window.TAKKEN_CHAPTERS||{};
 var MOCKS=(window.TAKKEN_MOCKS&&window.TAKKEN_MOCKS.sets)||[];
 /* ゲームと早見表のデータ（無くても落ちないように既定は空） */
 var LINKQ=window.TAKKEN_LINKQ||[], DICTQ=window.TAKKEN_DICTQ||[], TABLES=window.TAKKEN_TABLES||[];
-/* 使える声（無いときは春日部つむぎ1つだけとして扱う＝落ちない） */
-var VOICES=window.TAKKEN_VOICES||[{id:8,name:'春日部つむぎ',style:'ノーマル'}];
+/* 使える声。**手元に無いのに勝手に既定を作らない**（2026-08-23 本人報告の原因）。
+   一覧が空なら「声なし」として扱い、文字だけで進める（無音のまま止まらない）。 */
+var VOICES=window.TAKKEN_VOICES||[];
 /* 殻（端末）では data ブランチから来た中身が後から入るので、その時に読み直す。 */
 try{window.addEventListener('takken-data',function(){
   LINKQ=window.TAKKEN_LINKQ||LINKQ;DICTQ=window.TAKKEN_DICTQ||DICTQ;TABLES=window.TAKKEN_TABLES||TABLES;
@@ -3927,8 +3928,11 @@ function gmStartDict(){
 function kkUse(){
   var o=ST.settings||{},u=o.kkUse||{},out=[];
   VOICES.forEach(function(v){if(u[v.id])out.push(v.id)});
-  return out.length?out:[VOICES[0].id];
+  if(out.length)return out;
+  return VOICES.length?[VOICES[0].id]:[];      /* 声が1つも無いときは空 */
 }
+/* 声が無い（データがまだ届いていない）ときは音を鳴らさない＝無音で待たない */
+function kkNoVoice(){return kkUse().length===0}
 /* 声ごとの速さ（2026-08-23 本人指示「話すスピード自体は個別で設定・記憶」）。 */
 function kkRate(sid){
   var o=ST.settings||{},m=o.kkRates||{};
@@ -3944,6 +3948,7 @@ function kkSetRate(sid,r){
 function kkVoice(){
   if(GM&&GM.voice)return GM.voice;
   var u=kkUse();
+  if(!u.length)return null;
   var sid=(ST.settings&&ST.settings.kkRnd)?u[Math.floor(Math.random()*u.length)]:u[0];
   if(GM)GM.voice=sid;
   return sid;
@@ -3958,6 +3963,7 @@ function kkSet(){
 
 /* 声の名前（一覧に無いidでも落ちない） */
 function kkName(sid){
+  if(sid===null||sid===undefined)return '声なし';
   var i;for(i=0;i<VOICES.length;i++)if(VOICES[i].id===sid)
     return VOICES[i].name+'／'+VOICES[i].style;
   return 'id '+sid;
@@ -4004,9 +4010,9 @@ function vDict(){
   h+='</div></div><div class="kk-res" id="kk-res"></div>'
     /* 一時停止／再開は「次へ」の真上に固定（2026-08-23 本人指示）。
        答える前から同じ場所にあるので、押す位置が動かない。 */
-    +'<div class="kk-row" style="justify-content:center;margin-top:12px">'
-    +'<button class="pz" id="kk-pause" aria-label="'+(GM.paused?'再開':'一時停止')+'">'
-    +(GM.paused?IC.tplay:IC.tpause)+'</button></div>'
+    /* 「次へ」と同じ形のボタン（2026-08-23 本人指示）。アイコンと文字だけ変える。 */
+    +'<button class="nx" id="kk-pause" style="margin-top:12px">'
+    +(GM.paused?IC.tplay:IC.tpause)+'<span>'+(GM.paused?'再開':'一時停止')+'</span></button>'
     +'<div id="kk-next"></div>'
     /* 速さと制限＝スライダー（見た目はこちらで作る）。右に値を出す。 */
     +'<div class="kk-row"><span class="lb">速さ</span>'
@@ -4116,8 +4122,8 @@ function kkBind(){
   document.getElementById('kk-pause').onclick=function(){
     GM.paused=!GM.paused;
     /* アイコンと下の字を入れ替える（描き直さない＝音が途切れない） */
-    this.innerHTML=(GM.paused?IC.tplay:IC.tpause);
-    this.setAttribute('aria-label',GM.paused?'再開':'一時停止');
+    this.innerHTML=(GM.paused?IC.tplay:IC.tpause)
+      +'<span>'+(GM.paused?'再開':'一時停止')+'</span>';
     if(GM.paused){
       aPause();                                /* いま鳴っている1本を止めて行列は保つ */
       clearInterval(KKT);KKT=null;
@@ -4150,6 +4156,7 @@ function kkBind(){
 function kkSay(q){
   kkStop();
   GM.phase='read';GM.remain=null;GM.expDone=false;
+  if(kkNoVoice()){kkCount(kkSet().lim);return}   /* 声が無ければ文字だけで始める */
   /* 問文だけを行列に積む。読み終わったらカウントダウンへ（重なることがない）。 */
   aQueue([vItem(q.id,kkSet().rate)],function(){
     if(!GM||GM.answered||GM.paused)return;
@@ -4229,8 +4236,10 @@ function kkPick(okq,btn,q){
      図は肢に付いているものをそのまま使う（2026-08-23 本人指示）。 */
   var ex='<div class="ex">'+esc(q.say||'')+'</div>'
     +(q.ngsay?('<div class="exng">'+esc(q.ngsay)+'</div>'):'')
+    /* 図は普通の過去問と同じ作り（.figbox＋.fig）。独自の規則を作らない＝見え方が揃う。 */
     +((q.figs&&q.figs.length)
-       ?('<img class="kk-fig" src="'+figSrc(q.figs[0])+'" alt="図">'):'')
+       ?('<div class="figbox"><img class="fig" src="'+esc(figSrc(q.figs[0]))+'" alt="図表"'
+         +' onerror="this.parentNode.style.display=\'none\'"></div>'):'')
     +'<div class="src">根拠 '+esc(q.src)+(q.from?('・'+esc(q.from)):'')+'</div>';
   if(okq){GM.ok++;document.getElementById('kk-res').innerHTML='<b class="o">正解</b>'+ex}
   else{GM.ng++;GM.wrongs.push(q);

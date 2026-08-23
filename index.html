@@ -1085,12 +1085,6 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-seg button{font-size:11px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);
   background:var(--panel);color:var(--muted);font-family:inherit;cursor:pointer}
 .kk-seg button.on{background:var(--chipbg);color:var(--chipfg);border-color:#bfe0d1}
-/* 一時停止／再開（アイコンだけ・大きめ）。押しやすさのため48px。2026-08-23 */
-.pz{width:48px;height:48px;border-radius:50%;border:1px solid var(--line);background:var(--panel);
-  color:var(--acc);display:flex;align-items:center;justify-content:center;cursor:pointer;
-  transition:transform .1s var(--easeOut)}
-.pz svg{width:22px;height:22px;display:block}
-.pz:active{transform:scale(.95)}
 /* 次へのゲージ（NETFLIX の「オープニングをスキップ」の形）。中が満ちたら自動で進む。 */
 .nx{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;
   gap:8px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel);
@@ -1107,7 +1101,6 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-res .ex{font-size:12.5px;color:var(--fg);margin-top:5px;line-height:1.75}
 .kk-res .exng{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.7}
 .kk-res .src{font-size:10px;color:var(--muted);margin-top:4px}
-.kk-fig{display:block;width:100%;margin-top:8px;border-radius:10px;border:1px solid var(--line)}
 .kk-res b.o{color:#3f8a62}
 .kk-res b.x{color:#b4483d}
 .kk-stage{position:relative}
@@ -1385,7 +1378,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='36373375';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b2c76703';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1439,7 +1432,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             mocks:rec.parts['mocks.json']||null,
             linkq:rec.parts['link_q.json']||null,
             dictq:rec.parts['dict_q.json']||null,
-            tables:rec.parts['tables.json']||null};
+            tables:rec.parts['tables.json']||null,
+            voices:rec.parts['voices.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1526,6 +1520,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_LINKQ=d.linkq||[];            /* 線つなぎ */
     window.TAKKEN_DICTQ=d.dictq||[];            /* 聞き取り2択 */
     window.TAKKEN_TABLES=d.tables||[];          /* 早見表 */
+    window.TAKKEN_VOICES=d.voices||[];         /* 使える声の一覧（2026-08-23） */
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
      console に出すだけで画面には出さない（引き算の原則）。 */
