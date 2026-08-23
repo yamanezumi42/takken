@@ -2855,6 +2855,21 @@ function catsSorted(b){
       ||(x<y?-1:1);
   });
 }
+/* 章（小見出し）を**動画の章の順**に並べる（2026-08-23 本人指摘）。
+   CINFO[c].topics は items.js に出てきた順なので、講義の順とは関係ない。
+   chapsOf(c) は動画の章を秒の早い順に返すので、その並びに合わせる。
+   動画の章に出てこない topic（＝紐づいていないもの）は末尾に回す。 */
+function topicsSorted(c){
+  var info=CINFO[c];if(!info)return [];
+  var ord={},i=0;
+  chapsOf(c).forEach(function(ch){
+    var t=ch.topic;if(t&&ord[t]===undefined)ord[t]=i++;
+  });
+  return info.topics.slice().sort(function(x,y){
+    var a=(ord[x]===undefined?99999:ord[x]),b=(ord[y]===undefined?99999:ord[y]);
+    return a-b||(x<y?-1:1);
+  });
+}
 function catsOrdered(){
   var out=[];bigsOrdered().forEach(function(b){out=out.concat(catsSorted(b))});return out;
 }
@@ -4455,9 +4470,14 @@ function filterHtml(opt){
   /* opt.chapsOnly=true で**章の一覧だけ**にする（ゲームタブ）。
      条件のチップ（間違え・いつ・正解率・難易度）と「そのまま解く／この範囲で」は出さない。 */
   var fl=filtered(),h='',chapsOnly=!!(opt&&opt.chapsOnly);
-  h+='<div class="panel"><button class="tapline" data-act="togFilter"><span style="flex:1;font-weight:600">範囲を選ぶ</span>'
-    +'<span class="badge">'+n3(fl.length)+'問</span>'+(S.openFilter?IC.up:IC.down)+'</button>';
-  if(S.openFilter){
+  /* ゲームタブは畳まない＝開くための1タップを要らなくする（2026-08-23 本人指示）。
+     押せない見出しにするので、ボタンではなく行にする。 */
+  h+='<div class="panel">'+(chapsOnly
+    ?'<div class="rowx" style="min-height:36px"><span style="flex:1;font-weight:600">範囲</span>'
+      +'<span class="badge">'+n3(fl.length)+'問</span></div>'
+    :'<button class="tapline" data-act="togFilter"><span style="flex:1;font-weight:600">範囲を選ぶ</span>'
+      +'<span class="badge">'+n3(fl.length)+'問</span>'+(S.openFilter?IC.up:IC.down)+'</button>');
+  if(chapsOnly||S.openFilter){
     /* 種類ごとに1行（2026-08-23 本人指摘でコンパクトに）。
        行の頭に種類を書くので、チップは「あり」「2回＋」のように短くできる。 */
     if(!chapsOnly)h+='<div class="hr"></div>'
@@ -4484,16 +4504,19 @@ function filterHtml(opt){
       +'</span></div>';
     /* 章の一覧は**最初から開く**（2026-08-23 本人指示）。
        畳んでおくと、範囲を選ぶのに毎回もう1タップ要る＝選ぶのが目的の画面で邪魔になる。 */
-    h+='<div class="hr"></div><button class="tapline" data-act="togchaps"><span style="flex:1">章</span>'
+    /* 「章」の行はゲームタブでは出さない（2026-08-23 本人指示「章自体の文字も必要ない」）。
+       復習タブでは条件のチップと章の境目になるので残す。 */
+    if(!chapsOnly)h+='<div class="hr"></div><button class="tapline" data-act="togchaps"><span style="flex:1">章</span>'
       +(F.topics.length?'<span class="chip">'+F.topics.length+'</span>':'')
       +(S.openChaps?IC.up:IC.down)+'</button>';
     /* 大分類 → 小分類 → 章 の3段（2026-08-23 本人指摘「並び替えとかも特にされておらず見づらい。
        大分類ごとに分けて内部で開けた方がまだわかりやすい」）。 */
-    if(S.openChaps)BIGS.forEach(function(b){
-      var cs=catsOfBig(b),nsb=0;
-      cs.forEach(function(c2){nsb+=CINFO[c2].topics.filter(function(t2){
+    /* 並びは**習う順**（動画学習・単元学習と同じ関数を通す）。2026-08-23 本人指摘 */
+    if(chapsOnly||S.openChaps)bigsOrdered().forEach(function(b){
+      var cs=catsSorted(b),nsb=0;
+      cs.forEach(function(c2){nsb+=topicsSorted(c2).filter(function(t2){
         return F.topics.indexOf(c2+'|:|'+t2)>=0}).length});
-      var nch=0;cs.forEach(function(c2){nch+=CINFO[c2].topics.length});
+      var nch=0;cs.forEach(function(c2){nch+=topicsSorted(c2).length});
       /* 名前（文章）を押す＝その下の章を全部チェック／∨を押す＝下の階層を開く
          （2026-08-23 本人指示。「全部」という文字ボタンは置かない）。 */
       var onb=(nsb===nch&&nch>0);
@@ -4509,7 +4532,7 @@ function filterHtml(opt){
         +' aria-label="開く">'+(S.openBigF[b]?IC.up:IC.down)+'</button></div>';
       if(!S.openBigF[b])return;
       cs.forEach(function(c){
-      var ts=CINFO[c].topics,open=!!S.openCat[c];
+      var ts=topicsSorted(c),open=!!S.openCat[c];
       var nsel=ts.filter(function(t){return F.topics.indexOf(c+'|:|'+t)>=0}).length;
       var onc=(nsel===ts.length&&ts.length>0);
       h+='<div class="rowx" style="gap:0;align-items:stretch;padding-left:14px">'
@@ -5253,8 +5276,11 @@ function ghFP(){
      settings.gh は入れない（at が毎回変わって無限に上げてしまう）。 */
   /* **報告と模試も見る**（2026-08-21）。ここに入れないと「模試だけやった」「報告だけした」日が
      『中身が変わっていない』と判定されて自動で上がらない（実際に模試の結果が届かなかった）。 */
-  var s2=JSON.stringify([ST.items||{},ST.watched||{},ST.vp||{},ST.tlog||{},ST.days||{},
-                         ST.closedSeen||{},ST.reports||{},ST.mock||[]]),h=5381;
+  /* ★キーを並べるのはやめた（2026-08-23）。並べていたので新しい記録を足すたびに
+     入れ忘れ、そのデータだけの日が上がらなかった（8/21 模試・8/23 ゲームの報告）。
+     stOut() は接続の設定（トークン）だけを落とした記録の全部なので、
+     **どんな記録を足しても自動で指紋に入る**。 */
+  var s2=stOut(),h=5381;
   for(var i=0;i<s2.length;i++){h=((h*33)^s2.charCodeAt(i))>>>0}
   return s2.length+'-'+h.toString(36);
 }
@@ -5601,10 +5627,10 @@ document.addEventListener('click',function(e){
     var keys=[];
     if(a==='fallbig'){
       catsOfBig(t.getAttribute('data-b')).forEach(function(c3){
-        CINFO[c3].topics.forEach(function(t3){keys.push(c3+'|:|'+t3)})});
+        topicsSorted(c3).forEach(function(t3){keys.push(c3+'|:|'+t3)})});
     }else{
       var c4=t.getAttribute('data-c');
-      CINFO[c4].topics.forEach(function(t4){keys.push(c4+'|:|'+t4)});
+      topicsSorted(c4).forEach(function(t4){keys.push(c4+'|:|'+t4)});
     }
     var allOn=keys.length&&keys.every(function(k){return F.topics.indexOf(k)>=0});
     keys.forEach(function(k){
