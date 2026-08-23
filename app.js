@@ -2187,9 +2187,18 @@ function mockLearned(){
     for(k=0;k<q.ids.length;k++){var it=BY[q.ids[k]];if(!it||att(R(it.id))===0){ok=false;break}}
     if(ok)pool.push({q:q,set:MOCKS[i].n,old:used[q.ids.join(',')]?1:0});
   }
-  /* 本試験の配点に近い割合で取る。足りない科目はあるだけ。 */
-  var want={'権利関係':14,'法令上の制限':8,'宅地建物取引業法等':20,'税に関する法令':2,
-            '不動産価格の評定':1,'土地・建物その他の需給':4},out=[],by={};
+  /* 問数＝**本試験の配点 × その分野をどこまで終えたか**（2026-08-23 本人指摘
+     「宅建業法全部終わってないのに20問出すのもおかしいよ」）。
+     配点そのままで取ると、35%しか解いていない宅建業法から20問出て、
+     中身が宅建業法だけの偏った回になる＝本試験の構成で測るという目的から外れる。
+     進み具合＝解いた肢 ÷ その大分類の全肢（bigStat の att/n）。
+     配点は BIGQ を使う（ベタ書きの表を2か所に持たない）。
+     全部終われば BIGQ の合計＝49問＝本試験と同じ構成になる。 */
+  var want={},out=[],by={};
+  BIGS.forEach(function(b){
+    var st=bigStat(b),prog=st.n?(st.att/st.n):0;
+    want[b]=Math.round((BIGQ[b]||0)*prog);
+  });
   pool.sort(function(x,y){
     var ox=x.q.own?0:1,oy=y.q.own?0:1;      /* オリジナルを先に出す（答えを覚えていない問） */
     return (x.old-y.old)||(ox-oy)||(x.set-y.set)||(x.q.no-y.q.no);
@@ -2478,7 +2487,7 @@ function flowHtml(){
     /* 日曜＝通し演習（本試験の形・習った範囲の全部）。平日＝オリジナル4択を5問だけ。
        行は増やさない（2026-08-23 本人「無駄に押せるものが多いと困る」）。 */
     if(isSunday()){
-      if(mn)rows.push({act:'startMock',lab:'通し演習（習った範囲 '+mn+'問）',
+      if(mn)rows.push({act:'startMock',lab:'通し演習（'+mn+'問）',
                        st:(last?('前回 '+last.ok+'/'+last.n+'　'):'')+'今日',done:false});
     }else{
       var on=ml.filter(function(q){return !!q.own}).length,od=mockToday();
