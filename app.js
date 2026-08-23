@@ -698,6 +698,14 @@ function figSrc(p){var m=window.TAKKEN_FIGS;return (m&&m[p])?m[p]:p}
 /* 音（voice/・se/）も図と同じ。端末では data URI、開発用の app.html では相対パス。
    ここを通さないと、端末で音が404になる（2026-08-23）。 */
 function mediaSrc(p){var m=window.TAKKEN_MEDIA;return (m&&m[p])?m[p]:p}
+/* 分を「○時間○分」にする（2026-08-24 本人指示「通算系は時間もかっこで」）。
+   60分未満は null を返す＝かっこを付けない（短いのに二重に書かない）。 */
+function hhm(mins){
+  mins=Math.round(+mins||0);
+  if(mins<60)return null;
+  var h=Math.floor(mins/60),m=mins%60;
+  return h+'時間'+(m?m+'分':'');
+}
 function mmss(s){s=Math.max(0,Math.round(s||0));return Math.floor(s/60)+':'+pad(s%60)}
 
 /* ---------- 日付 ---------- */
@@ -2488,9 +2496,10 @@ function checkLack(c){
   for(i=0;i<(c.ids||[]).length;i++){
     id=c.ids[i];
     if(!BY[id])return 'まだ端末に降りていません（アプリを開き直すと入ります）';
-    /* 読み上げの回＝その肢の音があるか。voice_k を持っている肢の一覧で見る。 */
-    if(c.voice&&!(window.TAKKEN_KAKO||{})[id])
-      return '読み上げの音がまだ端末にありません（アプリを開き直すと入ります）';
+    /* 読み上げの回＝その肢の音が**実物として**あるか（2026-08-24 本人報告で直した）。 */
+    if(c.voice&&!kvHas(id))
+      return '読み上げの音がまだ端末にありません（設定＝データ で取り込んでください。'
+        +'いま '+n3(kvCount())+'問ぶん）';
     /* 図の回＝図の実物があるか。図を data URI で持つ作りのときだけ見る
        （単一ファイル版・ローカルでは図はそのままの道で読むので見ない）。 */
     var F=window.TAKKEN_FIGS;
@@ -4953,7 +4962,9 @@ function vAnalysis(){
     var t=tlogSum(pr[1]),mins=Math.round(t.total/60000);
     h+='<div class="li" style="display:block;padding:8px 0">'
       +'<div class="spread"><span class="mini">'+pr[0]+'</span>'
-      +'<span class="mini num">'+(mins?mins+'分':'—')+'</span></div>'
+      /* 60分を超えたら「○分（○時間○分）」（2026-08-24 本人指示） */
+      +'<span class="mini num">'+(mins?(n3(mins)+'分'+(hhm(mins)?'（'+hhm(mins)+'）':'')):'—')
+      +'</span></div>'
       +'<div class="band thin" style="cursor:default">'
       /* 1分未満は「—」なので帯も空にして揃える（数字と帯で齟齬を出さない） */
       +(mins?TKINDS.map(function(k,i){var v=t[k[0]];return v?'<i class="t'+i+'" style="flex:'+v+'"></i>':''}).join('')
@@ -4961,8 +4972,10 @@ function vAnalysis(){
   });
   var tall=tlogSum(null);
   h+='<div class="rowx" style="flex-wrap:wrap;gap:8px;margin-top:8px">'
-    +TKINDS.map(function(k,i){return '<span class="mini"><i class="wdot t'+i+'"></i>'+k[1]
-      +' <span class="num">'+Math.round((tall[k[0]]||0)/60000)+'</span></span>'}).join('')
+    +TKINDS.map(function(k,i){
+      var mn=Math.round((tall[k[0]]||0)/60000),hx=hhm(mn);
+      return '<span class="mini"><i class="wdot t'+i+'"></i>'+k[1]
+      +' <span class="num">'+n3(mn)+'</span>分'+(hx?'（'+hx+'）':'')+'</span>'}).join('')
     +'</div>';
   var vr=vminReal();
   if(vr!==null)h+='<div class="mini" style="margin-top:6px">動画の実測平均 <span class="num">'+vr+'</span>分／日（1日の枠に反映）</div>';
@@ -5239,7 +5252,10 @@ function dataSheet(){
       ここには「いま何で動いているか」だけ出す。 */
    +'<div class="mini" id="dpstat" style="margin-top:8px;min-height:16px">'
    +(window.TAKKEN_SRC?('いま使っているデータ＝'+esc(window.TAKKEN_SRC.src)+'／'
-      +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'):'')+'</div>'
+      +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'
+      /* 読み上げの音が何問ぶん入っているか（2026-08-24 本人報告「音声は言ってなかった」）。
+         音は294MBを順に取るので、途中だと索引だけ届いて無音になる。数で分かるようにする。 */
+      +'／読み上げ '+n3(kvCount())+'問'):'')+'</div>'
    +'<div class="mini" style="margin-top:2px">問題・図は '+esc(GH().repo||'—')
    +' の <b>data</b> ブランチから取り込みます（記録は main。触りません）。'
    +'変わったファイルだけ落とすので数百KBで済みます。</div>'
@@ -7131,7 +7147,25 @@ function kvSet(){
 }
 function kvOn(){return kvSet().on}
 function kvPut(k,v){ST.settings[k]=v;saveST()}
-function kvHas(id){return !!((window.TAKKEN_KAKO||{})[id])}
+/* その肢の読み上げが**いま鳴らせるか**。
+   殻（端末）では音は window.TAKKEN_MEDIA に data URI で入る＝そこに無ければ鳴らない。
+   索引（TAKKEN_KAKO）は16バイトで先に届くので、索引だけで判断すると無音のボタンが出る
+   （2026-08-24 本人報告）。手元の単一ファイル版は TAKKEN_MEDIA を持たないので索引で見る。 */
+function kvHas(id){
+  var M=window.TAKKEN_MEDIA;
+  if(M&&Object.keys(M).length){
+    var sid=kkVoice();
+    if(!sid)return false;
+    return !!M['voice_k/'+sid+'/'+id+'_s.m4a'];
+  }
+  return !!((window.TAKKEN_KAKO||{})[id]);
+}
+/* 読み上げの音が端末に何件あるか（データの画面と、足りないときの案内に使う） */
+function kvCount(){
+  var M=window.TAKKEN_MEDIA||{},n=0;
+  Object.keys(M).forEach(function(k){if(k.indexOf('voice_k/')===0&&k.slice(-6)==='_s.m4a')n++});
+  return n;
+}
 /* 読む部品を並べる。（）の中を読む設定なら _p 付きのファイルを使う。 */
 function kvItem(name,rate){
   var sid=kkVoice();
@@ -7187,8 +7221,9 @@ function kvSheet(id){
     +kkRate(kkVoice()||0).toFixed(2)+'</span></div>'
     +'<div class="mini" style="margin-bottom:6px">声（2択問題と同じ設定）</div>'
     +kkVoiceHtml({voice:kkVoice(),lim:5,rate:kkRate(kkVoice()||0)})
-    +(kvHas(id)?'':'<div class="mini" style="margin-top:8px">'
-      +'この肢の音声はまだ作っていません（作った分から順に配信します）</div>')
+    +(kvHas(id)?'':'<div class="mini" style="margin-top:8px;color:var(--ngdeep)">'
+      +'この肢の読み上げは、いまこの端末にありません。'
+      +'（端末にある読み上げ '+n3(kvCount())+'問／設定＝データ で取り込めます）</div>')
     +'<button class="btn pri" style="margin-top:12px" data-act="kvplay" data-id="'+esc(id)+'">'
     +'いま読む</button>'
     +'</div>';
