@@ -1861,7 +1861,14 @@ function render(){
   if(S.view==='game'&&GM&&GM.qi<GM.qs.length){
     if(GM.kind==='link')lkBind();else kkBind();
   }
-  if(S.view!=='game')kkStop();
+  if(S.view!=='game'&&GM)kkStop();
+  /* 過去問の読み上げ（2026-08-23）。問題が出たら自動で読む。
+     同じ問を描き直したときに読み直さないよう、読んだ問を覚える。 */
+  if(S.view==='quiz'&&S.phase==='q'){
+    var kvid=S.queue[S.qi];
+    if(kvid&&KVLAST!==kvid){KVLAST=kvid;kvSay(kvid)}
+  }
+  if(S.view!=='quiz'){KVLAST=null;if(AQ.cur&&!GM)aClear()}
   /* クラスを外す→強制リフロー→付け直す。これをしないと innerHTML の作り直しでも
      クラスが付いたままになり、アニメーションが再生されない（今回の指摘6の原因）。 */
   if(ANIMON){
@@ -3415,16 +3422,11 @@ function vQuiz(){
        ここに初期値を入れておくのは、1秒待たずに出すため。 */
     +'<span class="qtime num" id="qtime">'+mmss(runSec())+'</span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
+    /* 読み上げ（★と出典の間・アイコンだけ）。2026-08-23 本人指示 */
+    +'<button class="btn sm'+(kvOn()?' acc':'')+'" style="min-height:28px;padding:0 8px"'
+    +' data-act="kvsheet" aria-label="読み上げ">'+IC.sound+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
     +IC.down+'</button></div><div class="qrule"></div></div>';
-  /* 過去問の読み上げ（2026-08-23 本人指示①）。音がある肢だけボタンを出す。
-     音は voice_k/<声のid>/<肢のid>.m4a（PCで作って配る）。
-     いまは「本文→正解→解説」を1本で読む形（形が決まったら作り直す）。 */
-  if(kkVoice()&&(window.TAKKEN_KAKO||{})[id]){
-    h+='<button class="btn sm" id="kvbtn" data-act="kvsay" data-id="'+esc(id)+'"'
-      +' style="width:auto;padding:0 12px;margin-bottom:10px">'+IC.sound+'<span'
-      +' style="margin-left:6px">読み上げ</span></button>';
-  }
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
   h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+esc(it.lead)+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
@@ -5430,6 +5432,7 @@ function doAnswer(userOx){
   S.tier=pickTier(id,S.res.ok,ev);S.ev=ev;
   /* 効果音（既定オフ）。節目は少し遅らせて重ねる */
   M2.sfx(S.res.ok?'ok':'ng');
+  kvAfter(id,S.res.ok);      /* 読み上げ（正解／不正解→解説）。設定で切れる。2026-08-23 */
   if(S.res.ok&&(S.tier==='full'||S.tier==='max'))setTimeout(function(){M2.sfx('combo')},170);
   /* ホームへ戻ったときに、解いた小分類のマスを1回だけ膨らませる（卒業なら金の枠） */
   S.bump={cat:it.cat,stage:catStat(it.cat).lv,grad:(stateOf(id)==='卒業'&&S.res.ok)};
@@ -5650,12 +5653,19 @@ document.addEventListener('click',function(e){
     t.className='tog xs'+(gi>=0?'':' on');
     return;
   }
-  /* 過去問の読み上げ（押すたびに切り替え＝もう一度押すと止まる） */
-  if(a==='kvsay'){
-    var kid=t.getAttribute('data-id');
+  /* 読み上げの設定シート（2026-08-23） */
+  if(a==='kvsheet'){kvSheet(S.queue[S.qi]);return}
+  if(a==='kvtog'){
+    /* 設定の名前（kvOn など）→ いまの値の名前（on など）の対応表。素直に書く。 */
+    var KVMAP={kvOn:'on',kvLead:'lead',kvStem:'stem',kvJudge:'judge',kvExp:'exp',kvParen:'paren'};
+    var kk2=t.getAttribute('data-k');
+    kvPut(kk2,!kvSet()[KVMAP[kk2]]);
+    kvSheet(S.queue[S.qi]);return;
+  }
+  if(a==='kvplay'){
+    var kid2=t.getAttribute('data-id');
     if(AQ.cur){aClear();return}
-    aQueue([{src:mediaSrc('voice_k/'+kkVoice()+'/'+kid+'.m4a'),rate:kkRate(kkVoice())}]);
-    return;
+    kvSay(kid2);return;
   }
   if(a==='togvoice'){S.openVoice=!S.openVoice;render();return}
   if(a==='kkrnd'){ST.settings.kkRnd=!ST.settings.kkRnd;saveST();
@@ -6951,6 +6961,90 @@ function m6SheetClose(dy,after){
   window.addEventListener('pointercancel',up);
 })();
 /* 出典・根拠・章のリンクはシートに寄せる（その場で開かない＝問題文の座標が動かない） */
+/* ---------- 過去問の読み上げ（2026-08-23 本人指示） ----------
+   設定は ST.settings.kv* に持つ。既定＝読み上げする・問題文と肢と正誤を読む・
+   解説は答えたあとだけ・（）の中は読まない。 */
+var KVLAST=null;      /* 直前に読んだ肢（同じ問で二度読まないため） */
+function kvSet(){
+  var o=ST.settings||{};
+  return {on:(o.kvOn===undefined?true:!!o.kvOn),
+          lead:(o.kvLead===undefined?true:!!o.kvLead),
+          stem:(o.kvStem===undefined?true:!!o.kvStem),
+          judge:(o.kvJudge===undefined?true:!!o.kvJudge),
+          exp:(o.kvExp===undefined?true:!!o.kvExp),
+          paren:!!o.kvParen};
+}
+function kvOn(){return kvSet().on}
+function kvPut(k,v){ST.settings[k]=v;saveST()}
+function kvHas(id){return !!((window.TAKKEN_KAKO||{})[id])}
+/* 読む部品を並べる。（）の中を読む設定なら _p 付きのファイルを使う。 */
+function kvItem(name,rate){
+  var sid=kkVoice();
+  if(!sid)return null;
+  return {src:mediaSrc('voice_k/'+sid+'/'+name+'.m4a'),rate:rate||kkRate(sid)};
+}
+/* 問題が出たとき＝問題文→肢。答えたとき＝正解／不正解→解説。 */
+function kvSay(id,after){
+  var st=kvSet();
+  if(!st.on||!kkVoice())return;
+  var it=BY[id];if(!it)return;
+  var pz=st.paren?'p':'';
+  var q=[];
+  if(st.lead&&it.qid)q.push(kvItem('lead_'+it.qid+pz));
+  if(st.stem)q.push(kvItem(id+'_s'+pz));
+  q=q.filter(Boolean);
+  if(!q.length)return;
+  aQueue(q,after||null);
+}
+function kvAfter(id,okq){
+  var st=kvSet();
+  if(!st.on||!kkVoice())return;
+  var q=[];
+  if(st.judge)q.push({src:mediaSrc('voice/'+kkVoice()+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
+                      rate:kkRate(kkVoice())});
+  if(st.exp)q.push(kvItem(id+'_e'+(st.paren?'p':'')));
+  q=q.filter(Boolean);
+  if(q.length)aQueue(q);
+}
+/* 設定のシート（出典と同じ形で下から出す） */
+function kvSheet(id){
+  var st=kvSet(),m=document.getElementById('modal');
+  function tg2b(k,on,lab){
+    return '<button class="tog xs'+(on?' on':'')+'" data-act="kvtog" data-k="'+k+'">'
+      +esc(lab)+'</button>';
+  }
+  var h='<div class="sheet">'
+    +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">読み上げ</div>'
+    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+    +'<div class="kk-row"><span class="lb">音</span><span class="bs">'
+    +tg2b('kvOn',st.on,st.on?'読み上げる':'ミュート')+'</span></div>'
+    +'<div class="hr"></div><div class="mini" style="margin-bottom:6px">読むもの</div><div>'
+    +tg2b('kvLead',st.lead,'問題文')
+    +tg2b('kvStem',st.stem,'肢の本文')
+    +tg2b('kvJudge',st.judge,'正解／不正解')
+    +tg2b('kvExp',st.exp,'解説（答えた後）')
+    +'</div>'
+    +'<div class="kk-row"><span class="lb">かっこ</span><span class="bs">'
+    +tg2b('kvParen',st.paren,st.paren?'（）の中も読む':'（）の中は読まない')+'</span></div>'
+    +'<div class="hr"></div><div class="kk-row"><span class="lb">速さ</span>'
+    +'<input class="sl" type="range" min="0.7" max="2" step="0.05" value="'+kkRate(kkVoice()||0)
+    +'" id="kv-rate"><span class="slv num" id="kv-rv">'
+    +kkRate(kkVoice()||0).toFixed(2)+'</span></div>'
+    +'<div class="mini" style="margin-bottom:6px">声（2択問題と同じ設定）</div>'
+    +kkVoiceHtml({voice:kkVoice(),lim:5,rate:kkRate(kkVoice()||0)})
+    +(kvHas(id)?'':'<div class="mini" style="margin-top:8px">'
+      +'この肢の音声はまだ作っていません（作った分から順に配信します）</div>')
+    +'<button class="btn pri" style="margin-top:12px" data-act="kvplay" data-id="'+esc(id)+'">'
+    +'いま読む</button>'
+    +'</div>';
+  m.innerHTML=h;
+  m6SheetOpen();      /* 開き方は他のシートと同じ手順にそろえる（m.hidden は中で外れる） */
+  var r=document.getElementById('kv-rate');
+  if(r)r.oninput=function(){
+    var v=+this.value;document.getElementById('kv-rv').textContent=v.toFixed(2);
+    aRate(v);if(kkVoice())kkSetRate(kkVoice(),v);
+  };
+}
 function srcSheet(id){
   var it=BY[id]; if(!it)return;
   var chs=chapsFor(it),why=whyOf(it,S.baseVid||null);
