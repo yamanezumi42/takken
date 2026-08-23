@@ -15,6 +15,8 @@ var LINKQ=window.TAKKEN_LINKQ||[], DICTQ=window.TAKKEN_DICTQ||[], TABLES=window.
 /* 使える声。**手元に無いのに勝手に既定を作らない**（2026-08-23 本人報告の原因）。
    一覧が空なら「声なし」として扱い、文字だけで進める（無音のまま止まらない）。 */
 var VOICES=window.TAKKEN_VOICES||[];
+/* 読み上げの音を持っている肢の一覧（voice_k）。無ければボタンを出さない。 */
+window.TAKKEN_KAKO=window.TAKKEN_KAKO||{};
 /* 殻（端末）では data ブランチから来た中身が後から入るので、その時に読み直す。 */
 try{window.addEventListener('takken-data',function(){
   LINKQ=window.TAKKEN_LINKQ||LINKQ;DICTQ=window.TAKKEN_DICTQ||DICTQ;TABLES=window.TAKKEN_TABLES||TABLES;
@@ -53,8 +55,9 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"宅建業法 #21 報酬1",unit:"#21 報酬1",note:"",
-  dataAt:"2026-08-22 15:16",ids:["b5_10-007-2"]};
+var CHECK={label:"読み上げの試し（#15 媒介契約）",unit:"#15 媒介契約",
+  note:"読み上げのボタンを押して、聞こえ方を確かめてください（声＝冥鳴ひまり）。",
+  dataAt:"2026-08-23 21:10",ids:["b5_5-078-1"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -3414,6 +3417,14 @@ function vQuiz(){
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
     +IC.down+'</button></div><div class="qrule"></div></div>';
+  /* 過去問の読み上げ（2026-08-23 本人指示①）。音がある肢だけボタンを出す。
+     音は voice_k/<声のid>/<肢のid>.m4a（PCで作って配る）。
+     いまは「本文→正解→解説」を1本で読む形（形が決まったら作り直す）。 */
+  if(kkVoice()&&(window.TAKKEN_KAKO||{})[id]){
+    h+='<button class="btn sm" id="kvbtn" data-act="kvsay" data-id="'+esc(id)+'"'
+      +' style="width:auto;padding:0 12px;margin-bottom:10px">'+IC.sound+'<span'
+      +' style="margin-left:6px">読み上げ</span></button>';
+  }
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
   h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+esc(it.lead)+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
@@ -4275,7 +4286,7 @@ function kkHold(run){
     box.innerHTML='<button class="nx" id="kk-go">'+IC.tnext
       +'<span id="kk-golab">次へ</span><i id="kk-gauge"></i></button>'
       +'<div class="kk-row" style="justify-content:center;margin-top:8px">'
-      +'<button class="btn sm" id="kk-rep" style="width:auto;padding:0 14px">おかしい</button></div>'
+      +'<button class="btn sm" id="kk-rep" style="width:auto;padding:0 14px">報告</button></div>'
       +'<div id="kk-repbox"></div>';
     document.getElementById('kk-go').onclick=function(){kkGo()};
     document.getElementById('kk-rep').onclick=function(){kkRepOpen()};
@@ -5637,6 +5648,13 @@ document.addEventListener('click',function(e){
     gr.kind=GM.kind;gr.at=nowStamp();gr.ask=gq.ask||gq.id;
     ST.greports[gq.id]=gr;saveST();
     t.className='tog xs'+(gi>=0?'':' on');
+    return;
+  }
+  /* 過去問の読み上げ（押すたびに切り替え＝もう一度押すと止まる） */
+  if(a==='kvsay'){
+    var kid=t.getAttribute('data-id');
+    if(AQ.cur){aClear();return}
+    aQueue([{src:mediaSrc('voice_k/'+kkVoice()+'/'+kid+'.m4a'),rate:kkRate(kkVoice())}]);
     return;
   }
   if(a==='togvoice'){S.openVoice=!S.openVoice;render();return}

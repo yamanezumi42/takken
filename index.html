@@ -395,6 +395,8 @@ a{color:var(--chipfg)}
   background:linear-gradient(to top,var(--bg) 58%,rgba(255,255,255,0))}
 #nextbar[hidden]{display:none}
 #nextbar .btn{pointer-events:auto;max-width:520px;margin:0 auto}
+/* 演出の中央寄せで使う。タブ（52px）＋安全域を引かないと、見えている面の中央より下にずれる。 */
+:root{--tabh:calc(52px + env(safe-area-inset-bottom))}
 #tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--panel);
   border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 #tabs button{flex:1;background:none;border:0;padding:9px 0 8px;min-height:52px;color:var(--muted);
@@ -675,7 +677,9 @@ button:active,.btn:active,.cell:active,.tog:active,.cb:active,.tapline:active,.r
 #fx{position:fixed;inset:0;pointer-events:none;z-index:30;overflow:hidden}
 #fx[hidden]{display:none}
 .fx{position:absolute;inset:0;overflow:hidden}
-.fx .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+/* 中央＝**タブを除いた面**の中央（2026-08-23 本人指摘。下に少しずれていた） */
+.fx .mid{position:absolute;left:0;right:0;top:0;bottom:var(--tabh);display:flex;
+  flex-direction:column;align-items:center;justify-content:center}
 /* 消えは出現より必ず短く（出現0.30s／消失0.15s＝30fps換算 9f／4.5f） */
 .fx.out{animation:fadeAll .34s 1.5s both}          /* 節目＝フル（合計1.55s） */
 .fx.out.lite{animation:fadeAll .15s .3s both}      /* 毎問＝軽量（合計0.45s） */
@@ -1104,12 +1108,15 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-res b.o{color:#3f8a62}
 .kk-res b.x{color:#b4483d}
 .kk-stage{position:relative}
-.kk-cd{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);pointer-events:none;
-  font-family:var(--num);font-size:96px;font-weight:700;color:var(--acc);opacity:0;z-index:5;
+/* カウントダウンの数字＝**画面の中央**（2026-08-23 本人指示）。
+   問題の枠の中ではなく固定の層に出す。中央はタブを除いた面で計算する。 */
+.kk-cd{position:fixed;left:0;right:0;top:0;bottom:var(--tabh);pointer-events:none;z-index:25;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--num);font-size:108px;font-weight:700;color:var(--acc);opacity:0;
   font-variant-numeric:tabular-nums}
 .kk-cd.go{animation:kkcd 900ms var(--easeOut) 1}
-@keyframes kkcd{0%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}
-  22%{opacity:.30}100%{opacity:0;transform:translate(-50%,-50%) scale(.86)}}
+@keyframes kkcd{0%{opacity:0;transform:scale(1.5)}
+  22%{opacity:.30}100%{opacity:0;transform:scale(.86)}}
 .kk-cd.last{color:#b4483d}
 @media (prefers-reduced-motion:reduce){.kk-cd.go{animation:none;opacity:.22}
   .lk-card.ok,.lk-card.ng{animation:none}}
@@ -1355,6 +1362,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
      window.TAKKEN_CURRICULUM に入れたもの。無い場合は chapters.js の seq を見る。 -->
 <!-- ゲーム（線つなぎ・2択問題）と早見表のデータ。2026-08-23 -->
 <!-- 使える声の一覧（VOICEVOX。make_voice.py が書く） -->
+<!-- 過去問の読み上げを持っている肢の一覧 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1378,7 +1386,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b2c76703';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b1f81d1c';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1433,7 +1441,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             linkq:rec.parts['link_q.json']||null,
             dictq:rec.parts['dict_q.json']||null,
             tables:rec.parts['tables.json']||null,
-            voices:rec.parts['voices.json']||null};
+            voices:rec.parts['voices.json']||null,
+            kako:rec.parts['kako_voice.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1521,6 +1530,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_DICTQ=d.dictq||[];            /* 聞き取り2択 */
     window.TAKKEN_TABLES=d.tables||[];          /* 早見表 */
     window.TAKKEN_VOICES=d.voices||[];         /* 使える声の一覧（2026-08-23） */
+    window.TAKKEN_KAKO=d.kako||{};             /* 過去問の読み上げを持つ肢 */
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
      console に出すだけで画面には出さない（引き算の原則）。 */
