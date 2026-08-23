@@ -1044,8 +1044,13 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-btns{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .kk-btn{min-height:56px;border-radius:14px;border:1px solid var(--line);background:var(--panel);
   font-size:14px;font-family:inherit;color:var(--fg);cursor:pointer;padding:8px 12px}
-.kk-btn.ok{background:rgba(90,170,120,.20);border-color:#bfe0d1}
-.kk-btn.ng{background:rgba(200,90,80,.16);border-color:#e0bfbf}
+/* 名前を kkok / kkng にする（2026-08-23 本人指摘の原因）。
+   'ok' や 'ng' はアプリの演出（正解の○×オーバーレイ）が使っている名前で、
+   ボタンに付けると display:flex 等が当たって**文字の揃えが変わる**。
+   選択肢の揃えは答える前と後で絶対に変えない＝中央揃えを明示する。 */
+.kk-btn{text-align:center;justify-content:center}
+.kk-btn.kkok{background:rgba(90,170,120,.20);border-color:#bfe0d1}
+.kk-btn.kkng{background:rgba(200,90,80,.16);border-color:#e0bfbf}
 /* 押した感じ（2026-08-23 本人指示）。押し込み＋波紋。 */
 .kk-btn{position:relative;overflow:hidden;transition:transform .09s var(--easeOut)}
 .kk-btn:active{transform:scale(.985)}
@@ -1080,7 +1085,38 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .kk-seg button{font-size:11px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);
   background:var(--panel);color:var(--muted);font-family:inherit;cursor:pointer}
 .kk-seg button.on{background:var(--chipbg);color:var(--chipfg);border-color:#bfe0d1}
-.kk-res{font-size:12px;min-height:34px;margin-top:8px;line-height:1.5}
+/* 操作列（Focus のコンパクトプレイヤーの作りを流用。色は宅建の桜鼠に合わせる）。 */
+.tp{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:14px}
+.tp .tb{background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;
+  display:flex;align-items:center;justify-content:center;border-radius:99px;
+  transition:color .12s var(--easeOut),transform .12s var(--easeOut)}
+.tp .tb svg{width:20px;height:20px;display:block}
+.tp .tb:active{transform:scale(1.1)}
+.tp .tb:disabled{opacity:.3;cursor:default}
+.tp .tb.on{color:var(--acc)}
+.tp .main{width:46px;height:46px;border-radius:50%;background:var(--acc);color:#fff;
+  border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.14);transition:transform .12s var(--easeOut)}
+.tp .main svg{width:19px;height:19px;display:block}
+.tp .main:active{transform:scale(.96)}
+.tp-lab{display:flex;justify-content:center;gap:22px;margin-top:4px}
+.tp-lab span{font-size:9.5px;color:var(--muted);width:56px;text-align:center}
+/* 次へのゲージ（NETFLIX の「オープニングをスキップ」の形）。中が満ちたら自動で進む。 */
+.nx{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  gap:8px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel);
+  color:var(--fg);font-family:inherit;font-size:12.5px;cursor:pointer;width:100%;margin-top:10px}
+.nx i{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(201,139,155,.22);
+  pointer-events:none}
+.nx i.go{transition:width linear}
+.nx span{position:relative;z-index:1}
+.nx svg{position:relative;z-index:1;width:16px;height:16px}
+.gm-rep{margin-top:10px}
+.gm-rep .tog{margin:0 6px 6px 0}
+/* 解説は大きく（2026-08-23 本人指示）。誤りの選択肢の説明は少し落として並べる。 */
+.kk-res{font-size:13.5px;min-height:34px;margin-top:10px;line-height:1.75}
+.kk-res .ex{font-size:12.5px;color:var(--fg);margin-top:5px;line-height:1.75}
+.kk-res .exng{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.7}
+.kk-res .src{font-size:10px;color:var(--muted);margin-top:4px}
 .kk-res b.o{color:#3f8a62}
 .kk-res b.x{color:#b4483d}
 .kk-stage{position:relative}
@@ -1334,6 +1370,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- あこ課長の動画の通し番号（need_seq の基準）。data/curriculum.json を
      window.TAKKEN_CURRICULUM に入れたもの。無い場合は chapters.js の seq を見る。 -->
 <!-- ゲーム（線つなぎ・聞き取り2択）と早見表のデータ。2026-08-23 -->
+<!-- 使える声の一覧（VOICEVOX。make_voice.py が書く） -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1357,7 +1394,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='0a41c91c';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='245c2065';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

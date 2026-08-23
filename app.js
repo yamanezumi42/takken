@@ -12,9 +12,12 @@ var CHAP=window.TAKKEN_CHAPTERS||{};
 var MOCKS=(window.TAKKEN_MOCKS&&window.TAKKEN_MOCKS.sets)||[];
 /* ゲームと早見表のデータ（無くても落ちないように既定は空） */
 var LINKQ=window.TAKKEN_LINKQ||[], DICTQ=window.TAKKEN_DICTQ||[], TABLES=window.TAKKEN_TABLES||[];
+/* 使える声（無いときは春日部つむぎ1つだけとして扱う＝落ちない） */
+var VOICES=window.TAKKEN_VOICES||[{id:8,name:'春日部つむぎ',style:'ノーマル'}];
 /* 殻（端末）では data ブランチから来た中身が後から入るので、その時に読み直す。 */
 try{window.addEventListener('takken-data',function(){
   LINKQ=window.TAKKEN_LINKQ||LINKQ;DICTQ=window.TAKKEN_DICTQ||DICTQ;TABLES=window.TAKKEN_TABLES||TABLES;
+  if(window.TAKKEN_VOICES&&window.TAKKEN_VOICES.length)VOICES=window.TAKKEN_VOICES;
 })}catch(e){}
 var EXCL=['要確認','省略','解説なし'];
 var ITEMS=RAW.filter(function(it){var f=it.flags||[];for(var i=0;i<f.length;i++){if(EXCL.indexOf(f[i])>=0)return false}return true});
@@ -151,6 +154,8 @@ function catqCheck(){
 
 /* ---------- アイコン（自作SVG・ICOOON MONO風／絵文字は使わない） ---------- */
 function svg(p,w){return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(w||1.6)+'" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'}
+/* 塗りのアイコン（プレイヤーの三角など）。線のアイコンは svg()。 */
+function svg2(d){return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+d+'</svg>'}
 /* 配色は9つ。1が既定（桜鼠）。骨格は共通で、CSS変数だけを差し替える。 */
 var THEMES=[['1','桜鼠'],['2','ミント'],['3','藤'],['4','桃'],['5','水'],
             ['6','桃と水'],['7','ミルクティー'],['8','白と桃'],['9','生成り']];
@@ -182,6 +187,11 @@ var IC={
  check:svg('<path d="M4.5 12.5l4.5 4.5L19.5 6.5"/>',2),
  chev:svg('<path d="M9 5l7 7-7 7"/>'),
  /* ゲームのタブのアイコン＝2つの丸を線でつないだ形（線つなぎの絵）。2026-08-23 */
+ /* プレイヤーのアイコン（Focus app.html の .cp-ctrl から形を流用）。2026-08-23 */
+ tprev:svg2('<path d="M7 5h2.2v14H7z"/><path d="M19 5l-9 7 9 7z"/>'),
+ tnext:svg2('<path d="M14.8 5H17v14h-2.2z"/><path d="M5 5l9 7-9 7z"/>'),
+ tplay:svg2('<path d="M8 5l11 7-11 7z"/>'),
+ tpause:svg('<path d="M8 5v14M15 5v14"/>'),
  /* 音のアイコン（聞き取り2択）。自作の単色SVG。 */
  sound:svg('<path d="M4 9h3l4-3v12l-4-3H4z"/><path d="M15.5 9.5a4 4 0 010 5"/>'
    +'<path d="M18 7a7 7 0 010 10"/>'),
@@ -1614,7 +1624,7 @@ function cmpId(x,y){return x.id<y.id?-1:(x.id>y.id?1:0)}
 /* lockedOut＝未習で出さなかった件数／sT,sR,sStreak,sBest＝この1回（周回なら「その周」）の成績 */
 var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:null,label:'',
         urest:false,ucat:false,fieldsY:0,openZero:{},
-        openBig:{},openCat:{},openBigF:{},openSc:false,openChaps:true,openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
+        openBig:{},openCat:{},openBigF:{},openSc:false,openChaps:true,openVoice:false,openOther:{},openDone:{},openFilter:false,anim:null,baseVid:null,baseSrc:DEFSRC,openChap:{},
         /* いま解いている「単位」の印。roundVid/roundSec＝動画・章から入ったとき、
            roundCat/roundSub＝単元・小見出しから入ったとき。完走画面の「次へ」の行き先を決める。
            全部 startQueue の冒頭で落とす（周回だけは持ち越す）。 */
@@ -3751,7 +3761,7 @@ function vGame(){
       ? '下で範囲を選ぶと出る問が変わります。'
       : 'いまの範囲では出せる問がありません。下で範囲を広げてください。')+'</div></div>';
   h+=filterHtml({chapsOnly:true});
-  h+='<div class="gm-cred">VOICEVOX:春日部つむぎ</div>';
+  h+='<div class="gm-cred">VOICEVOX:'+esc(kkName(kkVoice()).split('／')[0])+'</div>';
   return h+'</div>';
 }
 /* ---------- 線つなぎ ---------- */
@@ -3908,15 +3918,67 @@ function gmStartDict(){
 /* 速さ0.70〜1.50・制限3〜20秒。**スライダーで連続**に変える（2026-08-23 本人指示。
    一度タップ3段にしたが「スライダーの方がいい。ダサかったのが嫌だった」ので、
    見た目をこちらで作り直してスライダーに戻した）。 */
+/* 使う声（複数）。何も選んでいなければ、いちばん最初の声を使う。 */
+function kkUse(){
+  var o=ST.settings||{},u=o.kkUse||{},out=[];
+  VOICES.forEach(function(v){if(u[v.id])out.push(v.id)});
+  return out.length?out:[VOICES[0].id];
+}
+/* 声ごとの速さ（2026-08-23 本人指示「話すスピード自体は個別で設定・記憶」）。 */
+function kkRate(sid){
+  var o=ST.settings||{},m=o.kkRates||{};
+  var r=+m[sid];
+  if(!r)r=+o.kkRate||1.0;                /* 昔の1つだけの設定があれば引き継ぐ */
+  return Math.min(2.0,Math.max(0.7,r));   /* 2倍まで（2026-08-23 本人指示） */
+}
+function kkSetRate(sid,r){
+  if(!ST.settings.kkRates)ST.settings.kkRates={};
+  ST.settings.kkRates[sid]=r;saveST();
+}
+/* いまの問で使う声。ランダムのときは**使う声の中から**選ぶ。 */
+function kkVoice(){
+  if(GM&&GM.voice)return GM.voice;
+  var u=kkUse();
+  var sid=(ST.settings&&ST.settings.kkRnd)?u[Math.floor(Math.random()*u.length)]:u[0];
+  if(GM)GM.voice=sid;
+  return sid;
+}
 function kkSet(){
   var o=ST.settings||{};
-  var r=+o.kkRate||1.0, l=+o.kkLim||5;
-  r=Math.min(1.5,Math.max(0.7,r));
+  var l=+o.kkLim||5;
   l=Math.min(20,Math.max(3,Math.round(l)));
-  return {lim:l,rate:r};
+  var sid=kkVoice();
+  return {lim:l,rate:kkRate(sid),voice:sid};
 }
-function kkSave(lim,rate){
-  ST.settings.kkLim=lim;ST.settings.kkRate=rate;saveST();
+
+/* 声の名前（一覧に無いidでも落ちない） */
+function kkName(sid){
+  var i;for(i=0;i<VOICES.length;i++)if(VOICES[i].id===sid)
+    return VOICES[i].name+'／'+VOICES[i].style;
+  return 'id '+sid;
+}
+/* 声の一覧＝使う声を複数えらぶ＋ランダムの切替。各行に「いまの速さ」を出す。 */
+function kkVoiceHtml(st){
+  var u=ST.settings.kkUse||{},h='';
+  h+='<div class="kk-row" style="margin-top:6px">'
+    +'<span class="mini" style="flex:1">選んだ声からランダムに出す</span>'
+    +'<button class="tog xs'+(ST.settings.kkRnd?' on':'')+'" data-act="kkrnd">'
+    +(ST.settings.kkRnd?'する':'しない')+'</button></div>';
+  VOICES.forEach(function(v){
+    var on=!!u[v.id], now=(v.id===st.voice);
+    h+='<div class="rowx" style="gap:0;align-items:stretch">'
+      +'<button class="tapline" data-act="kkuse" data-v="'+v.id+'" style="min-height:38px;flex:1">'
+      +'<span class="ck" style="width:20px;opacity:'+(on?1:0.22)+'">'+IC.check+'</span>'
+      +'<span style="flex:1;font-size:11.5px'+(now?';font-weight:700':'')+'">'
+      +esc(v.name)+'<span class="mini"> '+esc(v.style)+'</span></span>'
+      +'<span class="mini">'+kkRate(v.id).toFixed(2)+'</span></button>'
+      +'<button class="tapline" data-act="kkonly" data-v="'+v.id+'"'
+      +' style="min-height:38px;width:52px;justify-content:center;flex:none">'
+      +'<span class="mini">'+(now?'いま':'これ')+'</span></button></div>';
+  });
+  h+='<div class="mini" style="margin-top:6px">マスを押すと「使う声」に入ります（複数）。'
+    +'右の「これ」を押すとその声だけで出します。数字はその声の速さです。</div>';
+  return h;
 }
 function vDict(){
   if(GM.qi>=GM.qs.length)return vGmDone();
@@ -3932,71 +3994,129 @@ function vDict(){
   opts.forEach(function(o,i){
     h+='<button class="kk-btn" data-ok="'+o.ok+'" id="kk-b'+i+'">'+esc(o.v)+'</button>';
   });
-  h+='</div></div><div class="kk-res" id="kk-res"></div>'
+  h+='</div></div><div class="kk-res" id="kk-res"></div><div id="kk-next"></div>'
     /* 速さと制限＝スライダー（見た目はこちらで作る）。右に値を出す。 */
     +'<div class="kk-row"><span class="lb">速さ</span>'
-    +'<input class="sl" type="range" min="0.7" max="1.5" step="0.05" value="'+st.rate+'" id="kk-rate">'
+    +'<input class="sl" type="range" min="0.7" max="2" step="0.05" value="'+st.rate+'" id="kk-rate">'
     +'<span class="slv num" id="kk-rv">'+st.rate.toFixed(2)+'</span></div>'
     +'<div class="kk-row"><span class="lb">制限</span>'
     +'<input class="sl" type="range" min="3" max="20" step="1" value="'+st.lim+'" id="kk-lim">'
     +'<span class="slv num" id="kk-lv">'+st.lim+'秒</span></div>'
-    +'<div class="kk-row"><button class="btn sm" id="kk-replay" style="width:auto;padding:0 12px">'
-    +'もう一度聞く</button>'
-    +'<button class="btn sm" id="kk-pause" style="width:auto;padding:0 12px">'
-    +(GM.paused?'再開':'一時停止')+'</button>'
-    +'<button class="btn sm" data-act="gmQuit" style="width:auto;padding:0 12px">やめる</button></div>'
-    +'</div><div class="gm-cred">VOICEVOX:春日部つむぎ</div></div>';
+    /* 声の設定は**普段は畳む**（2026-08-23 本人指示）。開くと一覧＋ランダム。
+       速さは上のスライダーが「いまの声の速さ」＝声ごとに覚える。 */
+    +'<div class="hr"></div>'
+    +'<button class="tapline" data-act="togvoice" style="min-height:34px">'
+    +'<span class="mini" style="flex:1">声の設定（'+esc(kkName(st.voice))+'）</span>'
+    +(S.openVoice?IC.up:IC.down)+'</button>'
+    +(S.openVoice?kkVoiceHtml(st):'')
+    /* 操作は音楽プレイヤーの形（2026-08-23 本人指示。Focus の作りを流用）。
+       左＝もう一度聞く／中央＝一時停止・再開／右＝解説を飛ばして次へ。 */
+    +'<div class="tp">'
+    +'<button class="tb" id="kk-replay" aria-label="もう一度聞く">'+IC.tprev+'</button>'
+    +'<button class="main" id="kk-pause" aria-label="'+(GM.paused?'再開':'一時停止')+'">'
+    +(GM.paused?IC.tplay:IC.tpause)+'</button>'
+    +'<button class="tb" id="kk-skip" aria-label="次へ"'+(GM.answered?'':' disabled')+'>'
+    +IC.tnext+'</button></div>'
+    +'<div class="tp-lab"><span>もう一度</span><span>'+(GM.paused?'再開':'一時停止')
+    +'</span><span>次へ</span></div>'
+    +'<div class="kk-row" style="justify-content:center;margin-top:10px">'
+    +'<button class="btn sm" data-act="gmQuit" style="width:auto;padding:0 14px">やめる</button></div>'
+    +'</div><div class="gm-cred">VOICEVOX</div></div>';
   return h;
 }
-/* 音は**1本だけ**（GM.au）。以前は2つ持っていて、一時停止でどちらを止めるのか
-   決まっていなかった＝止まり方が安定しなかった（2026-08-23 本人指摘）。 */
+/* ---------- 音の待ち行列（インターロック）2026-08-23 ----------
+   鳴らすものは必ずここを通す＝**同時に鳴るのは1つだけ**。
+   行列に積んだ一連が終わったら after を呼ぶ（次の段へ進むのはここだけ）。 */
 var KKT=null;
+var AQ={list:[], cur:null, after:null, paused:false};
+function aClear(){
+  if(AQ.cur){try{AQ.cur.pause()}catch(e){}}
+  AQ.cur=null;AQ.list=[];AQ.after=null;AQ.paused=false;
+}
+function aRun(){
+  if(AQ.paused)return;
+  if(AQ.cur)return;                       /* まだ鳴っている＝重ねない */
+  if(!AQ.list.length){var f=AQ.after;AQ.after=null;if(f)f();return}
+  var it=AQ.list.shift();
+  var a=new Audio(it.src);
+  a.volume=(it.vol===undefined)?1:it.vol;
+  a.playbackRate=it.rate||1;
+  AQ.cur=a;
+  a.onended=function(){AQ.cur=null;aRun()};
+  var pr=a.play();
+  if(pr&&pr.catch)pr.catch(function(){AQ.cur=null;aRun()});
+}
+function aQueue(items,after){
+  aClear();
+  AQ.list=items.slice();AQ.after=after||null;
+  aRun();
+}
+function aPause(){
+  AQ.paused=true;
+  if(AQ.cur){try{AQ.cur.pause()}catch(e){}}
+}
+function aResume(){
+  AQ.paused=false;
+  if(AQ.cur){try{AQ.cur.play()}catch(e){}return}
+  aRun();
+}
+function aRate(r){if(AQ.cur)AQ.cur.playbackRate=r}
 function kkStop(){
-  if(GM&&GM.au){try{GM.au.pause()}catch(e){}GM.au=null}
+  aClear();
   clearInterval(KKT);KKT=null;
   var b=document.getElementById('kk-bar');if(b)b.style.width='0';
 }
-function kkPlay(name,rate,after){
-  var a=new Audio(mediaSrc('voice/'+name+'.m4a'));
-  a.playbackRate=rate||1;
-  a.onended=function(){if(GM)GM.au=null;if(after)after()};
-  if(GM)GM.au=a;
-  var p=a.play();
-  if(p&&p.catch)p.catch(function(){if(GM)GM.au=null;if(after)after()});
-  return a;
+/* 声のファイル1つを行列の形にする */
+/* 声ごとにフォルダが分かれている（voice/<声のid>/<key>.m4a）。 */
+function vItem(name,rate){
+  return {src:mediaSrc('voice/'+kkVoice()+'/'+name+'.m4a'),rate:rate||1};
 }
+/* 効果音を行列の形にする（音量は SEV の決め） */
+function sItem(name){return {src:mediaSrc('se/'+name+'.mp3'),vol:SEV[name]||0.4}}
 function kkBind(){
   var q=GM.qs[GM.qi],st=kkSet();
   GM.answered=false;GM.paused=false;
   document.getElementById('kk-rate').oninput=function(){
     var r=+this.value;
     document.getElementById('kk-rv').textContent=r.toFixed(2);
-    if(GM.au)GM.au.playbackRate=r;          /* いま鳴っている音にもすぐ効かせる */
-    kkSave(kkSet().lim,r);
+    aRate(r);                               /* いま鳴っている音にもすぐ効かせる */
+    kkSetRate(kkVoice(),r);                 /* **その声の速さ**として覚える */
   };
   document.getElementById('kk-lim').oninput=function(){
     var l=+this.value;
     document.getElementById('kk-lv').textContent=l+'秒';
-    kkSave(l,kkSet().rate);
+    ST.settings.kkLim=l;saveST();
   };
   document.getElementById('kk-replay').onclick=function(){kkSay(q)};
+  /* 飛ばす＝音を止めてすぐ次へ。一時停止中でも押せる（止まったまま詰まらないように）。 */
+  document.getElementById('kk-skip').onclick=function(){
+    if(!GM.answered)return;
+    clearInterval(KKT);KKT=null;
+    GM.paused=false;GM.expDone=true;
+    kkGo();                                   /* 解説も猶予も飛ばしてすぐ次へ */
+  };
   /* 一時停止＝**段ごとに決まった止め方・戻し方**（2026-08-23 本人が定義）。
        read  … 止めた時点で音を止める。再開は**問文を最初から読み直し**、読み終わってから数え直す
        count … 数えるのを止める。再開は**残り秒から**続ける
        exp   … 解説の音を止める。再開は**止めた位置から**。読み終わるまで次の問題に行かない */
   document.getElementById('kk-pause').onclick=function(){
     GM.paused=!GM.paused;
-    this.textContent=GM.paused?'再開':'一時停止';
+    /* アイコンと下の字を入れ替える（描き直さない＝音が途切れない） */
+    this.innerHTML=GM.paused?IC.tplay:IC.tpause;
+    this.setAttribute('aria-label',GM.paused?'再開':'一時停止');
+    var lb=document.querySelectorAll('.tp-lab span')[1];
+    if(lb)lb.textContent=GM.paused?'再開':'一時停止';
     if(GM.paused){
-      if(GM.au){try{GM.au.pause()}catch(e){}}
+      aPause();                                /* いま鳴っている1本を止めて行列は保つ */
       clearInterval(KKT);KKT=null;
+      kkHoldStop();                            /* 猶予のゲージも止める＝勝手に次へ行かない */
       return;
     }
     if(GM.phase==='read'){kkSay(GM.qs[GM.qi]);return}          /* 最初から読み直す */
     if(GM.phase==='count'){kkCount(GM.remain||kkSet().lim);return}
     if(GM.phase==='exp'){
-      if(GM.expDone){kkAdvance();return}                       /* 読み終わっていたら進む */
-      if(GM.au){try{GM.au.play()}catch(e){}}                   /* 止めた位置から */
+      if(GM.expDone){kkHold(true);return}      /* 読み終わっていたら猶予から出し直す */
+      aResume();                               /* 止めた位置から続ける */
     }
   };
   [0,1].forEach(function(i){
@@ -4018,8 +4138,9 @@ function kkBind(){
 function kkSay(q){
   kkStop();
   GM.phase='read';GM.remain=null;GM.expDone=false;
-  kkPlay(q.id,kkSet().rate,function(){
-    if(GM.answered||GM.paused)return;
+  /* 問文だけを行列に積む。読み終わったらカウントダウンへ（重なることがない）。 */
+  aQueue([vItem(q.id,kkSet().rate)],function(){
+    if(!GM||GM.answered||GM.paused)return;
     kkCount(kkSet().lim);
   });
 }
@@ -4039,9 +4160,9 @@ function kkCount(sec){
       var e=document.getElementById('kk-num');
       if(e){e.className='kk-cd';e.textContent=n;void e.offsetWidth;
             e.className='kk-cd go'+(n<=3?' last':'')}
-      kkTick(n<=3);                    /* 数字の読み上げはやめ、**小さい効果音**にした
-                                          （2026-08-23 本人「うるさくて集中できない」）。
-                                          残り3秒からは少し高い音にして、気づけるようにする。 */
+      /* 音は**全部同じ**（5秒前の音に統一。2026-08-23 本人指示
+         「カウントダウンの音は5秒前と3秒前で同じにして欲しい。5秒前の音でやってほしい」）。 */
+      kkTick(false);
     }
     if(left<=0){clearInterval(KKT);KKT=null;kkTimeout()}
   },80);
@@ -4050,7 +4171,10 @@ function kkCount(sec){
    音量は控えめ（2026-08-23 本人「うるさくて集中できないから効果音で小さく」）。
    ここは**公開しない**素材なので、殻（pwa）には入れず問題データ側で配る。 */
 /* 3秒前の音は「気づくが邪魔しない」程度に（2026-08-23 本人「うるさすぎる」）。 */
-var SEV={tick:0.28,tick_hi:0.26,ok:0.55,ng:0.50,clear:0.55};
+/* 3秒前の音は「チリン」（2026-08-23 本人指摘で2度目の差し替え）。控えめに0.22。 */
+var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55};
+/* 効果音を直接鳴らす（カウントダウンの小さい音だけ。声と同時には鳴らないので行列に入れない）。
+   線つなぎの正誤の音もここを使う（あちらは声が無い）。 */
 function se(name){
   try{
     var a=new Audio(mediaSrc('se/'+name+'.mp3'));
@@ -4064,47 +4188,135 @@ function kkTimeout(){
   GM.answered=true;GM.to++;GM.wrongs.push(GM.qs[GM.qi]);
   var q=GM.qs[GM.qi];
   document.getElementById('kk-res').innerHTML='<b class="x">時間切れ</b>　正しくは <b>'
-    +esc(q.ok)+'</b><div class="mini" style="margin-top:4px">'+esc(q.say||'')
-    +'<br>根拠 '+esc(q.src)+'</div>';
+    +esc(q.ok)+'</b><div class="ex">'+esc(q.say||'')+'</div>'
+    +(q.ngsay?('<div class="exng">'+esc(q.ngsay)+'</div>'):'')
+    +'<div class="src">根拠 '+esc(q.src)+'</div>';
   gmRec(false);
-  se('ng');
+  var sk2=document.getElementById('kk-skip');if(sk2)sk2.disabled=false;
   playFx(false,'badLite');
   kkAnsColor(q);
   GM.phase='exp';GM.expDone=false;
-  kkPlay('v_ng',kkSet().rate,function(){
-    if(GM.paused)return;
-    kkPlay(q.id+'_e',kkSet().rate,function(){GM.expDone=true;if(!GM.paused)kkAdvance()});
-  });
+  var r2=kkSet().rate;
+  kkHold(false);
+  aQueue([sItem('ng'), vItem('v_ng',r2), vItem(q.id+'_e',r2)],
+    function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
 }
 function kkPick(okq,btn,q){
   if(GM.answered)return;
   GM.answered=true;clearInterval(KKT);KKT=null;
   var b=document.getElementById('kk-bar');if(b)b.style.width='0';
-  btn.classList.add(okq?'ok':'ng');
+  btn.classList.add(okq?'kkok':'kkng');
   /* 解説は**文章として画面にも出す**（2026-08-23 本人指示。読み上げだけにしない） */
-  var ex='<div class="mini" style="margin-top:4px">'+esc(q.say||'')
-    +'<br>根拠 '+esc(q.src)+'</div>';
+  /* 解説＝①正解の説明 ②**選ばなかった側がどんな時に正しくなるか** ③根拠
+     （2026-08-23 本人指示「選択肢に対しての解説なんだから、違う選択肢の場合は
+       こういう時ですみたいな解説が望ましい」）。 */
+  var ex='<div class="ex">'+esc(q.say||'')+'</div>'
+    +(q.ngsay?('<div class="exng">'+esc(q.ngsay)+'</div>'):'')
+    +'<div class="src">根拠 '+esc(q.src)+'</div>';
   if(okq){GM.ok++;document.getElementById('kk-res').innerHTML='<b class="o">正解</b>'+ex}
   else{GM.ng++;GM.wrongs.push(q);
     document.getElementById('kk-res').innerHTML='<b class="x">誤り</b>　正しくは <b>'
       +esc(q.ok)+'</b>'+ex}
   gmRec(okq);
-  se(okq?'ok':'ng');
+  var sk=document.getElementById('kk-skip');if(sk)sk.disabled=false;
   playFx(okq,okq?'lite':'badLite');
   kkAnsColor(q);
   GM.phase='exp';GM.expDone=false;
-  /* 正誤を読み上げ → 解説を読み上げ → 読み終わってから次へ（2026-08-23 本人指示）。
-     一時停止中は進めない。 */
-  kkPlay(okq?'v_ok':'v_ng',kkSet().rate,function(){
-    if(GM.paused)return;
-    kkPlay(q.id+'_e',kkSet().rate,function(){GM.expDone=true;if(!GM.paused)kkAdvance()});
-  });
+  /* 押した瞬間に**問文の読み上げを切って**、効果音 → 正解／残念 → 解説 の順に鳴らす
+     （2026-08-23 本人指示「アクションに合わせる感じ」）。同時には鳴らない。 */
+  var r=kkSet().rate;
+  kkHold(false);                        /* 解説の段階から「次へ」を出す（押せる） */
+  aQueue([sItem(okq?'ok':'ng'), vItem(okq?'v_ok':'v_ng',r), vItem(q.id+'_e',r)],
+    function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
 }
 /* 次の問題へ。**一時停止中は進まない**（2026-08-23 本人指示）。 */
+/* 解説のあとの猶予。ゲージが満ちたら次へ。押せばすぐ次へ。止めれば留まる。
+   この猶予がないと、報告する間もなく次の問題に行ってしまう（2026-08-23 本人指摘）。 */
+var HOLD_MS=3000, HOLDT=null;   /* 5秒は長い（2026-08-23 本人指摘）→3秒 */
+/* run=false … ボタンだけ出す（解説を読んでいる間。勝手に進まない）
+   run=true  … ゲージを走らせる（3秒で自動）。解説を読み終わったときに呼ぶ。 */
+function kkHold(run){
+  if(!GM)return;
+  clearTimeout(HOLDT);HOLDT=null;
+  GM.holding=true;
+  var box=document.getElementById('kk-next');
+  if(!box)return;
+  if(!box.firstChild){
+    box.innerHTML='<button class="nx" id="kk-go">'+IC.tnext
+      +'<span id="kk-golab">次へ</span><i id="kk-gauge"></i></button>'
+      +'<div class="kk-row" style="justify-content:center;margin-top:8px">'
+      +'<button class="btn sm" id="kk-rep" style="width:auto;padding:0 14px">おかしい</button></div>'
+      +'<div id="kk-repbox"></div>';
+    document.getElementById('kk-go').onclick=function(){kkGo()};
+    document.getElementById('kk-rep').onclick=function(){kkRepOpen()};
+  }
+  if(!run)return;                       /* 解説の間は表示だけ */
+  var lab=document.getElementById('kk-golab');
+  if(lab)lab.textContent='次へ（'+Math.round(HOLD_MS/1000)+'秒で自動）';
+  var g=document.getElementById('kk-gauge');
+  if(g){
+    g.className='go';g.style.transitionDuration=HOLD_MS+'ms';
+    /* 1フレーム置いてから伸ばす（すぐ指定すると transition が効かない） */
+    setTimeout(function(){g.style.width='100%'},30);
+  }
+  HOLDT=setTimeout(function(){kkGo()},HOLD_MS);
+}
+function kkHoldStop(){
+  clearTimeout(HOLDT);HOLDT=null;
+  if(GM)GM.holding=false;
+  var g=document.getElementById('kk-gauge');
+  if(g){
+    /* いまの幅で止める（transition を切って現在値を固定する） */
+    var w=g.getBoundingClientRect().width, pw=g.parentNode.getBoundingClientRect().width;
+    g.className='';g.style.width=(pw?(w/pw*100):0)+'%';
+  }
+  var b=document.getElementById('kk-go');
+  if(b)b.querySelector('span').textContent='次へ';
+}
+function kkGo(){
+  clearTimeout(HOLDT);HOLDT=null;
+  if(!GM)return;
+  GM.holding=false;
+  aClear();
+  GM.qi++;
+  if(ST.settings.kkRnd)GM.voice=null;
+  render();
+}
+/* ---- ゲームの報告（ここおかしいよ）2026-08-23 ----
+   肢の報告（ST.reports）と同じ流儀で ST.greports[問のid] に入れる＝記録の同期でそのまま届く。 */
+var GREPS=['問題文がおかしい','答えが違う','解説が変','読み上げが変','その他'];
+function kkRepOpen(){
+  kkHoldStop();                     /* 報告している間に次へ行かせない */
+  var q=GM.qs[GM.qi], box=document.getElementById('kk-repbox');
+  if(!box)return;
+  var d=(ST.greports||{})[q.id]||{tags:[],memo:''};
+  box.innerHTML='<div class="panel gm-rep"><div class="mini" style="margin-bottom:6px">'
+    +'おかしいところ（複数えらべます）</div><div>'
+    +GREPS.map(function(w){return '<button class="tog xs'+(d.tags.indexOf(w)>=0?' on':'')+'"'
+      +' data-act="grep" data-w="'+esc(w)+'">'+w+'</button>'}).join('')
+    +'</div><input id="grepmemo" placeholder="ひとこと（任意）" value="'+esc(d.memo||'')+'"'
+    +' style="width:100%;margin-top:8px;min-height:34px;border-radius:10px;'
+    +'border:1px solid var(--line);padding:0 10px;font-family:inherit;font-size:12px">'
+    +'<div class="kk-row" style="margin-top:8px">'
+    +'<button class="btn sm" id="grepsend" style="width:auto;padding:0 14px">送る</button>'
+    +'<span class="mini" id="grepmsg"></span></div></div>';
+  document.getElementById('grepsend').onclick=function(){
+    var q2=GM.qs[GM.qi];
+    if(!ST.greports)ST.greports={};
+    var t=(ST.greports[q2.id]||{tags:[]}).tags||[];
+    ST.greports[q2.id]={kind:GM.kind,tags:t,
+      memo:(document.getElementById('grepmemo')||{}).value||'',
+      at:nowStamp(),voice:(GM.voice||null),ask:q2.ask||q2.id};
+    saveST();
+    document.getElementById('grepmsg').textContent='送りました';
+  };
+}
 function kkAdvance(){
   setTimeout(function(){
     if(!GM||GM.paused)return;
-    GM.qi++;render();
+    GM.qi++;
+    if(ST.settings.kkRnd)GM.voice=null;    /* ランダムは問ごとに選び直す */
+    render();
   },700);
 }
 /* 答えたあと、**正解の選択肢に色を付ける**（誤答でもどれが正解か分かる。2026-08-23 本人指示）。 */
@@ -5379,6 +5591,34 @@ document.addEventListener('click',function(e){
   if(a==='togchaps'){S.openChaps=!S.openChaps;render();return}
   if(a==='togsc'){S.openSc=!S.openSc;render();return}
   /* ゲーム（2026-08-23） */
+  /* 声の設定（2026-08-23） */
+  /* ゲームの報告のタグ（押した見た目だけ切り替え＝描き直さない） */
+  if(a==='grep'){
+    var gw=t.getAttribute('data-w'),gq=GM&&GM.qs[GM.qi];
+    if(!gq)return;
+    if(!ST.greports)ST.greports={};
+    var gr=ST.greports[gq.id]||{tags:[]};
+    var gi=gr.tags.indexOf(gw);
+    if(gi>=0)gr.tags.splice(gi,1);else gr.tags.push(gw);
+    gr.kind=GM.kind;gr.at=nowStamp();gr.ask=gq.ask||gq.id;
+    ST.greports[gq.id]=gr;saveST();
+    t.className='tog xs'+(gi>=0?'':' on');
+    return;
+  }
+  if(a==='togvoice'){S.openVoice=!S.openVoice;render();return}
+  if(a==='kkrnd'){ST.settings.kkRnd=!ST.settings.kkRnd;saveST();
+    if(GM)GM.voice=null;render();return}
+  if(a==='kkuse'){
+    var vu=+t.getAttribute('data-v');
+    if(!ST.settings.kkUse)ST.settings.kkUse={};
+    if(ST.settings.kkUse[vu])delete ST.settings.kkUse[vu];else ST.settings.kkUse[vu]=1;
+    saveST();if(GM)GM.voice=null;render();return;
+  }
+  if(a==='kkonly'){
+    var vo=+t.getAttribute('data-v');
+    ST.settings.kkUse={};ST.settings.kkUse[vo]=1;ST.settings.kkRnd=false;saveST();
+    if(GM)GM.voice=vo;render();return;
+  }
   if(a==='gmLink'){gmStartLink();return}
   if(a==='gmDict'){gmStartDict();return}
   if(a==='gmQuit'){kkStop();GM=null;S.view='game';render();return}
