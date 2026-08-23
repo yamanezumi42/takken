@@ -4012,7 +4012,18 @@ function kkSet(){
   var l=+o.kkLim||5;
   l=Math.min(20,Math.max(3,Math.round(l)));
   var sid=kkVoice();
-  return {lim:l,rate:kkRate(sid),voice:sid};
+  return {lim:l,rate:kkRate(sid),voice:sid,volSe:kkVol('se'),volV:kkVol('v')};
+}
+/* 音量（0〜1）。効果音と読み上げを**別々に**持つ（2026-08-23 本人報告 d38）。
+   既定は1。0にすれば消える＝消音のボタンは別に作らない（押す場所を増やさない）。 */
+function kkVol(kind){
+  var o=ST.settings||{},v=(kind==='se')?o.kkVolSe:o.kkVolV;
+  if(v===undefined||v===null||isNaN(+v))return 1;
+  return Math.min(1,Math.max(0,+v));
+}
+function kkSetVol(kind,v){
+  ST.settings[(kind==='se')?'kkVolSe':'kkVolV']=Math.min(1,Math.max(0,+v));
+  saveST();
 }
 
 /* 声の名前（一覧に無いidでも落ちない） */
@@ -4075,6 +4086,14 @@ function vDict(){
     +'<div class="kk-row"><span class="lb">制限</span>'
     +'<input class="sl" type="range" min="3" max="20" step="1" value="'+st.lim+'" id="kk-lim">'
     +'<span class="slv num" id="kk-lv">'+st.lim+'秒</span></div>'
+    /* 音量＝効果音と読み上げを別々に（2026-08-23 本人報告 d38）。0で消える。 */
+    +'<div class="kk-row"><span class="lb">効果音</span>'
+    +'<input class="sl" type="range" min="0" max="1" step="0.05" value="'+st.volSe+'" id="kk-vse">'
+    +'<span class="slv num" id="kk-vsv">'+Math.round(st.volSe*100)+'%</span></div>'
+    /* ラベルは1行に収まる長さにする（「読み上げ」は枠で折れた。2026-08-23 実測） */
+    +'<div class="kk-row"><span class="lb">声</span>'
+    +'<input class="sl" type="range" min="0" max="1" step="0.05" value="'+st.volV+'" id="kk-vv">'
+    +'<span class="slv num" id="kk-vvv">'+Math.round(st.volV*100)+'%</span></div>'
     /* 声の設定は**普段は畳む**（2026-08-23 本人指示）。開くと一覧＋ランダム。
        速さは上のスライダーが「いまの声の速さ」＝声ごとに覚える。 */
     +'<div class="hr"></div>'
@@ -4117,7 +4136,8 @@ function aRun(){
   if(!AQ.list.length){var f=AQ.after;AQ.after=null;if(f)f();return}
   var it=AQ.list.shift();
   var a=ael();
-  a.volume=(it.vol===undefined)?1:it.vol;
+  /* 読み上げの音量（2026-08-23 本人報告 d38）。行列に流れるのは読み上げだけ。 */
+  a.volume=Math.min(1,Math.max(0,((it.vol===undefined)?1:it.vol)*kkVol('v')));
   a.src=it.src;
   a.playbackRate=it.rate||1;
   AQ.cur=a;
@@ -4134,7 +4154,7 @@ var SEL=null;
 function aSe(name){
   try{
     if(!SEL){SEL=new Audio();SEL.preload='auto'}
-    SEL.volume=SEV[name]||0.4;
+    SEL.volume=Math.min(1,Math.max(0,(SEV[name]||0.4)*kkVol('se')));
     SEL.src=mediaSrc('se/'+name+'.mp3');
     var pr=SEL.play();if(pr&&pr.catch)pr.catch(function(){});
   }catch(e){}
@@ -4174,6 +4194,20 @@ function kkBind(){
     document.getElementById('kk-rv').textContent=r.toFixed(2);
     aRate(r);                               /* いま鳴っている音にもすぐ効かせる */
     kkSetRate(kkVoice(),r);                 /* **その声の速さ**として覚える */
+  };
+  /* 音量のスライダー。いま鳴っている音にもすぐ効かせる（2026-08-23 本人報告 d38）。 */
+  var vse=document.getElementById('kk-vse');
+  if(vse)vse.oninput=function(){
+    var v=+this.value;
+    document.getElementById('kk-vsv').textContent=Math.round(v*100)+'%';
+    kkSetVol('se',v);
+  };
+  var vv=document.getElementById('kk-vv');
+  if(vv)vv.oninput=function(){
+    var v=+this.value;
+    document.getElementById('kk-vvv').textContent=Math.round(v*100)+'%';
+    kkSetVol('v',v);
+    if(AQ.cur)try{AQ.cur.volume=Math.min(1,Math.max(0,v))}catch(e){}
   };
   document.getElementById('kk-lim').oninput=function(){
     var l=+this.value;
@@ -4394,7 +4428,7 @@ function kkRepOpen(){
   if(!box)return;
   var d=(ST.greports||{})[q.id]||{tags:[],memo:''};
   box.innerHTML='<div class="panel gm-rep"><div class="mini" style="margin-bottom:6px">'
-    +'おかしいところ（複数えらべます）</div><div>'
+    +'報告（複数えらべます）</div><div>'
     +GREPS.map(function(w){return '<button class="tog xs'+(d.tags.indexOf(w)>=0?' on':'')+'"'
       +' data-act="grep" data-w="'+esc(w)+'">'+w+'</button>'}).join('')
     +'</div><input id="grepmemo" placeholder="ひとこと（任意）" value="'+esc(d.memo||'')+'"'
