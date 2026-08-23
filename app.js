@@ -3195,6 +3195,15 @@ function vUnit(c,s){
    +'<div style="display:flex;gap:8px;margin-top:12px">'
    +twoBtns('startCat',' data-c="'+esc(c)+'"',rest,s.n,'','flex:1;width:auto;margin:0')
    +'</div>'
+   /* この単元の記録をリセット（2026-08-24 本人指示「単元学習で中途半端に解いた問題を
+      リセットしたい。家族法のやつ消したい」）。解いた記録が無いときは出さない。
+      押し間違いで消えないように、押すと件数を出して確認を取る（動画側と同じ2段）。
+      主役は「解く」なので、控えめな見た目で下に置く。 */
+   +(s.att?('<div class="rowx" style="gap:8px;margin-top:12px">'
+     +'<button class="btn sm" style="width:auto" data-act="creset" data-c="'+esc(c)+'">'
+     +IC.again+'<span style="margin-left:6px">記録をリセット（'+s.att+'問）</span></button>'
+     +'<span class="mini" style="flex:1;line-height:1.6">解いた記録を「まだ解いてない」に'
+     +'戻します。解いた日数・学習時間は残ります。</span></div>'):'')
    +'</div>';
   /* 単元の中の小見出しは出さない（2026-08-17 本人裁定）。
      「別に小分類で区切る必要ないか。単元では残りの問題やるだけだしね。
@@ -3241,7 +3250,6 @@ function vStudy(){
       +'記録をリセット（'+vv0.n+'問）</button>'
       +'<span class="mini" style="flex:1;line-height:1.6">まだ解いたことがない状態に戻します。'
       +'解いた日数・学習時間は残ります。</span></div>';
-
   if(!vids.length){
     h+='<div class="panel"><div class="mini">'+IC.warn+' この小分類の動画データがありません（chapters.js 未整備）。</div></div>';
   }
@@ -5086,6 +5094,45 @@ function vResetGo(vid){
   msg(k+'問を「まだ解いてない」に戻しました');
   render();
 }
+/* ---------- 単元ごとの記録リセット（2026-08-24 本人指示） ----------
+   動画側（vReset*）と同じ考え方。違うのは対象が「その単元の肢」であること。 */
+function cResetTargets(c){
+  return itemsOfCat(c).filter(function(it){return it&&att(R(it.id))>0});
+}
+function cResetAsk(c){
+  var its=cResetTargets(c),all=itemsOfCat(c).length;
+  var m=document.getElementById('modal');
+  m.innerHTML='<div class="sheet">'
+   +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">記録をリセット</div>'
+   +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+   +'<div class="mini" style="line-height:1.9">'+esc(c)+'<br>'
+   +'この単元の '+all+'問のうち、<b>解いた記録がある '+its.length+'問</b>を'
+   +'「まだ解いたことがない」状態に戻します。<br>'
+   +'消えるのは正誤・連続正解・卒業・休ませる段です。<br>'
+   +'<b>解いた日数・学習時間・報告は残ります。</b><br>'
+   +'元に戻せません。</div>'
+   +'<div class="rowx" style="gap:8px;margin-top:12px">'
+   +'<button class="btn sm" style="width:auto" data-act="cresetgo" data-c="'+esc(c)+'">'
+   +'リセットする（'+its.length+'問）</button>'
+   +'<button class="btn sm" style="width:auto" data-act="closeModal">やめる</button></div></div>';
+  m6SheetOpen();
+}
+function cResetGo(c){
+  var its=cResetTargets(c),k=0,ids={};
+  its.forEach(function(it){ids[it.id]=1;if(ST.items[it.id]){delete ST.items[it.id];k++}});
+  /* 動画ごとの進捗にも同じ肢が入っているので、そこからも外す
+     （外さないと動画側の「解いた数」だけが残って食い違う）。 */
+  Object.keys(ST.vp||{}).forEach(function(v){
+    var vp=ST.vp[v];if(!vp)return;
+    if(vp.done)vp.done=vp.done.filter(function(i){return !ids[i]});
+    if(vp.wrong)vp.wrong=vp.wrong.filter(function(i){return !ids[i]});
+    if(vp.done&&!vp.done.length){vp.completedAt=null;vp.round=0}
+  });
+  saveST();
+  var mm=document.getElementById('modal');if(mm)mm.hidden=true;
+  msg(k+'問を「まだ解いてない」に戻しました');
+  render();
+}
 function repSheet(id){
   var m=document.getElementById('modal'),it=BY[id]||{};
   m.innerHTML='<div class="sheet">'
@@ -5860,6 +5907,8 @@ document.addEventListener('click',function(e){
   /* 記録のリセット。押し間違いは戻せないので、必ず件数を出して確認を取る。 */
   if(a==='vreset'){vResetAsk(t.getAttribute('data-v'));return}
   if(a==='vresetgo'){vResetGo(t.getAttribute('data-v'));return}
+  if(a==='creset'){cResetAsk(t.getAttribute('data-c'));return}
+  if(a==='cresetgo'){cResetGo(t.getAttribute('data-c'));return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
   /* 選んだだけでは保存しない＝**送信で確定**（2026-08-18 本人の設計）。 */
