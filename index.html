@@ -1024,6 +1024,10 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
      左が下・右が上にずれる（2026-08-16 本人指摘）。中央で揃える。 */
   display:inline-flex;align-items:center}
 .qhead .qcnt .qtot{display:inline-flex;align-items:center;height:16px;line-height:16px}
+/* 経過時間＝数字だけの小さい表示（2026-08-23 本人指示）。問数の右に置く。
+   幅を固定するのは、桁が増えたときに★や∨が動かないようにするため。 */
+.qhead .qtime{font-size:11px;color:var(--muted);margin-left:8px;min-width:34px;text-align:right;
+  font-variant-numeric:tabular-nums}
 /* 前の問題へ（＜）＝数字の左。報告済みはアイコンを色で示す（2026-08-17） */
 .hd .hprev{background:none;border:0;color:var(--accd);padding:0 2px 0 0;min-height:0;
   display:inline-flex;align-items:center;cursor:pointer;flex:none}
@@ -1250,7 +1254,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='34e4c182';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='5b3636df';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

@@ -1778,6 +1778,24 @@ function srcLabel(it){
 /* =========================================================
    画面
    ========================================================= */
+/* ---------- 出題中の経過時間（2026-08-23 本人指示） ----------
+   値の元は完走時の「かかった時間」と同じ（ST.run.spent ＋ いまの区間）。
+   1秒ごとに #qtime の文字だけ差し替える＝render() を呼ばない（問題文が動かない）。 */
+var QTID=null;
+function runSec(){
+  var r=ST.run;
+  if(!r)return Math.round((S.spent||0)/1000);
+  var d=r.tick?Math.min(180000,Math.max(0,Date.now()-r.tick)):0;   /* 放置は180秒で打ち切る */
+  return Math.round(((r.spent||0)+d)/1000);
+}
+function qtNow(){return (S.view==='mock'&&S.mock)?mockSec(S.mock):runSec()}
+function qtTick(){
+  var e=document.getElementById('qtime');
+  if(!e){qtStop();return}
+  e.textContent=mmss(qtNow());
+}
+function qtStart(){qtStop();qtTick();QTID=setInterval(qtTick,1000)}
+function qtStop(){if(QTID){clearInterval(QTID);QTID=null}}
 function render(){
   var v=document.getElementById('view'),h='';
   /* この描画で「入場アニメーション（画面遷移＋段差）」を付けるか。
@@ -1799,6 +1817,8 @@ function render(){
   else if(S.view==='review')h=vReview();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
+  /* 出題中と通し演習のときだけ時計を回す（他の画面では止める＝無駄に動かさない）。 */
+  if(S.view==='quiz'||S.view==='mock')qtStart();else qtStop();
   /* クラスを外す→強制リフロー→付け直す。これをしないと innerHTML の作り直しでも
      クラスが付いたままになり、アニメーションが再生されない（今回の指摘6の原因）。 */
   if(ANIMON){
@@ -2304,12 +2324,13 @@ function vMock(){
   h+='<div class="qhead"><div class="qrow">'
     /* 短い回（平日のオリジナル5問）と通し演習で見出しを分ける＝どちらをやっているか分かる
        （2026-08-23。両方「通し演習」と出ていた）。 */
+    /* 問数は「配点×進捗」で決まるので「習った範囲」という言い方はやめた（2026-08-23）。 */
     +'<span class="qname">'+((m.kind==='オリジナル')?('4択（オリジナル） '+qs.length+'問')
-        :('通し演習（習った範囲 '+qs.length+'問）'))+'</span>'
+        :('通し演習 '+qs.length+'問'))+'</span>'
     +'<span class="qcnt"><span class="num">'+(m.i+1)+'</span><span class="qtot"> / '+qs.length+'</span></span>'
     +'<span class="chip">'+esc(q.cat)+'</span>'
     +(q.type==='個数'?'<span class="chip">個数</span>':'')
-    +'<span class="mini" style="margin-left:auto">'+mmss(mockSec(m))+'</span>'
+    +'<span class="qtime num" id="qtime" style="margin-left:auto">'+mmss(mockSec(m))+'</span>'
     +'</div><div class="qrule"></div></div>';
   h+='<div class="stem" style="font-weight:600">次の記述のうち、'+esc(q.ask)
     +'ものは'+(q.type==='個数'?'いくつあるか':'どれか')+'。</div>';
@@ -3343,6 +3364,9 @@ function vQuiz(){
     /* 「/ 2」も桁ロールと同じ 16px の箱に入れる。素のテキストのままだと、行の高さを
        まわりから受け継ぐので左右で行箱の高さが変わり、上下がずれる（2026-08-16 本人指摘・3度目）。 */
     +'<span class="qtot"> / '+n3(tot)+'</span></span>'
+    /* 経過時間（2026-08-23 本人指示）。中身は qtTick() が1秒ごとに入れる。
+       ここに初期値を入れておくのは、1秒待たずに出すため。 */
+    +'<span class="qtime num" id="qtime">'+mmss(runSec())+'</span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
     +IC.down+'</button></div><div class="qrule"></div></div>';
