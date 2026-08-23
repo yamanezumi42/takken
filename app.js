@@ -55,9 +55,10 @@ var WHYS=['ケアレス','知らなかった','読み違い','条文うろ覚え
 /* dataAt ＝ この並びに合わせて問題データを配信した時刻。
    端末のデータがこれより古いときは**チェックさせない**（2026-08-18 本人指摘
    「降りてないものを端末で確認させようとしてたってこと?」）。 */
-var CHECK={label:"読み上げの試し（#15 媒介契約）",unit:"#15 媒介契約",
+var CHECK={label:"読み上げの試し（媒介契約）",unit:"媒介契約（読み上げの試し）",
   note:"読み上げのボタンを押して、聞こえ方を確かめてください（声＝冥鳴ひまり）。",
-  dataAt:"2026-08-23 21:20",ids:["b5_5-078-1"]};
+  voice:true,                       /* 音があるかで出す（時刻では見ない） */
+  dataAt:"2026-08-23 22:13",ids:["b5_5-078-1"]};
 /* 報告のメモ（入力欄から離れたときに保存。再描画しないので入力が消えない） */
 document.addEventListener('change',function(e){
   var el=e.target;
@@ -2480,17 +2481,41 @@ function vMockResult(){
   h+='</div>';
   return h;
 }
+/* チェック用問題を出すのに足りないものを返す（無ければ空文字）。
+   時刻ではなく**実物**を見る。データを取り直せば直る話なので、文言でそう伝える。 */
+function checkLack(c){
+  var i,id;
+  for(i=0;i<(c.ids||[]).length;i++){
+    id=c.ids[i];
+    if(!BY[id])return 'まだ端末に降りていません（アプリを開き直すと入ります）';
+    /* 読み上げの回＝その肢の音があるか。voice_k を持っている肢の一覧で見る。 */
+    if(c.voice&&!(window.TAKKEN_KAKO||{})[id])
+      return '読み上げの音がまだ端末にありません（アプリを開き直すと入ります）';
+    /* 図の回＝図の実物があるか。図を data URI で持つ作りのときだけ見る
+       （単一ファイル版・ローカルでは図はそのままの道で読むので見ない）。 */
+    var F=window.TAKKEN_FIGS;
+    if(F&&Object.keys(F).length){
+      var fg=(BY[id].figs||[]);
+      for(var j=0;j<fg.length;j++)if(!F[fg[j]])
+        return '図がまだ端末にありません（アプリを開き直すと入ります）';
+    }
+  }
+  return '';
+}
 function checkHtml(){
   var list=checkList();
   if(!list.length)return '';
-  /* 端末のデータが、いちばん新しい回より古いなら押させない。
-     古い図を見て「これは違う」と判断させてしまうと、正解データが汚れる。 */
-  var v=window.TAKKEN_SRC||{},at=String(v.at||''),h='';
+  /* ★条件は「実物が端末にあるか」。時刻の比較はやめた（2026-08-23 本人「でないから
+     もう一度配信しなおして」）。端末がデータを取り直すまで時刻の条件は永久に真なので、
+     配信してもカードが出なかった。時計・タイムゾーン・取得時刻にも左右される。
+     見るのは ①その肢があるか（checkList で確認済み）②読み上げの回なら音があるか
+     ③図の回なら図があるか。無ければ「取り直すと出ます」と出す。 */
+  var h='';
   for(var i=0;i<list.length;i++){
-    var c=list[i];
-    if(c.dataAt&&at<c.dataAt){
+    var c=list[i],lack=checkLack(c);
+    if(lack){
       h+='<div class="mini" style="margin-bottom:8px;color:var(--ngdeep)">'
-        +esc(c.unit||'チェック用問題')+'は、アプリを開き直すと出ます</div>';
+        +esc(c.unit||'チェック用問題')+'は、'+esc(lack)+'</div>';
       continue;
     }
     h+='<div class="dlv"><span class="dlv-b">配信しました</span><b>'+esc(c.unit||'チェック用問題')
@@ -2534,7 +2559,8 @@ function flowHtml(){
     var nv=nextAkoVid();      /* 学習タブの一覧と同じ1本（あこ課長） */
     if(nv){
       rows.push({act:'gonextvid',
-                 lab:'今日の新規'+(vno(nv)===null?'':'（#'+vno(nv)+' '+(vlab(nv)||'')+'）'),
+                 /* ＃番号は出さない（2026-08-23 本人指示「＃数字がいらない」）。見出しだけ出す。 */
+                 lab:'今日の新規'+(vlab(nv)?('（'+vlab(nv)+'）'):''),
                  st:((!restNow&&restAll)?'動画を見てから'
                      :((newLeft?n3(newLeft)+'問':'今日は済')+'　動画から')),
                  done:(newLeft===0&&restNow>0),vid:nv});
@@ -4100,6 +4126,19 @@ function aRun(){
   /* 速さは src を入れ替えると戻ることがあるので、鳴り始めに入れ直す */
   try{a.onplaying=function(){a.playbackRate=it.rate||1}}catch(e){}
 }
+/* 効果音は**待ち行列に入れず**その場で鳴らす（2026-08-23）。
+   行列は「読み上げが被らないように」あるもので、効果音は読み上げではない。
+   行列に入れると効果音が終わるまで読み上げが始まらず、1.7秒の遅れになっていた。
+   読み上げ用の音源（AEL）とは別の音源を使う＝重ねても互いを止めない。 */
+var SEL=null;
+function aSe(name){
+  try{
+    if(!SEL){SEL=new Audio();SEL.preload='auto'}
+    SEL.volume=SEV[name]||0.4;
+    SEL.src=mediaSrc('se/'+name+'.mp3');
+    var pr=SEL.play();if(pr&&pr.catch)pr.catch(function(){});
+  }catch(e){}
+}
 function aQueue(items,after){
   aClear();
   AQ.list=items.slice();AQ.after=after||null;
@@ -4247,7 +4286,8 @@ function kkTimeout(){
   GM.phase='exp';GM.expDone=false;
   var r2=kkSet().rate;
   kkHold(false);
-  var seq2=[sItem('ng'), vItem('v_ng',r2), vItem(q.id+'_e',r2)];
+  aSe('ng');
+  var seq2=[vItem('v_ng',r2), vItem(q.id+'_e',r2)];
   if(q.ngsay)seq2.push(vItem(q.id+'_n',r2));
   aQueue(seq2,function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
 }
@@ -4282,7 +4322,8 @@ function kkPick(okq,btn,q){
   var r=kkSet().rate;
   kkHold(false);                        /* 解説の段階から「次へ」を出す（押せる） */
   /* 注釈（誤りの選択肢の説明）も読み上げる（2026-08-23 本人指示）。 */
-  var seq=[sItem(okq?'ok':'ng'), vItem(okq?'v_ok':'v_ng',r), vItem(q.id+'_e',r)];
+  aSe(okq?'ok':'ng');                   /* 効果音は待たずに鳴らす（読み上げと同時） */
+  var seq=[vItem(okq?'v_ok':'v_ng',r), vItem(q.id+'_e',r)];
   if(q.ngsay)seq.push(vItem(q.id+'_n',r));
   aQueue(seq,function(){GM.expDone=true;if(!GM.paused)kkHold(true)});
 }
