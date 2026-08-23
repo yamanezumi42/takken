@@ -3475,6 +3475,11 @@ function vQuiz(){
   h+='<div class="stem m3-hero m5-qr'+ac()+'" id="qstem"'+ad(2)+'>'
     +'<span class="m3-glow" aria-hidden="true"></span>'
     +'<span class="stemtx">'+esc(it.stem)+'</span></div>';
+  /* 条文問題（「〜旨」で終わる肢）は文が切れて見える（2026-08-23 本人報告）。
+     過去問の文は変えず、読み取りの助けを薄く1行だけ添える。 */
+  if(/旨$/.test(String(it.stem||''))&&/条文に規定/.test(String(it.lead||'')))
+    h+='<div class="mini" style="margin:-4px 0 6px;text-align:center;opacity:.7">'
+      +'…という決まりが、民法の条文にあるかどうか</div>';
   /* 難易度＝3段階の点（易●○○／普●●○／難●●●）。文字は出さない。未評価は「—」 */
   h+='<div class="meta m5-qr'+ac()+'"'+ad(3)+'>'+dotsHtml(it)+'</div>';
   /* 同じ問題が複数の動画に現れるので、紐づいた動画すべての章リンクを出す。
