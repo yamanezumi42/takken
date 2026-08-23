@@ -3905,13 +3905,15 @@ function gmStartDict(){
       paused:false,answered:false};
   S.view='game';render();
 }
-/* 速さは3段（0.8／1.0／1.25）。前のスライダー時代の値（1.1など）が残っていても、
-   いちばん近い段に寄せる＝どのボタンも選ばれていない状態を作らない（2026-08-23）。 */
-var KKRATES=[0.8,1.0,1.25];
+/* 速さ0.70〜1.50・制限3〜20秒。**スライダーで連続**に変える（2026-08-23 本人指示。
+   一度タップ3段にしたが「スライダーの方がいい。ダサかったのが嫌だった」ので、
+   見た目をこちらで作り直してスライダーに戻した）。 */
 function kkSet(){
-  var o=ST.settings||{},r=o.kkRate||1.0,best=KKRATES[0],i;
-  for(i=0;i<KKRATES.length;i++)if(Math.abs(KKRATES[i]-r)<Math.abs(best-r))best=KKRATES[i];
-  return {lim:o.kkLim||5,rate:best};
+  var o=ST.settings||{};
+  var r=+o.kkRate||1.0, l=+o.kkLim||5;
+  r=Math.min(1.5,Math.max(0.7,r));
+  l=Math.min(20,Math.max(3,Math.round(l)));
+  return {lim:l,rate:r};
 }
 function kkSave(lim,rate){
   ST.settings.kkLim=lim;ST.settings.kkRate=rate;saveST();
@@ -3931,84 +3933,105 @@ function vDict(){
     h+='<button class="kk-btn" data-ok="'+o.ok+'" id="kk-b'+i+'">'+esc(o.v)+'</button>';
   });
   h+='</div></div><div class="kk-res" id="kk-res"></div>'
-    /* 速さはタップの3段（2026-08-23 本人「スライダーがダサい」）。 */
-    +'<div class="kk-row"><span class="lb">速さ</span><span class="kk-seg" id="kk-rseg">'
-    +[[0.8,'ゆっくり'],[1.0,'ふつう'],[1.25,'速い']].map(function(x){
-        return '<button data-r="'+x[0]+'"'+(Math.abs(st.rate-x[0])<0.01?' class="on"':'')
-          +'>'+x[1]+'</button>'}).join('')+'</span></div>'
-    +'<div class="kk-row"><span class="lb">制限</span><span class="kk-seg" id="kk-seg">'
-    +[5,10,15].map(function(x){return '<button data-s="'+x+'"'
-      +(x===st.lim?' class="on"':'')+'>'+x+'秒</button>'}).join('')+'</span></div>'
+    /* 速さと制限＝スライダー（見た目はこちらで作る）。右に値を出す。 */
+    +'<div class="kk-row"><span class="lb">速さ</span>'
+    +'<input class="sl" type="range" min="0.7" max="1.5" step="0.05" value="'+st.rate+'" id="kk-rate">'
+    +'<span class="slv num" id="kk-rv">'+st.rate.toFixed(2)+'</span></div>'
+    +'<div class="kk-row"><span class="lb">制限</span>'
+    +'<input class="sl" type="range" min="3" max="20" step="1" value="'+st.lim+'" id="kk-lim">'
+    +'<span class="slv num" id="kk-lv">'+st.lim+'秒</span></div>'
     +'<div class="kk-row"><button class="btn sm" id="kk-replay" style="width:auto;padding:0 12px">'
     +'もう一度聞く</button>'
-    +'<button class="btn sm" id="kk-pause" style="width:auto;padding:0 12px">一時停止</button>'
+    +'<button class="btn sm" id="kk-pause" style="width:auto;padding:0 12px">'
+    +(GM.paused?'再開':'一時停止')+'</button>'
     +'<button class="btn sm" data-act="gmQuit" style="width:auto;padding:0 12px">やめる</button></div>'
     +'</div><div class="gm-cred">VOICEVOX:春日部つむぎ</div></div>';
   return h;
 }
-var KKA=null,KKT=null,KKN=null;
+/* 音は**1本だけ**（GM.au）。以前は2つ持っていて、一時停止でどちらを止めるのか
+   決まっていなかった＝止まり方が安定しなかった（2026-08-23 本人指摘）。 */
+var KKT=null;
 function kkStop(){
-  if(KKA){try{KKA.pause()}catch(e){}KKA=null}
+  if(GM&&GM.au){try{GM.au.pause()}catch(e){}GM.au=null}
   clearInterval(KKT);KKT=null;
-  if(KKN){try{KKN.pause()}catch(e){}KKN=null}
   var b=document.getElementById('kk-bar');if(b)b.style.width='0';
 }
 function kkPlay(name,rate,after){
   var a=new Audio(mediaSrc('voice/'+name+'.m4a'));
   a.playbackRate=rate||1;
-  a.onended=function(){if(after)after()};
+  a.onended=function(){if(GM)GM.au=null;if(after)after()};
+  if(GM)GM.au=a;
   var p=a.play();
-  if(p&&p.catch)p.catch(function(){if(after)after()});
+  if(p&&p.catch)p.catch(function(){if(GM)GM.au=null;if(after)after()});
   return a;
 }
 function kkBind(){
   var q=GM.qs[GM.qi],st=kkSet();
   GM.answered=false;GM.paused=false;
-  Array.prototype.forEach.call(document.getElementById('kk-rseg').querySelectorAll('button'),
-    function(b){
-      b.onclick=function(){
-        var r=+b.getAttribute('data-r');
-        if(KKA)KKA.playbackRate=r;kkSave(kkSet().lim,r);
-        Array.prototype.forEach.call(document.getElementById('kk-rseg').querySelectorAll('button'),
-          function(x){x.className=''});
-        b.className='on';
-      };
-    });
-  Array.prototype.forEach.call(document.getElementById('kk-seg').querySelectorAll('button'),function(b){
-    b.onclick=function(){
-      kkSave(+b.getAttribute('data-s'),kkSet().rate);
-      Array.prototype.forEach.call(document.getElementById('kk-seg').querySelectorAll('button'),
-        function(x){x.className=''});
-      b.className='on';
-    };
-  });
+  document.getElementById('kk-rate').oninput=function(){
+    var r=+this.value;
+    document.getElementById('kk-rv').textContent=r.toFixed(2);
+    if(GM.au)GM.au.playbackRate=r;          /* いま鳴っている音にもすぐ効かせる */
+    kkSave(kkSet().lim,r);
+  };
+  document.getElementById('kk-lim').oninput=function(){
+    var l=+this.value;
+    document.getElementById('kk-lv').textContent=l+'秒';
+    kkSave(l,kkSet().rate);
+  };
   document.getElementById('kk-replay').onclick=function(){kkSay(q)};
-  /* 一時停止＝音も時計も止める（2026-08-23 本人指示） */
+  /* 一時停止＝**段ごとに決まった止め方・戻し方**（2026-08-23 本人が定義）。
+       read  … 止めた時点で音を止める。再開は**問文を最初から読み直し**、読み終わってから数え直す
+       count … 数えるのを止める。再開は**残り秒から**続ける
+       exp   … 解説の音を止める。再開は**止めた位置から**。読み終わるまで次の問題に行かない */
   document.getElementById('kk-pause').onclick=function(){
     GM.paused=!GM.paused;
-    this.textContent=GM.paused?'続ける':'一時停止';
-    if(GM.paused){if(KKA)KKA.pause();clearInterval(KKT);KKT=null}
-    else{if(KKA&&KKA.paused&&!GM.answered)KKA.play();if(!KKT&&GM.left!=null)kkCount(GM.left)}
+    this.textContent=GM.paused?'再開':'一時停止';
+    if(GM.paused){
+      if(GM.au){try{GM.au.pause()}catch(e){}}
+      clearInterval(KKT);KKT=null;
+      return;
+    }
+    if(GM.phase==='read'){kkSay(GM.qs[GM.qi]);return}          /* 最初から読み直す */
+    if(GM.phase==='count'){kkCount(GM.remain||kkSet().lim);return}
+    if(GM.phase==='exp'){
+      if(GM.expDone){kkAdvance();return}                       /* 読み終わっていたら進む */
+      if(GM.au){try{GM.au.play()}catch(e){}}                   /* 止めた位置から */
+    }
   };
   [0,1].forEach(function(i){
     var b=document.getElementById('kk-b'+i);
-    if(b)b.onclick=function(){kkPick(b.getAttribute('data-ok')==='1',b,q)};
+    if(b)b.onclick=function(ev){
+      /* 押した位置に波紋を1つ出す（連打で溜まらないよう終わったら消す） */
+      try{
+        var r=b.getBoundingClientRect(),d=document.createElement('span');
+        d.className='rip';
+        d.style.left=((ev.clientX||r.left+r.width/2)-r.left)+'px';
+        d.style.top=((ev.clientY||r.top+r.height/2)-r.top)+'px';
+        b.appendChild(d);setTimeout(function(){d.remove()},430);
+      }catch(e){}
+      kkPick(b.getAttribute('data-ok')==='1',b,q);
+    };
   });
   kkSay(q);
 }
 function kkSay(q){
   kkStop();
-  KKA=kkPlay(q.id,kkSet().rate,function(){if(!GM.answered&&!GM.paused)kkCount(kkSet().lim)});
+  GM.phase='read';GM.remain=null;GM.expDone=false;
+  kkPlay(q.id,kkSet().rate,function(){
+    if(GM.answered||GM.paused)return;
+    kkCount(kkSet().lim);
+  });
 }
 /* カウントダウン＝中央に数字を出しつつ**その数字を読み上げる**（2026-08-23 本人指示）。 */
 function kkCount(sec){
   clearInterval(KKT);
-  GM.left=sec;
+  GM.phase='count';GM.remain=sec;
   var t0=Date.now(),shown=null,lim=kkSet().lim;
   KKT=setInterval(function(){
     if(GM.paused)return;
     var left=sec-(Date.now()-t0)/1000;
-    GM.left=left;
+    GM.remain=left;
     var b=document.getElementById('kk-bar');if(b)b.style.width=Math.max(0,left/lim*100)+'%';
     var n=Math.ceil(left);
     if(n>0&&n!==shown&&n<=5){
@@ -4026,7 +4049,8 @@ function kkCount(sec){
 /* ゲームの音＝本人の素材（Desktop\動画素材\SE）から se/ に取り込んだもの。
    音量は控えめ（2026-08-23 本人「うるさくて集中できないから効果音で小さく」）。
    ここは**公開しない**素材なので、殻（pwa）には入れず問題データ側で配る。 */
-var SEV={tick:0.30,tick_hi:0.35,ok:0.55,ng:0.50,clear:0.55};
+/* 3秒前の音は「気づくが邪魔しない」程度に（2026-08-23 本人「うるさすぎる」）。 */
+var SEV={tick:0.28,tick_hi:0.26,ok:0.55,ng:0.50,clear:0.55};
 function se(name){
   try{
     var a=new Audio(mediaSrc('se/'+name+'.mp3'));
@@ -4045,7 +4069,12 @@ function kkTimeout(){
   gmRec(false);
   se('ng');
   playFx(false,'badLite');
-  kkPlay('v_ng',kkSet().rate,function(){kkPlay(q.id+'_e',kkSet().rate,kkNext)});
+  kkAnsColor(q);
+  GM.phase='exp';GM.expDone=false;
+  kkPlay('v_ng',kkSet().rate,function(){
+    if(GM.paused)return;
+    kkPlay(q.id+'_e',kkSet().rate,function(){GM.expDone=true;if(!GM.paused)kkAdvance()});
+  });
 }
 function kkPick(okq,btn,q){
   if(GM.answered)return;
@@ -4062,12 +4091,31 @@ function kkPick(okq,btn,q){
   gmRec(okq);
   se(okq?'ok':'ng');
   playFx(okq,okq?'lite':'badLite');
-  /* 正誤を読み上げ → 正解のときは解説も読み上げる（2026-08-23 本人指示） */
+  kkAnsColor(q);
+  GM.phase='exp';GM.expDone=false;
+  /* 正誤を読み上げ → 解説を読み上げ → 読み終わってから次へ（2026-08-23 本人指示）。
+     一時停止中は進めない。 */
   kkPlay(okq?'v_ok':'v_ng',kkSet().rate,function(){
-    kkPlay(q.id+'_e',kkSet().rate,kkNext);
+    if(GM.paused)return;
+    kkPlay(q.id+'_e',kkSet().rate,function(){GM.expDone=true;if(!GM.paused)kkAdvance()});
   });
 }
-function kkNext(){setTimeout(function(){if(!GM)return;GM.qi++;render()},1100)}
+/* 次の問題へ。**一時停止中は進まない**（2026-08-23 本人指示）。 */
+function kkAdvance(){
+  setTimeout(function(){
+    if(!GM||GM.paused)return;
+    GM.qi++;render();
+  },700);
+}
+/* 答えたあと、**正解の選択肢に色を付ける**（誤答でもどれが正解か分かる。2026-08-23 本人指示）。 */
+function kkAnsColor(q){
+  [0,1].forEach(function(i){
+    var b=document.getElementById('kk-b'+i);
+    if(!b)return;
+    if(b.textContent===q.ok){b.classList.add('ans')}
+    else{b.classList.add('dim')}
+  });
+}
 /* ---------- 終わり ---------- */
 function vGmDone(){
   var sec=Math.round((Date.now()-GM.t0)/1000),n=GM.ok+GM.ng+(GM.to||0);
