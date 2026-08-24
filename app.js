@@ -3617,8 +3617,10 @@ function vQuiz(){
        回答時はこの入れ物だけを外して解説を差し込む＝問題文のDOMに触らない。
        ○×はボタンのタップだけ（スワイプと案内文は廃止＝2026-08-14 本人指摘）。 */
     h+='<div class="qctl m5-qr'+(CA?' qin':'')+'"'+(CA?' style="animation-delay:200ms"':'')+'>'
-      +'<div class="ans"><button class="b" data-act="ans" data-o="1">○</button>'
-      +'<button class="b x" data-act="ans" data-o="0">×</button></div>'
+      +'<div class="ans"><button class="b" data-act="ans" data-o="1">○'
+      +'<i>'+esc(oxMean(it).o)+'</i></button>'
+      +'<button class="b x" data-act="ans" data-o="0">×'
+      +'<i>'+esc(oxMean(it).x)+'</i></button></div>'
       /* パスの右に「おかしいところ」。行は増やさない（2026-08-17 本人指定）。
          パスは中央のまま、報告はその右に小さく置く＝左右の重さを揃える。 */
       /* パスは廃止（2026-08-18 本人指定「報告＝送信がパスになるので要らない」）。
@@ -4265,7 +4267,8 @@ function kkNoVoice(){return kkUse().length===0}
 function kkRate(sid){
   var o=ST.settings||{},m=o.kkRates||{};
   var r=+m[sid];
-  if(!r)r=+o.kkRate||1.0;                /* 昔の1つだけの設定があれば引き継ぐ */
+  /* 既定は1.30倍（2026-08-24 本人指示）。設定で声ごとに変えられる。 */
+  if(!r)r=+o.kkRate||1.3;                /* 昔の1つだけの設定があれば引き継ぐ */
   return Math.min(2.0,Math.max(0.7,r));   /* 2倍まで（2026-08-23 本人指示） */
 }
 function kkSetRate(sid,r){
@@ -7474,6 +7477,21 @@ function m6SheetClose(dy,after){
    設定は ST.settings.kv* に持つ。既定＝読み上げする・問題文と肢と正誤を読む・
    解説は答えたあとだけ・（）の中は読まない。 */
 var KVLAST=null;      /* 直前に読んだ肢（同じ問で二度読まないため） */
+/* ○×が何を意味するかを、その問のリードから読み取る（2026-08-24 本人指示）。
+   本人の言葉「肢を読んで単純にこれはあってるなあってないなで○×で答えたい。
+   それなのに問題文を読んで○×がどっちか迷う書き方をされているのが難しい」。
+   → リードを読み返さなくても済むように、**ボタンの中に意味を出す**。
+   リードの書き換えが漏れていても、ここが正しければ迷わない。 */
+function oxMean(it){
+  var l=(it&&it.lead)||"";
+  if(/違反しなければ○|違反しないものとして|適法なら○/.test(l))return {o:"適法",x:"違反"};
+  if(/適当な場合は○/.test(l))return {o:"適当",x:"不適当"};
+  if(/そうであれば○/.test(l)){
+    /* 「〜か。そうであれば○」＝直前の問いが成り立つかどうか */
+    return {o:"そのとおり",x:"違う"};
+  }
+  return {o:"正しい",x:"誤り"};
+}
 function kvSet(){
   var o=ST.settings||{};
   return {on:(o.kvOn===undefined?true:!!o.kvOn),

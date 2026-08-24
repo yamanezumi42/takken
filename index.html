@@ -191,6 +191,14 @@ a{color:var(--chipfg)}
 .ans .b{flex:1;height:70px;border-radius:var(--btnradius);display:flex;align-items:center;justify-content:center;
   font-size:28px;border:0;color:#fff;background:var(--acc);font-family:var(--font);cursor:pointer}
 .ans .b.x{background:var(--ng)}
+/* ○×の意味（2026-08-24 本人が案Iを選択）。
+   ★意味の文字は position:absolute ＝**記号のレイアウトに関与しない**。
+     だから○と×は今までと1pxも動かない（中心 x=88.75 / y=34.5 を実測）。
+     本人「○と×が中央からずれるのはやだ。透かしで入れるみたいなのはだめなの？」 */
+.ans .b{position:relative}
+.ans .b>i{position:absolute;left:0;right:0;top:50%;transform:translateY(2px);
+  text-align:center;font-style:normal;font-size:17px;opacity:.20;letter-spacing:.1em;
+  pointer-events:none}   /* 案I3：文字だけ2px下へ＝記号を隠さない（2026-08-24 本人選択） */
 .pass{margin:2px auto 0;font-size:12px;min-height:40px;padding:0 18px;border-radius:12px;background:var(--panel);
   border:1px solid var(--line);color:var(--muted);font-family:var(--font);cursor:pointer}
 
@@ -1441,7 +1449,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='eb9496f3';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='aad472fd';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
