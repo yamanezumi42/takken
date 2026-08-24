@@ -1386,7 +1386,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='4bb488de';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='1d30e754';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1500,6 +1500,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       rec=r||{man:{files:{}},at:''};
       return ghGet('manifest.json');
     }).then(function(man){
+      var skipped=0,lastSkipErr='';   /* 保存できなかった音の数（2026-08-24） */
       var have=(rec.man&&rec.man.files)||{},todo=[];
       Object.keys(man.files).forEach(function(p){
         if(!have[p]||have[p].sha!==man.files[p].sha)todo.push(p);
@@ -1521,7 +1522,15 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       function step(){
         if(i>=todo.length){
           /* 最後に版をそろえる（消えたファイルの掃除もここ） */
-          return put({man:man,at:stamp()},KEY2)
+          if(skipped){
+            var t='音を '+skipped+' 束ぶん保存できませんでした（'+lastSkipErr+'）。'
+              +'問題と図は入っています。';
+            say(t); errSave(t);
+          }
+          /* ★版の情報は**入ったものだけ**にする（man をそのまま書くと飛ばした音も
+             入ったことになり、次に取りに行かない）。builtAt は引き継ぐ。 */
+          rec.man.builtAt=man.builtAt;
+          return put({man:rec.man,at:stamp()},KEY2)
             .then(function(){srcAt(man.builtAt||stamp());return todo.length});
         }
         var p=todo[i];
@@ -1529,10 +1538,18 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         return ghGet(p).then(function(o){
           /* ★このファイルだけを保存する。以前は溜めた全部を書き直していたので、
              280件で累計40GB近い書き込みになり IndexedDB が落ちた（2026-08-24）。 */
-          return put(o,pkey(p)).then(function(){
+          return put(o,pkey(p)).then(function(){return true}).catch(function(e){
+            /* 音（media/）は学習の本体ではない。保存できなければ**飛ばして続ける**
+               ＝1件の失敗で問題も図も入らない、を避ける（2026-08-24）。 */
+            if(p.indexOf('media/')!==0)throw e;
+            skipped++; lastSkipErr=errText(e,'音の保存');
+            return false;
+          }).then(function(ok){
             if(!rec.man)rec.man={files:{}};
             if(!rec.man.files)rec.man.files={};
-            rec.man.files[p]=man.files[p];   /* この1件は取り終えた、と控える */
+            /* ★入ったものだけ控える。飛ばした音を控えると次に取りに行かない
+               （2026-08-24 自分で入れかけたバグ）。 */
+            if(ok)rec.man.files[p]=man.files[p];
             mb-=man.files[p].bytes/1048576; if(mb<0)mb=0;
             i++;
             /* 控えは小さいので毎回書いてよい＝途中で切れても続きから */
@@ -1604,6 +1621,23 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       try{console.log('起動 '+T.ready+'ms（データ '+T.data+'ms・'+T.n+'問）')}catch(e){}};
     document.body.appendChild(s);
   }
+  /* エラーを人が読める1行にする（名前＋文＋どこで起きたか）。 */
+  function errText(e,where){
+    var n=(e&&(e.name||e.constructor&&e.constructor.name))||'エラー';
+    var m=(e&&(e.message||e.toString&&e.toString()))||'';
+    return where+'：'+n+(m?('／'+m):'');
+  }
+  /* 記録に残す＝同期でこちらに届く（本人に聞かずに原因が分かる）。 */
+  function errSave(t){
+    try{
+      var k='takken_v1',st=JSON.parse(localStorage.getItem(k)||'{}');
+      st.settings=st.settings||{};
+      st.settings.lastErr={at:stamp(),text:String(t).slice(0,300),
+        ctx:(window.TAKKEN_SRC&&window.TAKKEN_SRC.ctx)||''};
+      localStorage.setItem(k,JSON.stringify(st));
+    }catch(e){}
+  }
+  window.TAKKEN_ERRSAVE=errSave;
   function ask(msg){
     var im=$('importer'); im.hidden=false;
     var b=$('m6boot'); if(b)b.style.display='none';
@@ -1618,7 +1652,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
           .then(function(){$('impstat').textContent='取り込みました。開き直します。';
                            setTimeout(function(){location.reload()},400)})
           .catch(function(err){gb.disabled=false;
-                 $('impstat').textContent=(err&&err.message)||'取り込めませんでした'});
+                 var t=errText(err,'取り込み');errSave(t);
+                 $('impstat').textContent=t});
       };
     }
     $('impfile').onchange=function(e){
@@ -1708,7 +1743,12 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       ask(force?'入れ直します。':'');
       return null;
     });
-  }).catch(function(){ ask('この端末では保存領域が使えません。ホーム画面に追加してから開いてください。') });
+  }).catch(function(e){
+    /* エラーの中身を必ず出す（2026-08-24 本人報告。以前は決め文句だけで原因が分からなかった） */
+    var t=errText(e,'起動時の読み込み');
+    errSave(t);
+    ask('保存領域を読めませんでした。'+t+'　［設定＝データ から取り込み直せます］');
+  });
 
   /* オフラインで起動できるようにする（殻だけキャッシュ。データは上のIndexedDB） */
   if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost'))
