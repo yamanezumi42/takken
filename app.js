@@ -3600,7 +3600,7 @@ function nextGauge(){
   if(!btn.querySelector('.lite')){
     btn.classList.add('gz');
     btn.insertAdjacentHTML('beforeend',
-      '<span class="lite"></span><span class="stop" data-act="nxstop">×</span>');
+      '<span class="lite"></span>');
   }
   var stopped=!st.auto||!!NXSTOP[id];
   btn.classList.toggle('stopped',stopped);
@@ -5813,6 +5813,22 @@ document.addEventListener('click',function(e){
   var cl=document.getElementById('m5-closed');
   if(cl&&!cl.hidden){M5.closeAll();render();return}
   var t=e.target.closest?e.target.closest('[data-act]'):null;
+  /* ---------- 画面をタップで読み上げを止める／再開する（2026-08-24 本人の要望） ----------
+     ボタン・リンク・入力の上ではない所をタップしたときだけ。
+     鳴っていなければ、走っている自動送りを止める（×と同じ）。 */
+  if(!t&&S.view==='quiz'&&e.target&&e.target.closest){
+    var inCtl=e.target.closest('button,a,input,select,textarea,label,.sheet,#modal,#tabs');
+    if(!inCtl){
+      if(AQ.paused){aResume();msg('読み上げを再開しました');return}
+      if(AQ.cur||AQ.list.length){aPause();msg('読み上げを止めました（もう一度タップで再開）');return}
+      /* 自動送り＝走っていれば止める／止めていれば再開する（2026-08-24 本人の要望） */
+      var qid=S.queue[S.qi];
+      if(NXT){nextStop();msg('自動で次へを止めました（もう一度タップで再開）');return}
+      if(qid&&NXSTOP[qid]&&kvSet().auto&&S.phase==='exp'){
+        delete NXSTOP[qid];NXID=null;nextGauge();msg('自動で次へを再開しました');return;
+      }
+    }
+  }
   if(!t)return;
   /* リザルトの上のボタンは、閉じてから既存処理へ流す */
   if(t.closest&&t.closest('.m5-ov'))M5.closeAll();
@@ -5973,8 +5989,6 @@ document.addEventListener('click',function(e){
     S.queue=[];S.qi=0;S.phase='q';
     go(gv);return;
   }
-  /* 右上の×＝この問だけ自動を止める（2026-08-24） */
-  if(a==='nxstop'){e.stopPropagation();nextStop();return}
   if(a==='kvsheet'){kvSheet(S.queue[S.qi]);return}
   if(a==='kvtog'){
     /* 設定の名前（kvOn など）→ いまの値の名前（on など）の対応表。素直に書く。 */
@@ -6048,7 +6062,12 @@ document.addEventListener('click',function(e){
      記録は動かさない＝戻って眺めるだけ（2026-08-17 本人指示）。 */
   if(a==='prevq'){
     if(S.qi<=0)return;
+    /* 読み上げと自動送りを止める（2026-08-24 本人報告）。
+       戻って眺める場面なので、勝手に進めない・鳴らし続けない。 */
+    aClear();KVLAST=null;nextClear();
     clearFx();S.qi--;
+    /* 戻った先の問は自動で進めない（眺めるために戻ったので） */
+    var pid=S.queue[S.qi];if(pid)NXSTOP[pid]=1;
     var pl=ansLogAt(S.qi);
     if(pl){S.res=pl;S.phase='exp'}else{S.res=null;S.phase='q'}
     S.anim=null;S.enter=false;render();window.scrollTo(0,0);return;

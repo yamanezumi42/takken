@@ -416,11 +416,7 @@ a{color:var(--chipfg)}
 #nextbar .gz .lite{position:absolute;left:0;top:0;bottom:0;right:0;border-radius:12px;
   background:rgba(255,255,255,.34);pointer-events:none;z-index:1}
 #nextbar .gz.run .lite{left:100%;transition:left linear var(--gd)}
-#nextbar .gz .stop{position:absolute;right:-7px;top:-7px;z-index:3;width:22px;height:22px;
-  border-radius:50%;background:#b98593;color:#fff;display:flex;align-items:center;
-  justify-content:center;font-size:13px;line-height:1;box-shadow:0 1px 3px rgba(51,46,40,.25);
-  pointer-events:auto}
-#nextbar .gz.stopped .lite,#nextbar .gz.stopped .stop{display:none}
+#nextbar .gz.stopped .lite{display:none}
 /* 押したときの手応え（面が軽く沈む・案③） */
 .tapfx{animation:tapfx .22s ease-out}
 @keyframes tapfx{0%{transform:scale(1)}45%{transform:scale(.955)}100%{transform:scale(1)}}
@@ -1415,7 +1411,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2cf58cd3';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='a0c8d0b9';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
