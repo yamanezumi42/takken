@@ -3586,7 +3586,7 @@ function syncNextBar(){
    ・解説を読み終えてから数える（読み上げの行列が空になってから）
    ・ゲージは明るい下地→普通の桜色。右上の×でその問だけ止める
    ・押せばすぐ次へ。止めたらボタンは普通の色に戻る */
-var NXT=null, NXID=null, NXSTOP={};      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
+var NXT=null, NXID=null, NXSTOP={}, NXARM={};  /* NXARM＝読み上げが終わったか */      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
 function nextGauge(){
   var bar=document.getElementById('nextbar');
   var btn=bar?bar.querySelector('.btn'):null;
@@ -3607,7 +3607,7 @@ function nextGauge(){
       btn.appendChild(sp);
     }
     btn.insertAdjacentHTML('beforeend',
-      '<span class="lite"></span><span class="fill"></span>');
+      '<span class="lite"></span><span class="fillbox"><i class="fill"></i></span>');
   }
   /* ボタンの実際の色を読み取って、伸びる面に入れる（配色9種に依存しない） */
   var fl=btn.querySelector('.fill');
@@ -3615,11 +3615,20 @@ function nextGauge(){
   var stopped=!st.auto||!!NXSTOP[id];
   btn.classList.toggle('stopped',stopped);
   if(NXT){clearTimeout(NXT);NXT=null}
-  if(stopped){btn.classList.remove('run');return}
+  /* ★問が変わったら必ず0に戻す（前の問の印が残ると最初から満タンに見える。
+     2026-08-24 本人報告「最初から半分になってて時間経過で見れてない」の真因）。 */
+  btn.classList.remove('run');
+  if(fl){fl.style.transition='none';fl.style.width='0px';void fl.offsetWidth;
+         fl.style.transition='';fl.style.width=''}
+  if(stopped)return;
   /* 読み上げが終わってから数え始める（鳴っている間は待つ） */
   function start(){
     if(S.phase!=='exp'||S.queue[S.qi]!==id)return;
-    if(AQ.cur||AQ.list.length){NXT=setTimeout(start,300);return}
+    /* 読み上げが**本当に終わるまで**待つ（一時停止中も待つ。2026-08-24 本人報告
+       「解説を読み上げてる時にゲージが動く」＝止めている間も走っていた）。 */
+    /* 合図（読み上げの終わり）が来ていなければ数えない。
+       鳴っている間・止めている間も待つ。 */
+    if(NXARM[id]===false||AQ.cur||AQ.list.length||AQ.paused){NXT=setTimeout(start,300);return}
     btn.style.setProperty('--gd',st.wait+'s');
     btn.classList.remove('run');void btn.offsetWidth;btn.classList.add('run');
     NXT=setTimeout(function(){
@@ -3628,7 +3637,7 @@ function nextGauge(){
   }
   start();
 }
-function nextClear(){NXID=null;if(NXT){clearTimeout(NXT);NXT=null}}
+function nextClear(){NXID=null;NXARM={};if(NXT){clearTimeout(NXT);NXT=null}}
 function nextStop(){
   var id=S.queue[S.qi];
   if(id)NXSTOP[id]=1;
@@ -3748,6 +3757,33 @@ window.addEventListener('takken-data',function(){if(S.view==='home')render()});
    本人「どのくらいダウンロードしてるとかゲージとか視覚的にわかるようにして欲しい。
         いつ終わるかもわからないし動いてるかも今はわからないから」。
    数は殻（index.html）が window.TAKKEN_SRC.prog に入れる。ここは出すだけ。 */
+/* 読み上げの入り具合＝全体と、足りていない単元の上位3つ（2026-08-24 本人指摘）。 */
+function kvProgHtml(){
+  var M=window.TAKKEN_MEDIA;
+  if(!M||!Object.keys(M).length)return '';
+  var got={};
+  Object.keys(M).forEach(function(k){
+    if(k.indexOf('voice_k/')!==0||k.slice(-6)!=='_s.m4a')return;
+    var a=k.split('/');if(a.length>2)got[a[2].slice(0,-6)]=1;
+  });
+  var by={};
+  ITEMS.forEach(function(it){
+    var c=it.cat||'その他';
+    if(!by[c])by[c]={n:0,ok:0};
+    by[c].n++;
+    if(got[it.id])by[c].ok++;
+  });
+  var rows=Object.keys(by).map(function(c){
+    return {c:c,n:by[c].n,ok:by[c].ok,left:by[c].n-by[c].ok};
+  }).filter(function(r){return r.left>0}).sort(function(a,b){return b.left-a.left}).slice(0,3);
+  var all=Object.keys(got).length, tot=ITEMS.length;
+  return '<div class="hr" style="margin:8px 0"></div>'
+    +'<div class="spread"><span class="mini">読み上げが入っている問</span>'
+    +'<span class="mini num">'+n3(all)+' / '+n3(tot)+'問</span></div>'
+    +(rows.length?('<div class="mini" style="margin-top:4px;line-height:1.8">まだ足りない単元　'
+      +rows.map(function(r){return esc(r.c)+' '+n3(r.ok)+'/'+n3(r.n)}).join('　／　')
+      +'</div>'):'<div class="mini" style="margin-top:4px">全部そろっています</div>');
+}
 function progHtml(){
   var v=window.TAKKEN_SRC||{},p=v.prog;
   if(!p||!p.n)return '';
@@ -3768,7 +3804,10 @@ function progHtml(){
     +'<span class="mini num">残り '+(p.mbLeft||0).toFixed(1)+'MB</span>'
     +'<span class="mini num">'+etaTx+'</span></div>'
     +'<div class="mini" style="margin-top:4px">アプリを開いたままにしておくと進みます。'
-    +'閉じても、次に開いたとき続きから取り込みます。</div></div>';
+    +'閉じても、次に開いたとき続きから取り込みます。</div>'
+    /* 何が入っているか（2026-08-24 本人指摘「どの辺の問題を取り込んでいるか分からない」） */
+    +kvProgHtml()
+    +'</div>';
 }
 /* 取り込み中はホームを1秒ごとに描き直す（動いているのが見えるように） */
 var PROGT=null;
@@ -5991,14 +6030,6 @@ document.addEventListener('click',function(e){
     return;
   }
   /* 読み上げの設定シート（2026-08-23） */
-  /* 出題をやめて移動（2026-08-24）。読み上げも止める。 */
-  if(a==='goq'){
-    var gv=t.getAttribute('data-v');
-    var mm2=document.getElementById('modal');if(mm2)mm2.hidden=true;
-    aClear();KVLAST=null;
-    S.queue=[];S.qi=0;S.phase='q';
-    go(gv);return;
-  }
   if(a==='kvsheet'){kvSheet(S.queue[S.qi]);return}
   if(a==='kvtog'){
     /* 設定の名前（kvOn など）→ いまの値の名前（on など）の対応表。素直に書く。 */
@@ -7429,7 +7460,14 @@ function kvAfter(id,okq){
                       rate:kkRate(kvVoice(id))});
   if(st.exp)q.push(kvItem(id+'_e'+(st.paren?'p':''),null,id));
   q=q.filter(Boolean);
-  if(q.length)aQueue(q);
+  if(q.length){
+    /* 読むものがある間は数えない。読み終わってから数え始める（2026-08-24 本人報告
+       「解説を読み終わる前にスキップする」「最初から半分になっている」）。 */
+    NXARM[id]=false;
+    aQueue(q,function(){NXARM[id]=true;NXID=null;nextGauge()});
+  }else{
+    NXARM[id]=true;
+  }
 }
 /* 設定のシート（出典と同じ形で下から出す） */
 function kvSheet(id){
@@ -7508,17 +7546,6 @@ function srcSheet(id){
         +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+(ch.src?'（'+esc(ch.src)+'）':'')+'</span>'
         +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
      }).join(''):'')
-   /* 出題中でも移動できるようにする（2026-08-24 本人指示「メニュー画面かなんかに移動できるように」）。
-      押すと出題を閉じてその画面へ行く。解いた記録はそのまま残る。 */
-   +(S.view==='quiz'?('<div class="hr"></div>'
-     +'<div class="mini" style="margin-bottom:6px">ここをやめて移動する</div>'
-     +'<div class="rowx" style="gap:8px;flex-wrap:wrap">'
-     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="home">ホーム</button>'
-     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="fields">学習</button>'
-     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="review">復習</button>'
-     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="game">ゲーム</button>'
-     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="analysis">分析</button>'
-     +'</div>'):'')
    +'</div>';
   m6SheetOpen();
 }

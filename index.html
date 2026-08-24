@@ -226,6 +226,7 @@ a{color:var(--chipfg)}
   .qwrap .lead{
     display:block;
     width:max(1em, round(down, 100%, 1em));
+    /* 丸めた余りを**左右に等しく**分ける（右だけ空くのを直す。2026-08-24 本人報告） */
     margin-inline:auto;
   }
 }
@@ -414,14 +415,18 @@ a{color:var(--chipfg)}
   flex:none;white-space:nowrap}
 /* ★重なりは**名前で**書く。span をまとめて指定すると、私が足した膜や塗りにも当たって
    絶対配置が負ける（2026-08-24 に2回やった）。文字は素の文字なので span.tx で包む。 */
-#nextbar .btn.gz>.tx{position:relative;z-index:2}
+#nextbar .btn.gz>.tx{position:relative;z-index:2;width:100%;text-align:center;
+  pointer-events:none}
 #nextbar .gz .lite{position:absolute;left:0;top:0;bottom:0;right:0;border-radius:12px;
   background:rgba(255,255,255,.34);pointer-events:none;z-index:1}
-/* 元の色が左から伸びる（境目＝この面の右端）。色は画面から読み取って入れる。 */
-#nextbar .gz .fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:12px 0 0 12px;
-  pointer-events:none;z-index:1}
+/* 元の色が左から伸びる（境目＝この面の右端）。色は画面から読み取って入れる。
+   ★角丸は**入れ物**で切る。塗りに角丸を付けると、満タンのとき右端が四角く見える
+   （2026-08-24 本人報告）。 */
+#nextbar .gz .fillbox{position:absolute;left:0;top:0;right:0;bottom:0;border-radius:12px;
+  overflow:hidden;pointer-events:none;z-index:1}
+#nextbar .gz .fill{position:absolute;left:0;top:0;bottom:0;width:0}
 #nextbar .gz.run .fill{width:100%;transition:width linear var(--gd)}
-#nextbar .gz.stopped .lite,#nextbar .gz.stopped .fill{display:none}
+#nextbar .gz.stopped .lite,#nextbar .gz.stopped .fillbox{display:none}
 /* 押したときの手応え（面が軽く沈む・案③） */
 .tapfx{animation:tapfx .22s ease-out}
 @keyframes tapfx{0%{transform:scale(1)}45%{transform:scale(.955)}100%{transform:scale(1)}}
@@ -1218,6 +1223,11 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qwrap .stem{flex:0 0 auto;font-family:var(--mincho);font-size:15.5px;line-height:1.95;
   border-radius:var(--radius);padding:15px 14px}
 .qwrap .stem .stemtx{font-family:var(--mincho)}
+/* 解説を肢とそろえる（2026-08-24 本人報告「肢と解説のフォントが違う・余白が一定でない」）。
+   書体・字の大きさ・行間・余白を同じにする＝1文字の幅も同じになり、
+   両端そろえの丸めの余りも同じ量になる。 */
+.qwrap .exp{font-family:var(--mincho);font-size:15.5px;line-height:1.95;padding:15px 14px}
+.qwrap .exp .exptx{font-family:var(--mincho)}
 /* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない。
    さらに sticky で「タブの上」に貼り付ける。面が短いときは元の位置のまま動かない（sticky なので）。
    下の余白（padding-bottom）だけでは、面が画面より高い問題では○×の位置が変わらず、
@@ -1416,7 +1426,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='4d9d62aa';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='59425f5b';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
