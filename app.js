@@ -3586,18 +3586,21 @@ function syncNextBar(){
    ・解説を読み終えてから数える（読み上げの行列が空になってから）
    ・ゲージは明るい下地→普通の桜色。右上の×でその問だけ止める
    ・押せばすぐ次へ。止めたらボタンは普通の色に戻る */
-var NXT=null, NXSTOP={};      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
+var NXT=null, NXID=null, NXSTOP={};      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
 function nextGauge(){
   var bar=document.getElementById('nextbar');
   var btn=bar?bar.querySelector('.btn'):null;
   if(!btn)return;
   var id=S.queue[S.qi], st=kvSet();
+  /* ★同じ問で作り直さない（2026-08-24）。描画のたびにやり直すと、取り込み中は
+     ホームのゲージが1秒ごとに描き直すのでゲージが永久に進まない（実際に起きた）。 */
+  if(NXID===id&&NXT)return;
+  NXID=id;
   /* ボタンの中身を1回だけ作る（ゲージの面と×） */
-  if(!btn.querySelector('.fill')){
+  if(!btn.querySelector('.lite')){
     btn.classList.add('gz');
     btn.insertAdjacentHTML('beforeend',
-      '<span class="lite"></span><span class="fill"><i></i></span>'
-      +'<b class="stop" data-act="nxstop">×</b>');
+      '<span class="lite"></span><span class="stop" data-act="nxstop">×</span>');
   }
   var stopped=!st.auto||!!NXSTOP[id];
   btn.classList.toggle('stopped',stopped);
@@ -3615,6 +3618,7 @@ function nextGauge(){
   }
   start();
 }
+function nextClear(){NXID=null;if(NXT){clearTimeout(NXT);NXT=null}}
 function nextStop(){
   var id=S.queue[S.qi];
   if(id)NXSTOP[id]=1;

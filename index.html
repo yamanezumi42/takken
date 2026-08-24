@@ -403,24 +403,24 @@ a{color:var(--chipfg)}
   transition:left .2s cubic-bezier(.3,.8,.3,1)}
 .sw.on{background:var(--acc)}
 .sw.on i{left:22px}
-/* ---------- 「次の問題」のゲージ（明るい→普通）と、その問だけ止める× ---------- */
-/* 下地＝ボタンの色に白を重ねて明るくする（配色9種すべてで成り立つ）。
-   経過したぶんは元の色（var(--fg)）に戻る＝「明るい→普通」（2026-08-24 本人指定）。 */
-#nextbar .btn.pri.gz{background:var(--fg);overflow:visible;position:relative}
-#nextbar .btn.pri.gz>.lite{position:absolute;left:0;top:0;right:0;bottom:0;border-radius:12px;
-  background:rgba(255,255,255,.34);pointer-events:none}
-#nextbar .btn.pri.gz>span{position:relative;z-index:1}
-#nextbar .gz .fill{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;
-  border-radius:12px;pointer-events:none}
-#nextbar .gz .fill i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--fg)}
-#nextbar .gz.run .fill i{width:100%;transition:width linear var(--gd)}
-#nextbar .gz .stop{position:absolute;right:-7px;top:-7px;z-index:2;width:22px;height:22px;
+/* ---------- 「次の問題」のゲージ（明るい→普通）と、その問だけ止める× ----------
+   ★ボタンの色は**触らない**（配色9種があるので上書きすると黒くなる。2026-08-24 実際に黒くなった）。
+   白い膜を上に重ね、時間が経つほど膜が右へ縮む＝出てくるのは元の色＝「明るい→普通」。 */
+#nextbar .btn{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent}
+/* 長押しで文字選択が始まってボタンが画面いっぱいに伸びた（2026-08-24 本人報告）。
+   選択と長押しメニューを止め、高さも固定して中身で伸びないようにする。 */
+#nextbar .btn.gz{overflow:visible;position:relative;height:44px;min-height:44px;
+  flex:none;white-space:nowrap}
+#nextbar .btn.gz>span{position:relative;z-index:2}
+#nextbar .gz .lite{position:absolute;left:0;top:0;bottom:0;right:0;border-radius:12px;
+  background:rgba(255,255,255,.34);pointer-events:none;z-index:1}
+#nextbar .gz.run .lite{left:100%;transition:left linear var(--gd)}
+#nextbar .gz .stop{position:absolute;right:-7px;top:-7px;z-index:3;width:22px;height:22px;
   border-radius:50%;background:#b98593;color:#fff;display:flex;align-items:center;
   justify-content:center;font-size:13px;line-height:1;box-shadow:0 1px 3px rgba(51,46,40,.25);
   pointer-events:auto}
-#nextbar .btn.pri.gz.stopped{background:var(--fg)}
-#nextbar .gz.stopped>.lite{display:none}
-#nextbar .gz.stopped .fill,#nextbar .gz.stopped .stop{display:none}
+#nextbar .gz.stopped .lite,#nextbar .gz.stopped .stop{display:none}
 /* 押したときの手応え（面が軽く沈む・案③） */
 .tapfx{animation:tapfx .22s ease-out}
 @keyframes tapfx{0%{transform:scale(1)}45%{transform:scale(.955)}100%{transform:scale(1)}}
@@ -1415,7 +1415,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='347dd5a7';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2cf58cd3';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
