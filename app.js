@@ -197,7 +197,7 @@ var TXD={txFont:'mincho',txSize:15.5,txLh:1.95,txLs:0,txPad:14};
 /* 帯の色と濃さ（2026-08-25 本人指定）。表の値は**濃さ1.0のときの色**。
    画面に出す色は白と混ぜて作る＝透かしにすると後ろの紙と混ざって色が読めないため。
    既定の濃さ 0.35 が、これまでの淡い色（桜 #f5e8eb 等）とほぼ同じになる。 */
-var RDCOL=[['桜','#e2bdc6'],['水色','#bdd4e8'],['若草','#b8dab2'],
+var RDCOL=[['桜','#e2bdc6'],['水色','#a9dcf0'],['若草','#b8dab2'],
            ['藤','#c9bae5'],['山吹','#e8d49e'],['灰','#c9c3b8']];
 var RDA=0.35;
 function rdBase(){
@@ -7753,8 +7753,12 @@ function rdPlan(rows,rects){
   }
   return out;
 }
-function rdMeasure(el){
-  var chs=el.querySelectorAll('.rdch'),b=el.parentNode.getBoundingClientRect(),out=[];
+function rdMeasure(el,base){
+  /* ★基準は**帯そのもの**（2026-08-25 直し）。前は el.parentNode（.stem / .exp）の外枠から
+     測っていたが、長方形は .rdband の中に置かれ、その原点は余白の内側になる。
+     .stem は padding 15px 14px ＋ 枠1px を持つので右に15px・下に16pxずれた
+     （.exp は余白が無いのでずれず、「解説は合うのに肢はずれる」になっていた）。 */
+  var chs=el.querySelectorAll('.rdch'),b=(base||el.parentNode).getBoundingClientRect(),out=[];
   for(var i=0;i<chs.length;i++){
     var r=chs[i].getBoundingClientRect();
     out.push({l:r.left-b.left,r:r.right-b.left,t:r.top-b.top,h:r.height});
@@ -7788,7 +7792,7 @@ function rdStart(id,part){
   rdWrap(tx);
   var band=wrap.querySelector('.rdband');
   if(!band){band=document.createElement('div');band.className='rdband';wrap.insertBefore(band,wrap.firstChild)}
-  var rects=rdMeasure(tx);
+  var rects=rdMeasure(tx,band);
   RDTXT=tx.textContent||'';
   RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id};
   rdTick();
