@@ -22,6 +22,33 @@ try{window.addEventListener('takken-data',function(){
   LINKQ=window.TAKKEN_LINKQ||LINKQ;DICTQ=window.TAKKEN_DICTQ||DICTQ;TABLES=window.TAKKEN_TABLES||TABLES;
   if(window.TAKKEN_VOICES&&window.TAKKEN_VOICES.length)VOICES=window.TAKKEN_VOICES;
 })}catch(e){}
+/* ---------- アプリのエラーを記録に残す（2026-08-24 本人報告） ----------
+   「undefined is not an object」と言われても、どこで起きたか分からなかった。
+   ここで受けて ST.settings.appErr に残す＝記録の同期でこちらに届く。
+   学習は止めない（画面には出さない。設定＝データに1行出す）。 */
+try{
+  window.addEventListener('error',function(e){
+    try{
+      var t=((e&&e.message)||'エラー')+'（'+String((e&&e.filename)||'').split('/').pop()
+        +':'+((e&&e.lineno)||0)+'）';
+      var k='takken_v1',o=JSON.parse(localStorage.getItem(k)||'{}');
+      o.settings=o.settings||{};
+      o.settings.appErr={at:nowStamp(),
+                         text:String(t).slice(0,300)};
+      localStorage.setItem(k,JSON.stringify(o));
+    }catch(x){}
+  });
+  window.addEventListener('unhandledrejection',function(e){
+    try{
+      var r=e&&e.reason,t=((r&&(r.message||r.name))||String(r||'')).slice(0,200)+'（約束の失敗）';
+      var k='takken_v1',o=JSON.parse(localStorage.getItem(k)||'{}');
+      o.settings=o.settings||{};
+      o.settings.appErr={at:nowStamp(),
+                         text:String(t).slice(0,300)};
+      localStorage.setItem(k,JSON.stringify(o));
+    }catch(x){}
+  });
+}catch(e){}
 var EXCL=['要確認','省略','解説なし'];
 var ITEMS=RAW.filter(function(it){var f=it.flags||[];for(var i=0;i<f.length;i++){if(EXCL.indexOf(f[i])>=0)return false}return true});
 var NEXCL=RAW.length-ITEMS.length;
@@ -1875,7 +1902,12 @@ function render(){
      同じ問を描き直したときに読み直さないよう、読んだ問を覚える。 */
   if(S.view==='quiz'&&S.phase==='q'){
     var kvid=S.queue[S.qi];
-    if(kvid&&KVLAST!==kvid){KVLAST=kvid;kvSay(kvid)}
+    if(kvid&&KVLAST!==kvid){
+      KVLAST=kvid;
+      /* 問が変わったら声を選び直す＝その問の中では変わらない（2026-08-24） */
+      if(ST.settings.kkRnd)KVV=null;
+      kvSay(kvid);
+    }
   }
   if(S.view!=='quiz'){KVLAST=null;if(AQ.cur&&!GM)aClear()}
   /* クラスを外す→強制リフロー→付け直す。これをしないと innerHTML の作り直しでも
@@ -5251,6 +5283,11 @@ function dataSheet(){
    /* 問題データは**起動時に勝手に取り込む**。押すボタンは置かない（2026-08-18 本人指示）。
       ここには「いま何で動いているか」だけ出す。 */
    +'<div class="mini" id="dpstat" style="margin-top:8px;min-height:16px">'
+   /* 記録に残ったエラー（2026-08-24）。出ていれば私が読める＝聞かずに直せる。 */
+   +((ST.settings&&(ST.settings.appErr||ST.settings.lastErr))
+     ?('<div class="mini" style="margin-top:6px;color:var(--ngdeep)">最後のエラー '
+       +esc(((ST.settings.appErr||ST.settings.lastErr).at||''))+'　'
+       +esc(((ST.settings.appErr||ST.settings.lastErr).text||''))+'</div>'):'')
    +(window.TAKKEN_SRC?('いま使っているデータ＝'+esc(window.TAKKEN_SRC.src)+'／'
       +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'
       /* 読み上げの音が何問ぶん入っているか（2026-08-24 本人報告「音声は言ってなかった」）。
@@ -7154,7 +7191,7 @@ function kvPut(k,v){ST.settings[k]=v;saveST()}
 function kvHas(id){
   var M=window.TAKKEN_MEDIA;
   if(M&&Object.keys(M).length){
-    var sid=kkVoice();
+    var sid=kvVoice();
     if(!sid)return false;
     return !!M['voice_k/'+sid+'/'+id+'_s.m4a'];
   }
@@ -7166,16 +7203,25 @@ function kvCount(){
   Object.keys(M).forEach(function(k){if(k.indexOf('voice_k/')===0&&k.slice(-6)==='_s.m4a')n++});
   return n;
 }
+/* その問で使う声。**1問につき1つに固定する**（2026-08-24 本人報告）。
+   ランダムのときに部品ごとに選び直すと、問題文と肢で声が変わり、
+   片方の音が端末に無ければその部品だけ無音になる。 */
+var KVV=null;
+function kvVoice(){
+  if(KVV)return KVV;
+  KVV=kkVoice();
+  return KVV;
+}
 /* 読む部品を並べる。（）の中を読む設定なら _p 付きのファイルを使う。 */
 function kvItem(name,rate){
-  var sid=kkVoice();
+  var sid=kvVoice();
   if(!sid)return null;
   return {src:mediaSrc('voice_k/'+sid+'/'+name+'.m4a'),rate:rate||kkRate(sid)};
 }
 /* 問題が出たとき＝問題文→肢。答えたとき＝正解／不正解→解説。 */
 function kvSay(id,after){
   var st=kvSet();
-  if(!st.on||!kkVoice())return;
+  if(!st.on||!kvVoice())return;
   var it=BY[id];if(!it)return;
   var pz=st.paren?'p':'';
   var q=[];
@@ -7187,10 +7233,10 @@ function kvSay(id,after){
 }
 function kvAfter(id,okq){
   var st=kvSet();
-  if(!st.on||!kkVoice())return;
+  if(!st.on||!kvVoice())return;
   var q=[];
-  if(st.judge)q.push({src:mediaSrc('voice/'+kkVoice()+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
-                      rate:kkRate(kkVoice())});
+  if(st.judge)q.push({src:mediaSrc('voice/'+kvVoice()+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
+                      rate:kkRate(kvVoice())});
   if(st.exp)q.push(kvItem(id+'_e'+(st.paren?'p':'')));
   q=q.filter(Boolean);
   if(q.length)aQueue(q);
