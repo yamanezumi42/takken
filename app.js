@@ -192,6 +192,46 @@ function svg2(d){return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidde
 var THEMES=[['1','桜鼠'],['2','ミント'],['3','藤'],['4','桃'],['5','水'],
             ['6','桃と水'],['7','ミルクティー'],['8','白と桃'],['9','生成り']];
 function themeNow(){var t=ST&&ST.settings&&ST.settings.theme;return (t&&/^[1-9]$/.test(t))?t:'1'}
+/* 本文の見た目を当てる（設定の値→CSS変数）。触っていない項目は既定のまま。 */
+var TXD={txFont:'mincho',txSize:15.5,txLh:1.95,txLs:0,txPad:14};
+function txSet(){
+  var o=(ST&&ST.settings)||{},r={};
+  r.font=(o.txFont==='goth')?'goth':'mincho';
+  r.size=Math.min(22,Math.max(13,+o.txSize||TXD.txSize));
+  r.lh=Math.min(2.4,Math.max(1.5,+o.txLh||TXD.txLh));
+  r.ls=Math.min(0.12,Math.max(0,(o.txLs===undefined?TXD.txLs:+o.txLs)||0));
+  r.pad=Math.min(24,Math.max(6,+o.txPad||TXD.txPad));
+  return r;
+}
+/* 設定の1行＝ラベル＋スライダー＋いまの値 */
+function txRow(id,label,mn,mx,st,val,unit){
+  var show=(unit==='em')?val.toFixed(3)+unit:(unit?val+unit:val.toFixed(2));
+  return '<div class="kk-row"><span class="lb">'+label+'</span>'
+    +'<input class="sl" type="range" min="'+mn+'" max="'+mx+'" step="'+st
+    +'" value="'+val+'" id="'+id+'" data-unit="'+unit+'">'
+    +'<span class="slv num" id="'+id+'-v">'+show+'</span></div>';
+}
+/* スライダーを配線する。動かした瞬間に見本と本文の両方が変わる。 */
+function txWire(){
+  var map={'tx-size':'txSize','tx-lh':'txLh','tx-ls':'txLs','tx-pad':'txPad'};
+  Object.keys(map).forEach(function(id){
+    var el=document.getElementById(id); if(!el)return;
+    el.oninput=function(){
+      var v=+this.value,unit=this.getAttribute('data-unit');
+      ST.settings[map[id]]=v; saveST(); applyText();
+      var o=document.getElementById(id+'-v');
+      if(o)o.textContent=(unit==='em')?v.toFixed(3)+unit:(unit?v+unit:v.toFixed(2));
+    };
+  });
+}
+function applyText(){
+  var t=txSet(),d=document.documentElement.style;
+  d.setProperty('--txfont',t.font==='goth'?'var(--font)':'var(--mincho)');
+  d.setProperty('--txsize',t.size+'px');
+  d.setProperty('--txlh',String(t.lh));
+  d.setProperty('--txls',t.ls+'em');
+  d.setProperty('--txpad',t.pad+'px');
+}
 function applyTheme(){
   var t=themeNow();
   if(t==='1')document.documentElement.removeAttribute('data-theme');
@@ -211,6 +251,10 @@ var IC={
  home:svg('<path d="M3.5 10.5 12 4l8.5 6.5V20a.5.5 0 0 1-.5.5h-5v-6h-6v6H4a.5.5 0 0 1-.5-.5z"/>'),
  book:svg('<path d="M4 4.5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 4.5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/>'),
  again:svg('<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.5V7h-3.5"/>'),
+ /* 本文の見た目（2026-08-24）。大きいAと小さいaで「文字の見た目」を表す。 */
+ aa:svg('<path d="M2.5 19 7 5.5 11.5 19"/><path d="M4 14.5h6"/>'
+        +'<path d="M20.5 12.8v6.2"/>'
+        +'<path d="M20.5 15a2.6 2.6 0 1 0 0 3.2 2.6 2.6 0 0 0 0-3.2z"/>'),
  chart:svg('<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 20v-6"/><path d="M13 20V9"/><path d="M18 20v-9"/>'),
  star:svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/>'),
  /* 汎用の再生。2026-08-15 に動画の導線は全部 IC.yt（YouTubeのマーク）へ移したので今は未使用。
@@ -724,7 +768,17 @@ function vurl(vid,sec){return 'https://youtu.be/'+vid+'?t='+(sec||0)}
 function figSrc(p){var m=window.TAKKEN_FIGS;return (m&&m[p])?m[p]:p}
 /* 音（voice/・se/）も図と同じ。端末では data URI、開発用の app.html では相対パス。
    ここを通さないと、端末で音が404になる（2026-08-23）。 */
-function mediaSrc(p){var m=window.TAKKEN_MEDIA;return (m&&m[p])?m[p]:p}
+/* 音の在り処を返す。（2026-08-24 作り替え）
+   殻では効果音・聞き取り2択の声は data URI で持っているが、
+   **過去問の読み上げ（voice_k）は中身を持たず、印（1）だけ**入っている。
+   493MB 全部をメモリに置いていて iPhone が落ちていたため（実測662MB）。
+   印だったときは「鳴らす直前に1本だけ取り出す関数」を返す＝aRun が待って鳴らす。 */
+function mediaSrc(p){
+  var m=window.TAKKEN_MEDIA;
+  if(!m||!m[p])return p;
+  if(m[p]===1&&window.TAKKEN_MEDIA_GET)return function(){return window.TAKKEN_MEDIA_GET(p)};
+  return m[p];
+}
 /* 分を「○時間○分」にする（2026-08-24 本人指示「通算系は時間もかっこで」）。
    60分未満は null を返す＝かっこを付けない（短いのに二重に書かない）。 */
 function hhm(mins){
@@ -763,6 +817,7 @@ function addD(day,n){var d=new Date((dnum(day)+n)*86400000);return d.getUTCFullY
 var LSOK=true;
 var ST=loadST();
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
+applyText();           /* 本文の見た目（大きさ・行間・字間・余白・書体）も先に当てる */
 setTimeout(function(){try{ghAuto('boot')}catch(e){}},4000);    /* 起動のたび（中身が変わっていれば） */
 /* 記録が壊れて読めなかったら、**元の文字列を退避してから**空で始める。
    退避しないと直後の saveST() が原本を上書きして、部分的に救えたはずの記録まで消える
@@ -3513,6 +3568,10 @@ function vQuiz(){
     +'<span class="qtime num" id="qtime">'+mmss(runSec())+'</span>'
     +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
     /* 読み上げ（★と出典の間・アイコンだけ）。2026-08-23 本人指示 */
+    /* 本文の見た目（2026-08-24 本人指示「問題のところでいじれるように」）。
+       出題画面から開く＝実際の問題文を見ながら決められる。 */
+    +'<button class="btn sm" style="min-height:28px;padding:0 8px"'
+    +' data-act="txsheet" aria-label="本文の見た目">'+IC.aa+'</button>'
     +'<button class="btn sm'+(kvOn()?' acc':'')+'" style="min-height:28px;padding:0 8px"'
     +' data-act="kvsheet" aria-label="読み上げ">'+IC.sound+'</button>'
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
@@ -3586,7 +3645,11 @@ function syncNextBar(){
    ・解説を読み終えてから数える（読み上げの行列が空になってから）
    ・ゲージは明るい下地→普通の桜色。右上の×でその問だけ止める
    ・押せばすぐ次へ。止めたらボタンは普通の色に戻る */
-var NXT=null, NXID=null, NXSTOP={}, NXARM={};  /* NXARM＝読み上げが終わったか */      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
+var NXT=null, NXID=null, NXSTOP={}, NXARM={};
+/* 止めた位置を覚える（2026-08-24 本人指定「5秒のうち3秒で止めたら3秒から再開」）。
+   NXEL＝その問で数えた合計ミリ秒／NXT0＝いま数え始めた時刻／NXPAUSED＝止めている
+   NXLAST＝NXEL が誰のものか（問が変わったときだけ0に戻す） */
+var NXEL={}, NXT0=0, NXPAUSED=false, NXLAST=null;  /* NXARM＝読み上げが終わったか */      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
 function nextGauge(){
   var bar=document.getElementById('nextbar');
   var btn=bar?bar.querySelector('.btn'):null;
@@ -3596,31 +3659,24 @@ function nextGauge(){
      ホームのゲージが1秒ごとに描き直すのでゲージが永久に進まない（実際に起きた）。 */
   if(NXID===id&&NXT)return;
   NXID=id;
-  /* ボタンの中身を1回だけ作る（ゲージの面と×） */
-  if(!btn.querySelector('.lite')){
+  /* 文字を span.tx で包むだけ（膜は背景でやるので、重ねる要素は作らない） */
+  if(!btn.classList.contains('gz')){
     btn.classList.add('gz');
-    /* 「次の問題」は素の文字なので span で包む（重ねる面より上に出すため） */
     if(!btn.querySelector('.tx')){
       var lab=btn.textContent.trim()||'次の問題';
       btn.textContent='';
       var sp=document.createElement('span');sp.className='tx';sp.textContent=lab;
       btn.appendChild(sp);
     }
-    btn.insertAdjacentHTML('beforeend',
-      '<span class="lite"></span><span class="fillbox"><i class="fill"></i></span>');
   }
-  /* ボタンの実際の色を読み取って、伸びる面に入れる（配色9種に依存しない） */
-  var fl=btn.querySelector('.fill');
-  if(fl)fl.style.background=getComputedStyle(btn).backgroundColor;
+  if(NXLAST!==id){NXEL={};NXLAST=id;NXPAUSED=false}   /* 問が変わったら数えた分を捨てる */
   var stopped=!st.auto||!!NXSTOP[id];
   btn.classList.toggle('stopped',stopped);
   if(NXT){clearTimeout(NXT);NXT=null}
-  /* ★問が変わったら必ず0に戻す（前の問の印が残ると最初から満タンに見える。
-     2026-08-24 本人報告「最初から半分になってて時間経過で見れてない」の真因）。 */
-  btn.classList.remove('run');
-  if(fl){fl.style.transition='none';fl.style.width='0px';void fl.offsetWidth;
-         fl.style.transition='';fl.style.width=''}
-  if(stopped)return;
+  if(stopped){btn.style.transition='';btn.style.backgroundSize='';return}
+  /* ★問が変わったら必ず満タン（膜が全面）に戻す。前の問の位置が残ると
+     最初から半分進んで見える（2026-08-24 本人報告の真因）。 */
+  if(!NXPAUSED)gzPaint(btn,1,0);
   /* 読み上げが終わってから数え始める（鳴っている間は待つ） */
   function start(){
     if(S.phase!=='exp'||S.queue[S.qi]!==id)return;
@@ -3629,21 +3685,51 @@ function nextGauge(){
     /* 合図（読み上げの終わり）が来ていなければ数えない。
        鳴っている間・止めている間も待つ。 */
     if(NXARM[id]===false||AQ.cur||AQ.list.length||AQ.paused){NXT=setTimeout(start,300);return}
-    btn.style.setProperty('--gd',st.wait+'s');
-    btn.classList.remove('run');void btn.offsetWidth;btn.classList.add('run');
+    /* 止めた分を差し引いた**残り時間**で走らせる（3秒で止めたら残り2秒） */
+    var total=st.wait*1000, remain=Math.max(150,total-(NXEL[id]||0));
+    gzPaint(btn,remain/total,remain);
+    NXT0=Date.now();
     NXT=setTimeout(function(){
       if(S.phase==='exp'&&S.queue[S.qi]===id&&!NXSTOP[id]){aSe('move');next()}
-    },st.wait*1000);
+    },remain);
   }
+  if(NXPAUSED)return;                 /* 止めている間は数え始めない */
   start();
 }
-function nextClear(){NXID=null;NXARM={};if(NXT){clearTimeout(NXT);NXT=null}}
+/* ゲージ＝ボタンの背景を1枚だけ動かす。frac＝いま残っている膜の割合（1＝満タン）。
+   durMs>0 なら、そこから0へ durMs かけて縮める。 */
+function gzPaint(btn,frac,durMs){
+  btn.style.transition='none';
+  btn.style.backgroundSize=(frac*100)+'% 100%';
+  void btn.offsetWidth;                       /* いったん確定させてから動かす */
+  if(durMs>0){btn.style.transition='background-size '+durMs+'ms linear';
+              btn.style.backgroundSize='0% 100%'}
+}
+/* 画面タップで**その場で止める**（位置を覚える）。止めるものが無ければ false。 */
+function nextFreeze(){
+  var id=S.queue[S.qi];
+  if(!id||NXPAUSED||!NXT||!NXT0)return false;   /* NXT0＝実際に数えているときだけ */
+  clearTimeout(NXT);NXT=null;
+  NXEL[id]=(NXEL[id]||0)+(Date.now()-NXT0);NXT0=0;NXPAUSED=true;
+  var bar=document.getElementById('nextbar'),btn=bar?bar.querySelector('.btn'):null;
+  if(btn){var bs=getComputedStyle(btn).backgroundSize;   /* いま見えている幅そのまま */
+          btn.style.transition='none';btn.style.backgroundSize=bs}
+  return true;
+}
+/* 止めた位置から再開する。 */
+function nextResume(){
+  if(!NXPAUSED)return false;
+  NXPAUSED=false;NXID=null;nextGauge();       /* NXLAST は変えない＝数えた分を保つ */
+  return true;
+}
+function nextClear(){NXID=null;NXARM={};NXEL={};NXT0=0;NXPAUSED=false;NXLAST=null;if(NXT){clearTimeout(NXT);NXT=null}}
 function nextStop(){
   var id=S.queue[S.qi];
   if(id)NXSTOP[id]=1;
   if(NXT){clearTimeout(NXT);NXT=null}
   var bar=document.getElementById('nextbar'),btn=bar?bar.querySelector('.btn'):null;
-  if(btn){btn.classList.remove('run');btn.classList.add('stopped')}
+  NXPAUSED=false;NXT0=0;
+  if(btn){btn.classList.add('stopped');btn.style.transition='';btn.style.backgroundSize=''}
 }
 /* 回答したら、正誤の行が画面の上（固定ヘッダーのすぐ下）に来るまでスクロールする。
    これが無いと、長い問題では○×を押しても解説の頭が画面の外にあって読めない。
@@ -4333,13 +4419,24 @@ function aRun(){
   var a=ael();
   /* 読み上げの音量（2026-08-23 本人報告 d38）。行列に流れるのは読み上げだけ。 */
   a.volume=Math.min(1,Math.max(0,((it.vol===undefined)?1:it.vol)*kkVol('v')));
-  a.src=it.src;
   a.playbackRate=it.rate||1;
-  AQ.cur=a;
-  var pr=a.play();
-  if(pr&&pr.catch)pr.catch(function(){AQ.cur=null;aRun()});
-  /* 速さは src を入れ替えると戻ることがあるので、鳴り始めに入れ直す */
-  try{a.onplaying=function(){a.playbackRate=it.rate||1}}catch(e){}
+  AQ.cur=a;                       /* 先に押さえる＝取り出している間に二重に走らせない */
+  function go(url){
+    if(AQ.cur!==a)return;         /* 取り出している間に止められた／次へ進んだ */
+    a.src=url;
+    a.playbackRate=it.rate||1;
+    if(AQ.paused){try{a.pause()}catch(e){}return}
+    var pr=a.play();
+    if(pr&&pr.catch)pr.catch(function(){AQ.cur=null;aRun()});
+    /* 速さは src を入れ替えると戻ることがあるので、鳴り始めに入れ直す */
+    try{a.onplaying=function(){a.playbackRate=it.rate||1}}catch(e){}
+  }
+  /* 過去問の音は端末の中（IndexedDB）から1本だけ取り出す＝mediaSrc が関数を返す */
+  if(typeof it.src==='function'){
+    it.src().then(go,function(){if(AQ.cur===a){AQ.cur=null;aRun()}});
+    return;
+  }
+  go(it.src);
 }
 /* 効果音は**待ち行列に入れず**その場で鳴らす（2026-08-23）。
    行列は「読み上げが被らないように」あるもので、効果音は読み上げではない。
@@ -4490,7 +4587,7 @@ function kkCount(sec){
    ここは**公開しない**素材なので、殻（pwa）には入れず問題データ側で配る。 */
 /* 3秒前の音は「気づくが邪魔しない」程度に（2026-08-23 本人「うるさすぎる」）。 */
 /* 3秒前の音は「チリン」（2026-08-23 本人指摘で2度目の差し替え）。控えめに0.22。 */
-var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55,dec:0.42,cancel:0.38,move:0.34};   /* 押したときの音（2026-08-24 本人が選んだ3つ） */
+var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55,dec:0.42,cancel:0.22,move:0.34};   /* 押したときの音（2026-08-24 本人が選んだ3つ） */
 /* 効果音を直接鳴らす（カウントダウンの小さい音だけ。声と同時には鳴らないので行列に入れない）。
    線つなぎの正誤の音もここを使う（あちらは声が無い）。 */
 function se(name){
@@ -5368,7 +5465,7 @@ function repListHtml(){
 function dataSheet(){
   var m=document.getElementById('modal');
   var json=stOut();
-  var lv=fxLevel();
+  var lv=fxLevel(),tx=txSet();
   var lvs=[['auto','デフォルト（3段階）'],['strong','強'],['weak','弱'],['off','なし']];
   m.innerHTML='<div class="sheet">'
    +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">設定とデータ</div>'
@@ -5450,6 +5547,24 @@ function dataSheet(){
        +'<span class="thnm">'+t[1]+'</span></button>';}).join('')
    +'</div>'
    +'<div class="hr"></div>'
+   /* 本文の見た目（2026-08-24 本人指示）。見本がその場で変わる＝数字を見ずに決められる。 */
+   +'<div class="mini" style="margin-bottom:6px">本文の見た目（肢・解説・問題文）</div>'
+   +'<div class="qwrap" id="txprev" style="padding:0;min-height:0;gap:0;margin-bottom:10px">'
+     +'<div class="stem" style="border:1px solid var(--line);background:var(--panel)">'
+     +'<span class="stemtx">宅地建物取引業者は、重要事項の説明を行うにあたり、'
+     +'買主に対して書面を交付しなければならない。</span></div></div>'
+   +'<div class="kk-row"><span class="lb">書体</span><span class="bs">'
+   +'<button class="tog'+(tx.font==='mincho'?' on':'')+'" style="margin:0 6px 0 0"'
+   +' data-act="txfont" data-v="mincho">明朝</button>'
+   +'<button class="tog'+(tx.font==='goth'?' on':'')+'"'
+   +' data-act="txfont" data-v="goth">ゴシック</button></span></div>'
+   +txRow('tx-size','大きさ',13,22,0.5,tx.size,'px')
+   +txRow('tx-lh','行間',1.5,2.4,0.05,tx.lh,'')
+   +txRow('tx-ls','字間',0,0.12,0.005,tx.ls,'em')
+   +txRow('tx-pad','余白',6,24,1,tx.pad,'px')
+   +'<button class="btn sm" style="width:auto;margin-top:4px" data-act="txreset">'
+   +'既定に戻す</button>'
+   +'<div class="hr"></div>'
    +'<div class="mini" style="margin-bottom:6px">演出（回答したときの見た目）</div><div>'
    +lvs.map(function(x){return '<button class="tog'+(lv===x[0]?' on':'')+'" style="margin:0 6px 6px 0" data-act="fxlv" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')
    +'</div>'
@@ -5478,6 +5593,7 @@ function dataSheet(){
    +'<button class="btn" style="margin-top:10px;color:var(--ngdeep);border-color:#f0c9c4" data-act="wipe">進行状況を全消去</button>'
    +'<div id="msg" class="mini" style="margin-top:10px"></div></div>';
   m6SheetOpen();
+  txWire();      /* 本文の見た目のスライダーを配線する（開いた後でないと要素が無い） */
 }
 function msg(t){var e=document.getElementById('msg');if(e)e.textContent=t}
 /* 記録をJSONのファイルにして共有シートへ渡す。iOSは navigator.share でファイルを扱える。
@@ -5872,7 +5988,8 @@ document.addEventListener('click',function(e){
       if(AQ.cur||AQ.list.length){aPause();msg('読み上げを止めました（もう一度タップで再開）');return}
       /* 自動送り＝走っていれば止める／止めていれば再開する（2026-08-24 本人の要望） */
       var qid=S.queue[S.qi];
-      if(NXT){nextStop();msg('自動で次へを止めました（もう一度タップで再開）');return}
+      if(nextFreeze()){msg('自動で次へを止めました（もう一度タップで再開）');return}
+      if(nextResume()){msg('自動で次へを再開しました');return}
       if(qid&&NXSTOP[qid]&&kvSet().auto&&S.phase==='exp'){
         delete NXSTOP[qid];NXID=null;nextGauge();msg('自動で次へを再開しました');return;
       }
@@ -6214,6 +6331,15 @@ document.addEventListener('click',function(e){
   if(a==='ghpush'){ghPush(false);return}
   if(a==='ghpull'){ghPull();return}
   /* 配色の切替。色だけを入れ替えるので、開いている画面はそのままでよい */
+  /* 本文の見た目（2026-08-24 本人指示）。押した瞬間に当てて、設定を開き直す。 */
+  if(a==='txsheet'){txSheet();return}
+  if(a==='txfont'){var fv=t.getAttribute('data-v');
+    ST.settings.txFont=(fv==='goth')?'goth':'mincho';saveST();applyText();
+    if(t.getAttribute('data-back')==='tx')txSheet();else dataSheet();return}
+  if(a==='txreset'){delete ST.settings.txFont;delete ST.settings.txSize;
+    delete ST.settings.txLh;delete ST.settings.txLs;delete ST.settings.txPad;
+    saveST();applyText();
+    if(t.getAttribute('data-back')==='tx')txSheet();else dataSheet();return}
   if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
     applyTheme();dataSheet();}return}
   if(a==='srcf'){var sv=t.getAttribute('data-v');S.srcF=sv||null;render();return}
@@ -7470,6 +7596,31 @@ function kvAfter(id,okq){
   }
 }
 /* 設定のシート（出典と同じ形で下から出す） */
+/* 本文の見た目のシート（2026-08-24 本人指示）。出題画面から開く。
+   下寄せの短いシートにして、上に問題文が残るようにする＝動かした結果がその場で見える。 */
+function txSheet(){
+  var m=document.getElementById('modal'); if(!m)return;
+  var tx=txSet();
+  m.innerHTML='<div class="sheet" id="txsheet">'
+    +'<div class="spread" style="margin-bottom:10px">'
+    +'<div class="h" style="margin:0">本文の見た目</div>'
+    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+    +'<div class="mini" style="margin-bottom:8px">動かすとうしろの問題文がその場で変わります。</div>'
+    +'<div class="kk-row"><span class="lb">書体</span><span class="bs">'
+    +'<button class="tog'+(tx.font==='mincho'?' on':'')+'" style="margin:0 6px 0 0"'
+    +' data-act="txfont" data-v="mincho" data-back="tx">明朝</button>'
+    +'<button class="tog'+(tx.font==='goth'?' on':'')+'"'
+    +' data-act="txfont" data-v="goth" data-back="tx">ゴシック</button></span></div>'
+    +txRow('tx-size','大きさ',13,22,0.5,tx.size,'px')
+    +txRow('tx-lh','行間',1.5,2.4,0.05,tx.lh,'')
+    +txRow('tx-ls','字間',0,0.12,0.005,tx.ls,'em')
+    +txRow('tx-pad','余白',6,24,1,tx.pad,'px')
+    +'<button class="btn sm" style="width:auto;margin-top:6px" data-act="txreset"'
+    +' data-back="tx">既定に戻す</button>'
+    +'</div>';
+  m6SheetOpen();
+  txWire();
+}
 function kvSheet(id){
   var st=kvSet(),m=document.getElementById('modal');
   function tg2b(k,on,lab){

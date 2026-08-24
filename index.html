@@ -53,6 +53,14 @@
   --font:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif;
   --mincho:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
   --num:"SFMono-Regular",Menlo,Consolas,"Courier New",monospace;
+  /* 本文（肢・解説・問題文）の見た目。設定でいじれる（2026-08-24 本人指示
+     「文字間や行間やフォントの大きさ、余白など設定でいじれるように」）。
+     ここが既定値＝設定を触っていない状態。 */
+  --txfont:var(--mincho);   /* 書体（明朝＝同梱の Zen Old Mincho／ゴシック） */
+  --txsize:15.5px;          /* 文字の大きさ */
+  --txlh:1.95;              /* 行間 */
+  --txls:0em;               /* 字間 */
+  --txpad:14px;             /* 枠の内側の左右 */
 }
 /* ---- 配色 2〜9（設定で切替。html[data-theme] に付ける） ---- */
 :root[data-theme="2"]{--bg:#f6fbf8;--panel:#fff;--fg:#2f3d38;--muted:#7d938b;--acc:#5cc5a0;--accd:#2f8b6d;
@@ -225,11 +233,19 @@ a{color:var(--chipfg)}
   .qwrap .exp .exptx,
   .qwrap .lead{
     display:block;
-    width:max(1em, round(down, 100%, 1em));
-    /* 丸めた余りを**左右に等しく**分ける（右だけ空くのを直す。2026-08-24 本人報告） */
+    /* 1文字の送り＝1em＋字間。字間を広げたら丸めもそれに合わせる（2026-08-24） */
+    width:max(1em, round(down, 100%, calc(1em + var(--txls, 0em))));
+    /* 丸めた余りを**左右に等しく**分ける */
     margin-inline:auto;
   }
 }
+/* ★右だけ大きく空く本当の原因（2026-08-24 実測で特定）＝ text-wrap:pretty。
+   これは行末の泣き別れを避けるために**行をわざと短く折り返す**指定で、
+   iPhone（iOS 26）では効き、PC の Chrome では効かない。だから本人の言う
+   「PCはしっかりしてるのにスマホはだめ」になっていた。
+   本人のスクショから逆算すると、右に約47px（3文字ぶん）＝丸めの端数11.5pxでは説明できない量。
+   泣き別れの見た目より、左右の余白がそろうことを取る＝本文では pretty を使わない。 */
+.qwrap .stem,.qwrap .exp,.qwrap .lead{text-wrap:wrap}
 /* 図表：入れ物の幅を超えないこと（超えるものは横スクロール。縦横比は height:auto で保つ） */
 .figbox{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0 0}
 .fig{max-width:100%;height:auto;border:1px solid var(--line);border-radius:var(--radius);display:block}
@@ -411,22 +427,20 @@ a{color:var(--chipfg)}
   -webkit-tap-highlight-color:transparent}
 /* 長押しで文字選択が始まってボタンが画面いっぱいに伸びた（2026-08-24 本人報告）。
    選択と長押しメニューを止め、高さも固定して中身で伸びないようにする。 */
-#nextbar .btn.gz{overflow:visible;position:relative;height:44px;min-height:44px;
-  flex:none;white-space:nowrap}
-/* ★重なりは**名前で**書く。span をまとめて指定すると、私が足した膜や塗りにも当たって
-   絶対配置が負ける（2026-08-24 に2回やった）。文字は素の文字なので span.tx で包む。 */
+#nextbar .btn.gz{overflow:hidden;position:relative;height:44px;min-height:44px;
+  flex:none;white-space:nowrap;
+  /* ★重ねをやめて**1枚の背景**にした（2026-08-24 本人指摘「作りが荒い・カーブがずれてる」）。
+     前は3枚（明るい下地／切り抜きの入れ物／伸びる面）を重ねていて、
+     それぞれの角丸が1pxずれ、角に段と点々が見えていた。
+     いまは白い膜を**背景画像**として置き、右に寄せて幅を縮める＝元の色が左から出てくる。
+     背景はボタン自身の角丸で切られるので、角のずれが構造的に起きない。 */
+  background-image:linear-gradient(rgba(255,255,255,.34),rgba(255,255,255,.34));
+  background-repeat:no-repeat;background-position:right center;background-size:100% 100%}
+/* この問だけ自動を止めた／自動が切ってあるときは、膜を出さない＝普通のボタンの色 */
+#nextbar .btn.gz.stopped{background-image:none}
+/* 文字は膜より上。幅を固定しないと、止めたときに文字が左へずれる（2026-08-24 本人報告） */
 #nextbar .btn.gz>.tx{position:relative;z-index:2;width:100%;text-align:center;
   pointer-events:none}
-#nextbar .gz .lite{position:absolute;left:0;top:0;bottom:0;right:0;border-radius:12px;
-  background:rgba(255,255,255,.34);pointer-events:none;z-index:1}
-/* 元の色が左から伸びる（境目＝この面の右端）。色は画面から読み取って入れる。
-   ★角丸は**入れ物**で切る。塗りに角丸を付けると、満タンのとき右端が四角く見える
-   （2026-08-24 本人報告）。 */
-#nextbar .gz .fillbox{position:absolute;left:0;top:0;right:0;bottom:0;border-radius:12px;
-  overflow:hidden;pointer-events:none;z-index:1}
-#nextbar .gz .fill{position:absolute;left:0;top:0;bottom:0;width:0}
-#nextbar .gz.run .fill{width:100%;transition:width linear var(--gd)}
-#nextbar .gz.stopped .lite,#nextbar .gz.stopped .fillbox{display:none}
 /* 押したときの手応え（面が軽く沈む・案③） */
 .tapfx{animation:tapfx .22s ease-out}
 @keyframes tapfx{0%{transform:scale(1)}45%{transform:scale(.955)}100%{transform:scale(1)}}
@@ -1220,14 +1234,15 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
   min-height:calc(100dvh - 188px)}           /* 上のヘッダーと下のタブを引いた高さ */
 /* B1：面（問題文）は文章の高さにぴったり合わせ、上に寄せる。引き伸ばさない。
    左右の余白は詰める＝1行に入る字数を増やして、行末の空きを減らすため。 */
-.qwrap .stem{flex:0 0 auto;font-family:var(--mincho);font-size:15.5px;line-height:1.95;
-  border-radius:var(--radius);padding:15px 14px}
-.qwrap .stem .stemtx{font-family:var(--mincho)}
+.qwrap .stem{flex:0 0 auto;font-family:var(--txfont);font-size:var(--txsize);
+  line-height:var(--txlh);border-radius:var(--radius);padding:15px var(--txpad)}
+.qwrap .stem .stemtx{font-family:var(--txfont);letter-spacing:var(--txls)}
 /* 解説を肢とそろえる（2026-08-24 本人報告「肢と解説のフォントが違う・余白が一定でない」）。
    書体・字の大きさ・行間・余白を同じにする＝1文字の幅も同じになり、
    両端そろえの丸めの余りも同じ量になる。 */
-.qwrap .exp{font-family:var(--mincho);font-size:15.5px;line-height:1.95;padding:15px 14px}
-.qwrap .exp .exptx{font-family:var(--mincho)}
+.qwrap .exp{font-family:var(--txfont);font-size:var(--txsize);line-height:var(--txlh);
+  padding:15px var(--txpad)}
+.qwrap .exp .exptx{font-family:var(--txfont);letter-spacing:var(--txls)}
 /* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない。
    さらに sticky で「タブの上」に貼り付ける。面が短いときは元の位置のまま動かない（sticky なので）。
    下の余白（padding-bottom）だけでは、面が画面より高い問題では○×の位置が変わらず、
@@ -1426,7 +1441,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='59425f5b';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='eb9496f3';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1477,18 +1492,55 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     });
   }
   /* 版の情報にある全ファイルを、1件ずつ読み集める。 */
+  /* ★音のうち**過去問の読み上げ（voice_k）は中身をメモリに置かない**（2026-08-24）。
+     置いていたせいで、取り込みが進むほど JS の文字列が膨らみ、実測で 662MB に達して
+     iPhone が描画プロセスごと落ちていた（本人報告「ピンチすると謎のエラー」＝
+     "問題が繰り返し起きました"＝WebKit の強制終了）。
+     効果音（0.3MB）と聞き取り2択の声（25MB）はそのまま持つ＝すぐ鳴らす必要があるため。
+     voice_k は「どの束に入っているか」だけ覚えて、鳴らす直前に1本だけ取り出す。 */
+  var MEDIA={}, MHAS={}, MWHERE={};
   function loadParts(man){
     var names=Object.keys((man&&man.files)||{}),out={},i=0;
     function step(){
       if(i>=names.length)return Promise.resolve(out);
       var p=names[i++];
       return get(pkey(p)).then(function(o){
-        if(o!==null&&o!==undefined)out[p]=o;
+        if(o===null||o===undefined)return step();
+        if(p.indexOf('media/')===0){
+          for(var k in o){
+            if(k.indexOf('voice_k/')===0){MHAS[k]=1;MWHERE[k]=p}
+            else MEDIA[k]=o[k];
+          }
+          o=null;                     /* 束そのものは捨てる＝ここが要点 */
+          return step();
+        }
+        out[p]=o;
         return step();
       },function(){return step()});
     }
     return step();
   }
+  /* 鳴らす直前に1本だけ取り出す。直近8本だけ一時URLを持ち、古いものは解放する
+     （解放しないと一時URLが溜まって同じことになる）。 */
+  var MCACHE=[];
+  window.TAKKEN_MEDIA_GET=function(key){
+    for(var i=0;i<MCACHE.length;i++)if(MCACHE[i].key===key)return Promise.resolve(MCACHE[i].url);
+    var p=MWHERE[key];
+    if(!p)return Promise.reject(new Error('音の在り処がありません'));
+    return get(pkey(p)).then(function(o){
+      var d=o&&o[key];
+      if(!d)throw new Error('束の中に音がありません');
+      return fetch(d).then(function(r){return r.blob()}).then(function(b){
+        var url=URL.createObjectURL(b);
+        MCACHE.push({key:key,url:url});
+        while(MCACHE.length>8){
+          var old=MCACHE.shift();
+          try{URL.revokeObjectURL(old.url)}catch(e){}
+        }
+        return url;
+      });
+    });
+  };
   /* 古い形（1件に parts を抱えている）を、1件ずつの形へ移す。
      読めない・書けないときは false を返す＝取り直す。 */
   function migrate(rec){
@@ -1505,11 +1557,13 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   /* parts（ファイルごとの中身）から、アプリが読む形に組み立てる。 */
   function assemble(rec){
     var idx=rec.parts['items_index.json']||[],items=[],figs={},media={};
+    /* 小さい音は中身、過去問の音は在り処の印（1）。app.html の mediaSrc が見分ける。 */
+    for(var mk in MEDIA)media[mk]=MEDIA[mk];
+    for(var hk in MHAS)media[hk]=1;
     idx.forEach(function(r){var a=rec.parts[r.file];if(a&&a.length)items=items.concat(a)});
     Object.keys(rec.parts).forEach(function(p){
       if(p.indexOf('figs/')===0){var o=rec.parts[p];for(var k in o)figs[k]=o[k]}
-      /* 音声（voice/）と効果音（se/）も同じ形で束になっている（2026-08-23） */
-      if(p.indexOf('media/')===0){var m=rec.parts[p];for(var k2 in m)media[k2]=m[k2]}
+      /* 音は loadParts で仕分けてある（voice_k は中身を持たない）。ここでは触らない。 */
     });
     return {items:items,chapters:rec.parts['chapters.json']||{},
             curriculum:rec.parts['curriculum.json']||null,figs:figs,media:media,
@@ -1817,6 +1871,10 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   /* オフラインで起動できるようにする（殻だけキャッシュ。データは上のIndexedDB） */
   if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost'))
     addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+  /* ★ここまで動いた印（2026-08-24）。文字列が割れて SyntaxError になると**この行に来ない**。
+     tools/check_shell.py はこの印だけを見る＝IndexedDB の読み込み（非同期）を待たずに
+     判定できる。前は「取り込み画面が出たか」を見ていて、写す時機で NG/OK が揺れた（実測）。 */
+  try{document.documentElement.setAttribute('data-shell','ok')}catch(e){}
 })();
 </script>
 
