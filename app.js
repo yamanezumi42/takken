@@ -1943,7 +1943,7 @@ function render(){
   else if(S.view==='quiz')h=vQuiz();
   else if(S.view==='mock')h=vMock();
   else if(S.view==='review')h=vReview();
-  else if(S.view==='game')h=vGame();
+  else if(S.view==='game'){S.view='home';h=vHome();}   /* 外したタブ */
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* 出題中と通し演習のときだけ時計を回す（他の画面では止める＝無駄に動かさない）。 */
@@ -2015,7 +2015,9 @@ var LASTVIEW=null,ANIMON=false;
 /* 段差クラス（入場時だけ付ける） */
 function stag(){return ANIMON?' stag':''}
 /* タブは5つ。ゲームは**復習と分析の間**（2026-08-23 本人指示）。 */
-var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['game','ゲーム',IC.game],['analysis','分析',IC.chart]];
+/* ゲームタブは外した（2026-08-25 本人指示。線つなぎ3件・早見表2件・オリジナル4択3件・聞き取り2択は使わない）。
+   関数の本体は残してある＝kkRate・kkVoice・kkVol などを過去問の読み上げが使っているため。 */
+var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
 function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':'動画学習'):x[1]}
@@ -3724,7 +3726,8 @@ function nextResume(){
   NXPAUSED=false;NXID=null;nextGauge();       /* NXLAST は変えない＝数えた分を保つ */
   return true;
 }
-function nextClear(){NXID=null;NXARM={};NXEL={};NXT0=0;NXPAUSED=false;NXLAST=null;if(NXT){clearTimeout(NXT);NXT=null}}
+function nextClear(){try{rdStop()}catch(e){}
+  NXID=null;NXARM={};NXEL={};NXT0=0;NXPAUSED=false;NXLAST=null;if(NXT){clearTimeout(NXT);NXT=null}}
 function nextStop(){
   var id=S.queue[S.qi];
   if(id)NXSTOP[id]=1;
@@ -7594,7 +7597,10 @@ function kvSay(id,after){
   if(st.stem)q.push(kvItem(id+'_s'+pz,null,id));
   q=q.filter(Boolean);
   if(!q.length)return;
-  aQueue(q,after||null);
+  /* 読み上げ中の帯（2026-08-25）。肢の本文を読み始めたら帯を動かす。
+     問題文（lead）には帯を出さない＝時間表を持っていない。 */
+  aQueue(q,function(){rdStop();if(after)after()});
+  setTimeout(function(){rdStart(id,'s')},60);   /* 描画が終わってから測る */
 }
 function kvAfter(id,okq){
   var st=kvSet();
@@ -7608,10 +7614,113 @@ function kvAfter(id,okq){
     /* 読むものがある間は数えない。読み終わってから数え始める（2026-08-24 本人報告
        「解説を読み終わる前にスキップする」「最初から半分になっている」）。 */
     NXARM[id]=false;
-    aQueue(q,function(){NXARM[id]=true;NXID=null;nextGauge()});
+    aQueue(q,function(){rdStop();NXARM[id]=true;NXID=null;nextGauge()});
+    setTimeout(function(){rdStart(id,'e')},60);
   }else{
     NXARM[id]=true;
   }
+}
+/* ---------- 読み上げ中の帯（2026-08-25 本人指定） ----------
+   時間表（window.TAKKEN_TIMING）＝肢ごとに {s:[[開始,終了,字数],…], e:[…]}。
+   「s」は肢の本文、「e」は解説。字数だけ持つので、画面側で文字を数えて位置を出す。
+   区切りの規則（本人の確定）：「。」で区切る／2行を超える文だけ「、」で割る／
+   12字未満の片は同じ文の中で前（先頭なら後ろ）にくっつける。 */
+var RD={box:null,part:null,spans:null,rects:null,raf:0};
+function rdTiming(id){
+  var T=window.TAKKEN_TIMING||{};
+  return T[id]||null;
+}
+/* 文字を1つずつ span に入れる（帯の位置を測るため）。文字は変えない。 */
+function rdWrap(el){
+  if(!el||el.getAttribute('data-rd'))return;
+  var t=el.textContent;
+  el.textContent='';
+  for(var i=0;i<t.length;i++){
+    var c=document.createElement('span');c.className='rdch';c.textContent=t[i];
+    el.appendChild(c);
+  }
+  el.setAttribute('data-rd','1');
+}
+/* 行の数を数える（同じ上端＝同じ行） */
+function rdLines(rects,a,b){
+  var o={};for(var i=a;i<=b;i++)o[Math.round(rects[i].t)]=1;
+  return Object.keys(o).length;
+}
+/* 帯の区切りを作る */
+function rdPlan(rows,rects){
+  var rng=[],p=0;
+  for(var i=0;i<rows.length;i++){rng.push({a:p,b:p+rows[i][2]-1,s:rows[i][0],e:rows[i][1]});p+=rows[i][2]}
+  /* 「。」で文にまとめる＝字数で見ると分からないので、行の最後が「。」かは呼び手が渡す。
+     ここでは rows の並びをそのまま使い、2行を超えたら割る形にする。 */
+  var out=[],cur=null;
+  for(var j=0;j<rng.length;j++){
+    var z=rng[j];
+    if(!cur){cur={a:z.a,b:z.b,s:z.s,e:z.e};continue}
+    if(rdLines(rects,cur.a,z.b)<=2){cur.b=z.b;cur.e=z.e;continue}
+    out.push(cur);cur={a:z.a,b:z.b,s:z.s,e:z.e};
+  }
+  if(cur)out.push(cur);
+  /* 12字未満の片は前にくっつける（先頭なら後ろ） */
+  for(var k=out.length-1;k>0;k--){
+    if(out[k].b-out[k].a+1<12){out[k-1].b=out[k].b;out[k-1].e=out[k].e;out.splice(k,1)}
+  }
+  if(out.length>1&&out[0].b-out[0].a+1<12){out[1].a=out[0].a;out[1].s=out[0].s;out.shift()}
+  return out;
+}
+function rdMeasure(el){
+  var chs=el.querySelectorAll('.rdch'),b=el.parentNode.getBoundingClientRect(),out=[];
+  for(var i=0;i<chs.length;i++){
+    var r=chs[i].getBoundingClientRect();
+    out.push({l:r.left-b.left,r:r.right-b.left,t:r.top-b.top,h:r.height});
+  }
+  return out;
+}
+function rdRects(rects,a,b){
+  var L={};
+  for(var i=a;i<=b&&i<rects.length;i++){
+    var q=rects[i],key=Math.round(q.t);
+    if(!L[key])L[key]={t:q.t,h:q.h,l:q.l,r:q.r};
+    else{L[key].l=Math.min(L[key].l,q.l);L[key].r=Math.max(L[key].r,q.r)}
+  }
+  var o='',PAD=3;
+  Object.keys(L).map(Number).sort(function(x,y){return x-y}).forEach(function(key){
+    var z=L[key];
+    o+='<i style="left:'+z.l.toFixed(1)+'px;top:'+(z.t-PAD).toFixed(1)+'px;width:'
+      +(z.r-z.l).toFixed(1)+'px;height:'+(z.h+PAD*2).toFixed(1)+'px"></i>';
+  });
+  return o;
+}
+/* 読み上げが始まったら呼ぶ。part＝'s'（肢）か 'e'（解説） */
+function rdStart(id,part){
+  rdStop();
+  var tb=rdTiming(id);
+  if(!tb||!tb[part])return;
+  var wrap=document.querySelector(part==='s'?'.qwrap .stem':'.qwrap .exp');
+  if(!wrap)return;
+  var tx=wrap.querySelector(part==='s'?'.stemtx':'.exptx');
+  if(!tx)return;
+  rdWrap(tx);
+  var band=wrap.querySelector('.rdband');
+  if(!band){band=document.createElement('div');band.className='rdband';wrap.insertBefore(band,wrap.firstChild)}
+  var rects=rdMeasure(tx);
+  RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id};
+  rdTick();
+}
+function rdStop(){
+  if(RD.raf)cancelAnimationFrame(RD.raf);
+  if(RD.box)RD.box.innerHTML='';
+  RD.raf=0;RD.spans=null;
+}
+function rdTick(){
+  if(!RD.spans||!RD.box){return}
+  var a=AQ&&AQ.cur;
+  if(!a){RD.box.innerHTML='';RD.raf=requestAnimationFrame(rdTick);return}
+  var t=a.currentTime,hit=null;
+  for(var i=0;i<RD.spans.length;i++){
+    if(t>=RD.spans[i].s&&t<RD.spans[i].e){hit=RD.spans[i];break}
+  }
+  RD.box.innerHTML=hit?rdRects(RD.rects,hit.a,hit.b):'';
+  RD.raf=requestAnimationFrame(rdTick);
 }
 /* 設定のシート（出典と同じ形で下から出す） */
 /* 本文の見た目のシート（2026-08-24 本人指示）。出題画面から開く。

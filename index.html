@@ -1251,6 +1251,14 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qwrap .exp{font-family:var(--txfont);font-size:var(--txsize);line-height:var(--txlh);
   padding:15px var(--txpad)}
 .qwrap .exp .exptx{font-family:var(--txfont);letter-spacing:var(--txls)}
+/* ---------- 読み上げ中の帯（2026-08-25 本人指定） ----------
+   いま読んでいる所を淡い帯で示す。**文字は一切いじらない**（薄くも小さくもしない）。
+   帯は文字の後ろに長方形を敷く＝行をまたいでも段が出ない。
+   区切り＝「。」が基本。2行を超える文だけ「、」で割る。12字未満の片はくっつける。 */
+.qwrap .stem,.qwrap .exp{position:relative}
+.rdband{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:0}
+.rdband i{position:absolute;border-radius:3px;background:var(--rdband,#f5e8eb)}
+.qwrap .stem .stemtx,.qwrap .exp .exptx{position:relative;z-index:1}
 /* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない。
    さらに sticky で「タブの上」に貼り付ける。面が短いときは元の位置のまま動かない（sticky なので）。
    下の余白（padding-bottom）だけでは、面が画面より高い問題では○×の位置が変わらず、
@@ -1449,7 +1457,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='aad472fd';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='71cd7552';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1580,7 +1588,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             dictq:rec.parts['dict_q.json']||null,
             tables:rec.parts['tables.json']||null,
             voices:rec.parts['voices.json']||null,
-            kako:rec.parts['kako_voice.json']||null};
+            kako:rec.parts['kako_voice.json']||null,
+            timing:rec.parts['timing.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1724,6 +1733,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_TABLES=d.tables||[];          /* 早見表 */
     window.TAKKEN_VOICES=d.voices||[];         /* 使える声の一覧（2026-08-23） */
     window.TAKKEN_KAKO=d.kako||{};             /* 過去問の読み上げを持つ肢 */
+    window.TAKKEN_TIMING=d.timing||{};         /* 読み上げの時間表（帯） */
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
      console に出すだけで画面には出さない（引き算の原則）。 */
