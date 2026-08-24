@@ -4429,6 +4429,9 @@ function aRun(){
   AQ.cur=a;                       /* 先に押さえる＝取り出している間に二重に走らせない */
   function go(url){
     if(AQ.cur!==a)return;         /* 取り出している間に止められた／次へ進んだ */
+    /* 帯は**この部品が鳴り始めた瞬間**に張る（2026-08-25）。
+       行列は「問題文→肢」「判定→解説」の順なので、始めに張ると外れる。 */
+    try{ if(it.band)rdStart(it.band.id,it.band.part); else rdStop(); }catch(e){}
     a.src=url;
     a.playbackRate=it.rate||1;
     if(AQ.paused){try{a.pause()}catch(e){}return}
@@ -7594,13 +7597,15 @@ function kvSay(id,after){
   var pz=st.paren?'p':'';
   var q=[];
   if(st.lead&&it.qid)q.push(kvItem('lead_'+it.qid+pz,null,id));
-  if(st.stem)q.push(kvItem(id+'_s'+pz,null,id));
+  if(st.stem){
+    var qs=kvItem(id+'_s'+pz,null,id);
+    if(qs){qs.band={id:id,part:'s'};q.push(qs)}      /* 肢の本文に帯を出す */
+  }
   q=q.filter(Boolean);
   if(!q.length)return;
   /* 読み上げ中の帯（2026-08-25）。肢の本文を読み始めたら帯を動かす。
      問題文（lead）には帯を出さない＝時間表を持っていない。 */
   aQueue(q,function(){rdStop();if(after)after()});
-  setTimeout(function(){rdStart(id,'s')},60);   /* 描画が終わってから測る */
 }
 function kvAfter(id,okq){
   var st=kvSet();
@@ -7608,14 +7613,16 @@ function kvAfter(id,okq){
   var q=[];
   if(st.judge)q.push({src:mediaSrc('voice/'+kvVoice(id)+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
                       rate:kkRate(kvVoice(id))});
-  if(st.exp)q.push(kvItem(id+'_e'+(st.paren?'p':''),null,id));
+  if(st.exp){
+    var qe=kvItem(id+'_e'+(st.paren?'p':''),null,id);
+    if(qe){qe.band={id:id,part:'e'};q.push(qe)}      /* 解説に帯を出す */
+  }
   q=q.filter(Boolean);
   if(q.length){
     /* 読むものがある間は数えない。読み終わってから数え始める（2026-08-24 本人報告
        「解説を読み終わる前にスキップする」「最初から半分になっている」）。 */
     NXARM[id]=false;
     aQueue(q,function(){rdStop();NXARM[id]=true;NXID=null;nextGauge()});
-    setTimeout(function(){rdStart(id,'e')},60);
   }else{
     NXARM[id]=true;
   }
@@ -7648,8 +7655,17 @@ function rdLines(rects,a,b){
 }
 /* 帯の区切りを作る */
 function rdPlan(rows,rects){
-  var rng=[],p=0;
-  for(var i=0;i<rows.length;i++){rng.push({a:p,b:p+rows[i][2]-1,s:rows[i][0],e:rows[i][1]});p+=rows[i][2]}
+  /* 時間表は [開始, 終了, 画面の開始, 画面の終了]（2026-08-25 作り替え）。
+     前は音の字数で持っていたが、音にする文は かっこを落とす・読点を足す などで
+     画面の文字と違う（実測で63.9%の部品がずれていた）。だから画面の位置を直接持つ。 */
+  var rng=[];
+  for(var i=0;i<rows.length;i++){
+    var a=rows[i][2],b=rows[i][3];
+    if(a==null||b==null||b<a)continue;
+    if(b>=rects.length)b=rects.length-1;
+    if(a>=rects.length)continue;
+    rng.push({a:a,b:b,s:rows[i][0],e:rows[i][1]});
+  }
   /* 「。」で文にまとめる＝字数で見ると分からないので、行の最後が「。」かは呼び手が渡す。
      ここでは rows の並びをそのまま使い、2行を超えたら割る形にする。 */
   var out=[],cur=null;
