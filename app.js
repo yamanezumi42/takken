@@ -3578,7 +3578,49 @@ function vQuiz(){
 function syncNextBar(){
   var b=document.getElementById('nextbar');
   if(!b)return;
-  b.hidden=!(S.view==='quiz'&&S.phase==='exp'&&S.queue.length&&S.qi<S.queue.length);
+  var show=(S.view==='quiz'&&S.phase==='exp'&&S.queue.length&&S.qi<S.queue.length);
+  b.hidden=!show;
+  if(show)nextGauge();
+}
+/* ---------- 自動で次へ（2026-08-24 本人指定） ----------
+   ・解説を読み終えてから数える（読み上げの行列が空になってから）
+   ・ゲージは明るい下地→普通の桜色。右上の×でその問だけ止める
+   ・押せばすぐ次へ。止めたらボタンは普通の色に戻る */
+var NXT=null, NXSTOP={};      /* NXSTOP＝その問だけ止めた印（肢のidで持つ） */
+function nextGauge(){
+  var bar=document.getElementById('nextbar');
+  var btn=bar?bar.querySelector('.btn'):null;
+  if(!btn)return;
+  var id=S.queue[S.qi], st=kvSet();
+  /* ボタンの中身を1回だけ作る（ゲージの面と×） */
+  if(!btn.querySelector('.fill')){
+    btn.classList.add('gz');
+    btn.insertAdjacentHTML('beforeend',
+      '<span class="lite"></span><span class="fill"><i></i></span>'
+      +'<b class="stop" data-act="nxstop">×</b>');
+  }
+  var stopped=!st.auto||!!NXSTOP[id];
+  btn.classList.toggle('stopped',stopped);
+  if(NXT){clearTimeout(NXT);NXT=null}
+  if(stopped){btn.classList.remove('run');return}
+  /* 読み上げが終わってから数え始める（鳴っている間は待つ） */
+  function start(){
+    if(S.phase!=='exp'||S.queue[S.qi]!==id)return;
+    if(AQ.cur||AQ.list.length){NXT=setTimeout(start,300);return}
+    btn.style.setProperty('--gd',st.wait+'s');
+    btn.classList.remove('run');void btn.offsetWidth;btn.classList.add('run');
+    NXT=setTimeout(function(){
+      if(S.phase==='exp'&&S.queue[S.qi]===id&&!NXSTOP[id]){aSe('move');next()}
+    },st.wait*1000);
+  }
+  start();
+}
+function nextStop(){
+  var id=S.queue[S.qi];
+  if(id)NXSTOP[id]=1;
+  if(NXT){clearTimeout(NXT);NXT=null}
+  var bar=document.getElementById('nextbar'),btn=bar?bar.querySelector('.btn'):null;
+  if(btn){btn.classList.remove('run');btn.classList.add('stopped')}
 }
 /* 回答したら、正誤の行が画面の上（固定ヘッダーのすぐ下）に来るまでスクロールする。
    これが無いと、長い問題では○×を押しても解説の頭が画面の外にあって読めない。
@@ -4129,13 +4171,17 @@ function kkName(sid){
 /* 声の一覧＝使う声を複数えらぶ＋ランダムの切替。各行に「いまの速さ」を出す。 */
 function kkVoiceHtml(st){
   var u=ST.settings.kkUse||{},h='';
+  /* 出す声を絞れる（st.only＝この声だけ出す）。読み上げは音がある声しか意味がない
+     （2026-08-24 本人「九州そらはいらない」）。 */
+  var list=(st&&st.only&&st.only.length)
+    ?VOICES.filter(function(v){return st.only.indexOf(v.id)>=0}):VOICES;
   /* ランダムの行は出さないこともある（読み上げ＝音が1声ぶんしか無いので意味がない。
      2026-08-24 本人「ランダムもだからいらない」）。 */
   if(!(st&&st.noRnd))h+='<div class="kk-row" style="margin-top:6px">'
     +'<span class="mini" style="flex:1">選んだ声からランダムに出す</span>'
     +'<button class="tog xs'+(ST.settings.kkRnd?' on':'')+'" data-act="kkrnd">'
     +(ST.settings.kkRnd?'する':'しない')+'</button></div>';
-  VOICES.forEach(function(v){
+  list.forEach(function(v){
     var on=!!u[v.id], now=(v.id===st.voice);
     h+='<div class="rowx" style="gap:0;align-items:stretch">'
       +'<button class="tapline" data-act="kkuse" data-v="'+v.id+'" style="min-height:38px;flex:1">'
@@ -4147,8 +4193,9 @@ function kkVoiceHtml(st){
       +' style="min-height:38px;width:52px;justify-content:center;flex:none">'
       +'<span class="mini">'+(now?'いま':'これ')+'</span></button></div>';
   });
-  h+='<div class="mini" style="margin-top:6px">マスを押すと「使う声」に入ります（複数）。'
-    +'右の「これ」を押すとその声だけで出します。数字はその声の速さです。</div>';
+  if(!(st&&st.noNote))
+    h+='<div class="mini" style="margin-top:6px">マスを押すと「使う声」に入ります（複数）。'
+      +'右の「これ」を押すとその声だけで出します。数字はその声の速さです。</div>';
   return h;
 }
 function vDict(){
@@ -4390,7 +4437,7 @@ function kkCount(sec){
    ここは**公開しない**素材なので、殻（pwa）には入れず問題データ側で配る。 */
 /* 3秒前の音は「気づくが邪魔しない」程度に（2026-08-23 本人「うるさすぎる」）。 */
 /* 3秒前の音は「チリン」（2026-08-23 本人指摘で2度目の差し替え）。控えめに0.22。 */
-var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55};
+var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55,dec:0.42,cancel:0.38,move:0.34};   /* 押したときの音（2026-08-24 本人が選んだ3つ） */
 /* 効果音を直接鳴らす（カウントダウンの小さい音だけ。声と同時には鳴らないので行列に入れない）。
    線つなぎの正誤の音もここを使う（あちらは声が無い）。 */
 function se(name){
@@ -5642,8 +5689,21 @@ function clearFx(){
   setSad(false);
 }
 /* 入力確認（0.12s）：押した要素をその場で沈ませる */
+/* 押したときにどの音を鳴らすか（2026-08-24 本人指定）。
+   基本＝決定50／閉じる・やめる＝キャンセル9／次へ・移動＝カーソル移動9。 */
+var SE_CANCEL={closeModal:1,goq:1,quit:1,gmQuit:1,fclear:1,rsess:1,creset:1,vreset:1,
+               kkHoldStop:1,pause:1};
+var SE_MOVE={next:1,again:1,nextcat:1,nextchap:1,tab:1,ucat:1,vid:1,startCheck:1,resumeMock:1};
+function tapSe(a){
+  if(!a)return 'dec';
+  if(SE_CANCEL[a])return 'cancel';
+  if(SE_MOVE[a])return 'move';
+  return 'dec';
+}
 function tapFx(el){
   if(!el||!el.classList)return;
+  /* 音（2026-08-24 本人が選んだ3つ）。押した所すべてで鳴る。音量は効果音のスライダーに従う。 */
+  try{aSe(tapSe(el.getAttribute&&el.getAttribute('data-act')))}catch(e){}
   el.classList.remove('tapfx');void el.offsetWidth;el.classList.add('tapfx');
   setTimeout(function(){if(el.classList)el.classList.remove('tapfx')},140);
 }
@@ -5901,10 +5961,20 @@ document.addEventListener('click',function(e){
     return;
   }
   /* 読み上げの設定シート（2026-08-23） */
+  /* 出題をやめて移動（2026-08-24）。読み上げも止める。 */
+  if(a==='goq'){
+    var gv=t.getAttribute('data-v');
+    var mm2=document.getElementById('modal');if(mm2)mm2.hidden=true;
+    aClear();KVLAST=null;
+    S.queue=[];S.qi=0;S.phase='q';
+    go(gv);return;
+  }
+  /* 右上の×＝この問だけ自動を止める（2026-08-24） */
+  if(a==='nxstop'){e.stopPropagation();nextStop();return}
   if(a==='kvsheet'){kvSheet(S.queue[S.qi]);return}
   if(a==='kvtog'){
     /* 設定の名前（kvOn など）→ いまの値の名前（on など）の対応表。素直に書く。 */
-    var KVMAP={kvOn:'on',kvLead:'lead',kvStem:'stem',kvJudge:'judge',kvExp:'exp',kvParen:'paren'};
+    var KVMAP={kvOn:'on',kvLead:'lead',kvStem:'stem',kvJudge:'judge',kvExp:'exp',kvParen:'paren',kvAuto:'auto'};
     var kk2=t.getAttribute('data-k');
     kvPut(kk2,!kvSet()[KVMAP[kk2]]);
     kvSheet(S.queue[S.qi]);return;
@@ -7221,7 +7291,10 @@ function kvSet(){
           stem:(o.kvStem===undefined?true:!!o.kvStem),
           judge:(o.kvJudge===undefined?true:!!o.kvJudge),
           exp:(o.kvExp===undefined?true:!!o.kvExp),
-          paren:!!o.kvParen};
+          paren:!!o.kvParen,
+          /* 自動で次へ（2026-08-24 本人指示）。既定＝する・4秒 */
+          auto:(o.kvAuto===undefined?true:!!o.kvAuto),
+          wait:Math.min(15,Math.max(1,+o.kvWait||4))};
 }
 function kvOn(){return kvSet().on}
 function kvPut(k,v){ST.settings[k]=v;saveST()}
@@ -7265,6 +7338,14 @@ function kvCountText(){
 var KVV=null;
 /* その肢の音を**持っている声**の中から選ぶ。持っている声が無ければ普通の選び方に落ちる。
    ＝過去問の音を1声ぶんしか作っていない今は自然にその声になる（設定を増やさない）。 */
+/* その肢の音を持っている声（端末にあるものだけ）。無ければ全部を返す＝空にしない。 */
+function kvHaveVoices(id){
+  var M=window.TAKKEN_MEDIA;
+  if(!M||!Object.keys(M).length||!id)return null;
+  var out=VOICES.filter(function(v){return !!M['voice_k/'+v.id+'/'+id+'_s.m4a']})
+    .map(function(v){return v.id});
+  return out.length?out:null;
+}
 function kvVoice(id){
   if(KVV)return KVV;
   var M=window.TAKKEN_MEDIA,u=kkUse();
@@ -7319,8 +7400,16 @@ function kvSheet(id){
   var h='<div class="sheet">'
     +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">読み上げ</div>'
     +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
-    +'<div class="kk-row"><span class="lb">音</span><span class="bs">'
-    +tg2b('kvOn',st.on,st.on?'読み上げる':'ミュート')+'</span></div>'
+    /* スイッチ（2026-08-24 本人指定・案A）。ラベルだけで分かるので値の文字は出さない。 */
+    +'<div class="kk-row"><span class="lb" style="flex:1">読み上げ</span>'
+    +'<button class="sw'+(st.on?' on':'')+'" data-act="kvtog" data-k="kvOn"'
+    +' aria-label="読み上げ"><i></i></button></div>'
+    +'<div class="kk-row"><span class="lb" style="flex:1">自動で次へ</span>'
+    +'<button class="sw'+(st.auto?' on':'')+'" data-act="kvtog" data-k="kvAuto"'
+    +' aria-label="自動で次へ"><i></i></button></div>'
+    +'<div class="kk-row"><span class="lb">秒数</span>'
+    +'<input class="sl" type="range" min="1" max="15" step="1" value="'+st.wait
+    +'" id="kv-wait"><span class="slv num" id="kv-wv">'+st.wait+'秒</span></div>'
     +'<div class="hr"></div><div class="mini" style="margin-bottom:6px">読むもの</div><div>'
     +tg2b('kvLead',st.lead,'問題文')
     +tg2b('kvStem',st.stem,'肢の本文')
@@ -7333,8 +7422,9 @@ function kvSheet(id){
     +'<input class="sl" type="range" min="0.7" max="2" step="0.05" value="'+kkRate(kkVoice()||0)
     +'" id="kv-rate"><span class="slv num" id="kv-rv">'
     +kkRate(kkVoice()||0).toFixed(2)+'</span></div>'
-    +'<div class="mini" style="margin-bottom:6px">声（2択問題と同じ設定）</div>'
-    +kkVoiceHtml({voice:kvVoice(id),lim:5,rate:kkRate(kvVoice(id)||0),noRnd:true})
+    +'<div class="mini" style="margin-bottom:6px">声</div>'
+    +kkVoiceHtml({voice:kvVoice(id),lim:5,rate:kkRate(kvVoice(id)||0),noRnd:true,noNote:true,
+                  only:kvHaveVoices(id)})
     +(kvHas(id)?'':'<div class="mini" style="margin-top:8px;color:var(--ngdeep)">'
       +'この肢の読み上げは、いまこの端末にありません。'
       +'（端末にある読み上げ '+kvCountText()+'／設定＝データ で取り込めます）</div>')
@@ -7343,6 +7433,11 @@ function kvSheet(id){
     +'</div>';
   m.innerHTML=h;
   m6SheetOpen();      /* 開き方は他のシートと同じ手順にそろえる（m.hidden は中で外れる） */
+  var w=document.getElementById('kv-wait');
+  if(w)w.oninput=function(){
+    var v=+this.value;document.getElementById('kv-wv').textContent=v+'秒';
+    ST.settings.kvWait=v;saveST();
+  };
   var r=document.getElementById('kv-rate');
   if(r)r.oninput=function(){
     var v=+this.value;document.getElementById('kv-rv').textContent=v.toFixed(2);
@@ -7372,6 +7467,17 @@ function srcSheet(id){
         +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+(ch.src?'（'+esc(ch.src)+'）':'')+'</span>'
         +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
      }).join(''):'')
+   /* 出題中でも移動できるようにする（2026-08-24 本人指示「メニュー画面かなんかに移動できるように」）。
+      押すと出題を閉じてその画面へ行く。解いた記録はそのまま残る。 */
+   +(S.view==='quiz'?('<div class="hr"></div>'
+     +'<div class="mini" style="margin-bottom:6px">ここをやめて移動する</div>'
+     +'<div class="rowx" style="gap:8px;flex-wrap:wrap">'
+     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="home">ホーム</button>'
+     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="fields">学習</button>'
+     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="review">復習</button>'
+     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="game">ゲーム</button>'
+     +'<button class="btn sm" style="width:auto" data-act="goq" data-v="analysis">分析</button>'
+     +'</div>'):'')
    +'</div>';
   m6SheetOpen();
 }

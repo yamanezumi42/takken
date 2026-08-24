@@ -395,6 +395,35 @@ a{color:var(--chipfg)}
   background:linear-gradient(to top,var(--bg) 58%,rgba(255,255,255,0))}
 #nextbar[hidden]{display:none}
 #nextbar .btn{pointer-events:auto;max-width:520px;margin:0 auto}
+/* ---------- 切り替えスイッチ（2026-08-24 本人指定・見本の画像に合わせた寸法） ---------- */
+.sw{position:relative;width:51px;height:31px;border-radius:999px;border:0;background:#c9c5be;
+  cursor:pointer;flex:none;transition:background .2s ease;padding:0}
+.sw i{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;
+  box-shadow:0 3px 8px rgba(51,46,40,.15),0 1px 1px rgba(51,46,40,.16);
+  transition:left .2s cubic-bezier(.3,.8,.3,1)}
+.sw.on{background:var(--acc)}
+.sw.on i{left:22px}
+/* ---------- 「次の問題」のゲージ（明るい→普通）と、その問だけ止める× ---------- */
+/* 下地＝ボタンの色に白を重ねて明るくする（配色9種すべてで成り立つ）。
+   経過したぶんは元の色（var(--fg)）に戻る＝「明るい→普通」（2026-08-24 本人指定）。 */
+#nextbar .btn.pri.gz{background:var(--fg);overflow:visible;position:relative}
+#nextbar .btn.pri.gz>.lite{position:absolute;left:0;top:0;right:0;bottom:0;border-radius:12px;
+  background:rgba(255,255,255,.34);pointer-events:none}
+#nextbar .btn.pri.gz>span{position:relative;z-index:1}
+#nextbar .gz .fill{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;
+  border-radius:12px;pointer-events:none}
+#nextbar .gz .fill i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--fg)}
+#nextbar .gz.run .fill i{width:100%;transition:width linear var(--gd)}
+#nextbar .gz .stop{position:absolute;right:-7px;top:-7px;z-index:2;width:22px;height:22px;
+  border-radius:50%;background:#b98593;color:#fff;display:flex;align-items:center;
+  justify-content:center;font-size:13px;line-height:1;box-shadow:0 1px 3px rgba(51,46,40,.25);
+  pointer-events:auto}
+#nextbar .btn.pri.gz.stopped{background:var(--fg)}
+#nextbar .gz.stopped>.lite{display:none}
+#nextbar .gz.stopped .fill,#nextbar .gz.stopped .stop{display:none}
+/* 押したときの手応え（面が軽く沈む・案③） */
+.tapfx{animation:tapfx .22s ease-out}
+@keyframes tapfx{0%{transform:scale(1)}45%{transform:scale(.955)}100%{transform:scale(1)}}
 /* 演出の中央寄せで使う。タブ（52px）＋安全域を引かないと、見えている面の中央より下にずれる。 */
 :root{--tabh:calc(52px + env(safe-area-inset-bottom))}
 #tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--panel);
@@ -1386,7 +1415,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='a51c57fb';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='347dd5a7';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
