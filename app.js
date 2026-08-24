@@ -3599,9 +3599,19 @@ function nextGauge(){
   /* ボタンの中身を1回だけ作る（ゲージの面と×） */
   if(!btn.querySelector('.lite')){
     btn.classList.add('gz');
+    /* 「次の問題」は素の文字なので span で包む（重ねる面より上に出すため） */
+    if(!btn.querySelector('.tx')){
+      var lab=btn.textContent.trim()||'次の問題';
+      btn.textContent='';
+      var sp=document.createElement('span');sp.className='tx';sp.textContent=lab;
+      btn.appendChild(sp);
+    }
     btn.insertAdjacentHTML('beforeend',
-      '<span class="lite"></span>');
+      '<span class="lite"></span><span class="fill"></span>');
   }
+  /* ボタンの実際の色を読み取って、伸びる面に入れる（配色9種に依存しない） */
+  var fl=btn.querySelector('.fill');
+  if(fl)fl.style.background=getComputedStyle(btn).backgroundColor;
   var stopped=!st.auto||!!NXSTOP[id];
   btn.classList.toggle('stopped',stopped);
   if(NXT){clearTimeout(NXT);NXT=null}
@@ -7364,9 +7374,17 @@ var KVV=null;
 /* その肢の音を持っている声（端末にあるものだけ）。無ければ全部を返す＝空にしない。 */
 function kvHaveVoices(id){
   var M=window.TAKKEN_MEDIA;
-  if(!M||!Object.keys(M).length||!id)return null;
-  var out=VOICES.filter(function(v){return !!M['voice_k/'+v.id+'/'+id+'_s.m4a']})
-    .map(function(v){return v.id});
+  if(!M||!Object.keys(M).length)return null;
+  /* まずこの肢の音を持っている声。無ければ**過去問の音を1本でも持っている声**で絞る
+     ＝音を作っていない声（九州そら）を一覧に出さない（2026-08-24 本人指摘で直した）。 */
+  var byId=id?VOICES.filter(function(v){return !!M['voice_k/'+v.id+'/'+id+'_s.m4a']}):[];
+  if(byId.length)return byId.map(function(v){return v.id});
+  var any={};
+  Object.keys(M).forEach(function(k){
+    if(k.indexOf('voice_k/')!==0)return;
+    var a=k.split('/');if(a.length>1)any[a[1]]=1;
+  });
+  var out=VOICES.filter(function(v){return any[String(v.id)]}).map(function(v){return v.id});
   return out.length?out:null;
 }
 function kvVoice(id){
