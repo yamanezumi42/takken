@@ -1386,7 +1386,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='6e6d787e';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='a51c57fb';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1514,10 +1514,18 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         /* 落とすものが無くても**確認した時刻は刻む**。刻まないと版がいつまでも
            「未取得」のままで、チェックのボタンが出ない（2026-08-18 実機）。 */
         say('最新です（'+(man.builtAt||'')+'）');rec.man=man;rec.at=stamp();
+        if(window.TAKKEN_SRC)window.TAKKEN_SRC.prog=null;
         return put({man:man,at:stamp()},KEY2)
           .then(function(){srcAt(man.builtAt||stamp());return 0});
       }
       var mb=todo.reduce(function(a,p){return a+man.files[p].bytes},0)/1048576;
+      var mbAll=mb,t0=Date.now();
+      /* 進み具合を数で持つ（画面のゲージ用。2026-08-24 本人指示） */
+      function prog(i2){
+        if(!window.TAKKEN_SRC)return;
+        window.TAKKEN_SRC.prog={i:i2,n:todo.length,mbAll:mbAll,mbLeft:mb,t0:t0};
+        try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
+      }
       var i=0;
       /* **1ファイルごとに保存する**。最後にまとめて保存していたら、34MB×110ファイルの途中で
          画面を離れた（iOSが裏に回した）ときに全部消えて、古いデータで起動していた
@@ -1534,10 +1542,12 @@ body{overflow-x:clip;overscroll-behavior-x:none}
           /* ★版の情報は**入ったものだけ**にする（man をそのまま書くと飛ばした音も
              入ったことになり、次に取りに行かない）。builtAt は引き継ぐ。 */
           rec.man.builtAt=man.builtAt;
+          if(window.TAKKEN_SRC)window.TAKKEN_SRC.prog=null;
           return put({man:rec.man,at:stamp()},KEY2)
             .then(function(){srcAt(man.builtAt||stamp());return todo.length});
         }
         var p=todo[i];
+        prog(i+1);
         say('取り込み中 '+(i+1)+'/'+todo.length+'（残り '+mb.toFixed(1)+'MB）');
         return ghGet(p).then(function(o){
           /* ★このファイルだけを保存する。以前は溜めた全部を書き直していたので、
@@ -1709,7 +1719,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
           }
           try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
         }).catch(function(err){
-          window.TAKKEN_SRC.busy='';
+          window.TAKKEN_SRC.busy='';window.TAKKEN_SRC.prog=null;
           /* ここだけ記録に残していなかった（2026-08-24）。同期の失敗はここを通るので、
              残さないと私が原因を見られない。 */
           var t=errText(err,'自動の同期')+'／'+(String((err&&err.stack)||'').split(String.fromCharCode(10))[1]||'');

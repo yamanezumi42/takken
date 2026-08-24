@@ -1904,8 +1904,7 @@ function render(){
     var kvid=S.queue[S.qi];
     if(kvid&&KVLAST!==kvid){
       KVLAST=kvid;
-      /* 問が変わったら声を選び直す＝その問の中では変わらない（2026-08-24） */
-      if(ST.settings.kkRnd)KVV=null;
+      KVV=null;   /* 問ごとに選び直す（音を持つ声が肢によって違ってもよいように） */
       kvSay(kvid);
     }
   }
@@ -2138,6 +2137,7 @@ function vHome(){
      間違いと復習は復習の画面にも置いてある＝引き算の原則。 */
   h+=verLineHtml();      /* 出題中に新しいデータが来たとき／失敗したときだけ出る */
   h+=checkHtml();        /* 私が直した分のチェック（CHECK が空のときは何も出ない） */
+  h+=progHtml();         /* 取り込み中のゲージ（2026-08-24 本人指示）。ないときは何も出ない */
   h+=flowHtml();         /* 今日の流れ＝新規→間違えた問題→復習→通し演習（この中に演習も入る） */
 
   /* 中断中の出題セッション */
@@ -2531,7 +2531,7 @@ function checkLack(c){
     /* 読み上げの回＝その肢の音が**実物として**あるか（2026-08-24 本人報告で直した）。 */
     if(c.voice&&!kvHas(id))
       return '読み上げの音がまだ端末にありません（設定＝データ で取り込んでください。'
-        +'いま '+n3(kvCount())+'問ぶん）';
+        +'いま '+kvCountText()+'）';
     /* 図の回＝図の実物があるか。図を data URI で持つ作りのときだけ見る
        （単一ファイル版・ローカルでは図はそのままの道で読むので見ない）。 */
     var F=window.TAKKEN_FIGS;
@@ -3688,6 +3688,45 @@ function qHead(ses,p){
 var PROGPREV=0,PROGNEW=0;
 /* 殻が版を確認し終えたら、ホームの版の行を描き直す（押さなくても分かるように） */
 window.addEventListener('takken-data',function(){if(S.view==='home')render()});
+/* ---------- 取り込みの進み具合（2026-08-24 本人指示） ----------
+   本人「どのくらいダウンロードしてるとかゲージとか視覚的にわかるようにして欲しい。
+        いつ終わるかもわからないし動いてるかも今はわからないから」。
+   数は殻（index.html）が window.TAKKEN_SRC.prog に入れる。ここは出すだけ。 */
+function progHtml(){
+  var v=window.TAKKEN_SRC||{},p=v.prog;
+  if(!p||!p.n)return '';
+  var got=Math.max(0,(p.mbAll||0)-(p.mbLeft||0));
+  var pc=p.mbAll?Math.min(100,got/p.mbAll*100):(p.i/p.n*100);
+  /* 見込み＝実測の速さから。落とせた量が小さいうちは出さない（当てにならない） */
+  var sec=Math.max(1,Math.round((Date.now()-(p.t0||Date.now()))/1000));
+  var eta=(got>2)?Math.round((p.mbLeft||0)/(got/sec)):null;
+  var etaTx=(eta===null)?'計算中'
+    :(eta>=60?('あと約 '+Math.ceil(eta/60)+'分'):('あと約 '+eta+'秒'));
+  return '<div class="panel">'
+    +'<div class="spread" style="margin-bottom:6px">'
+    +'<span class="mini">読み上げの音などを取り込んでいます</span>'
+    +'<span class="mini num">'+pc.toFixed(0)+'%</span></div>'
+    +'<div class="bar3"><i style="width:'+pc.toFixed(1)+'%"></i></div>'
+    +'<div class="spread" style="margin-top:6px">'
+    +'<span class="mini num">'+n3(p.i)+' / '+n3(p.n)+'件</span>'
+    +'<span class="mini num">残り '+(p.mbLeft||0).toFixed(1)+'MB</span>'
+    +'<span class="mini num">'+etaTx+'</span></div>'
+    +'<div class="mini" style="margin-top:4px">アプリを開いたままにしておくと進みます。'
+    +'閉じても、次に開いたとき続きから取り込みます。</div></div>';
+}
+/* 取り込み中はホームを1秒ごとに描き直す（動いているのが見えるように） */
+var PROGT=null;
+function progTick(){
+  if(PROGT){clearInterval(PROGT);PROGT=null}
+  PROGT=setInterval(function(){
+    var v=window.TAKKEN_SRC||{};
+    if(!v.prog){clearInterval(PROGT);PROGT=null;if(S.view==='home')render();return}
+    if(S.view==='home')render();
+  },1000);
+}
+window.addEventListener('takken-data',function(){
+  if((window.TAKKEN_SRC||{}).prog&&!PROGT)progTick();
+});
 /* 連続正解の数字＝入れ替わる整数なので桁ロール（qHead と applyExpDom の2か所で同じものを使う） */
 function comboHtml(sk){
   return '<span class="combo'+(sk>=5?' hot':'')+'"><span class="m6-roll"'
@@ -4090,7 +4129,9 @@ function kkName(sid){
 /* 声の一覧＝使う声を複数えらぶ＋ランダムの切替。各行に「いまの速さ」を出す。 */
 function kkVoiceHtml(st){
   var u=ST.settings.kkUse||{},h='';
-  h+='<div class="kk-row" style="margin-top:6px">'
+  /* ランダムの行は出さないこともある（読み上げ＝音が1声ぶんしか無いので意味がない。
+     2026-08-24 本人「ランダムもだからいらない」）。 */
+  if(!(st&&st.noRnd))h+='<div class="kk-row" style="margin-top:6px">'
     +'<span class="mini" style="flex:1">選んだ声からランダムに出す</span>'
     +'<button class="tog xs'+(ST.settings.kkRnd?' on':'')+'" data-act="kkrnd">'
     +(ST.settings.kkRnd?'する':'しない')+'</button></div>';
@@ -5292,7 +5333,7 @@ function dataSheet(){
       +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'
       /* 読み上げの音が何問ぶん入っているか（2026-08-24 本人報告「音声は言ってなかった」）。
          音は294MBを順に取るので、途中だと索引だけ届いて無音になる。数で分かるようにする。 */
-      +'／読み上げ '+n3(kvCount())+'問'):'')+'</div>'
+      +'／読み上げ '+kvCountText()):'')+'</div>'
    +'<div class="mini" style="margin-top:2px">問題・図は '+esc(GH().repo||'—')
    +' の <b>data</b> ブランチから取り込みます（記録は main。触りません）。'
    +'変わったファイルだけ落とすので数百KBで済みます。</div>'
@@ -7191,53 +7232,80 @@ function kvPut(k,v){ST.settings[k]=v;saveST()}
 function kvHas(id){
   var M=window.TAKKEN_MEDIA;
   if(M&&Object.keys(M).length){
-    var sid=kvVoice();
+    var sid=kvVoice(id);
     if(!sid)return false;
     return !!M['voice_k/'+sid+'/'+id+'_s.m4a'];
   }
   return !!((window.TAKKEN_KAKO||{})[id]);
 }
 /* 読み上げの音が端末に何件あるか（データの画面と、足りないときの案内に使う） */
+/* ★数えるのは**肢の数**（ファイル数ではない）。声が2つあるとファイルは肢の2倍になり、
+   「488問」のように問数と読めてしまう（2026-08-24 本人指摘）。
+   返す＝{n:肢の数, all:配信されている肢の数, by:{声:肢の数}} */
 function kvCount(){
-  var M=window.TAKKEN_MEDIA||{},n=0;
-  Object.keys(M).forEach(function(k){if(k.indexOf('voice_k/')===0&&k.slice(-6)==='_s.m4a')n++});
-  return n;
+  var M=window.TAKKEN_MEDIA||{},ids={},by={};
+  Object.keys(M).forEach(function(k){
+    if(k.indexOf('voice_k/')!==0||k.slice(-6)!=='_s.m4a')return;
+    var a=k.split('/');
+    if(a.length<3)return;
+    ids[a[2].slice(0,-6)]=1;by[a[1]]=(by[a[1]]||0)+1;
+  });
+  return {n:Object.keys(ids).length,all:Object.keys(window.TAKKEN_KAKO||{}).length,by:by};
+}
+/* 画面に出す1行（例「271/393問（冥鳴ひまり 271／九州そら 217）」） */
+function kvCountText(){
+  var c=kvCount(),sids=Object.keys(c.by),t=n3(c.n)+(c.all?('/'+n3(c.all)):'')+'問';
+  if(sids.length)t+='（'+sids.map(function(s2){
+    return kkName(+s2).split('／')[0]+' '+n3(c.by[s2])}).join('／')+'）';
+  return t;
 }
 /* その問で使う声。**1問につき1つに固定する**（2026-08-24 本人報告）。
    ランダムのときに部品ごとに選び直すと、問題文と肢で声が変わり、
    片方の音が端末に無ければその部品だけ無音になる。 */
 var KVV=null;
-function kvVoice(){
+/* その肢の音を**持っている声**の中から選ぶ。持っている声が無ければ普通の選び方に落ちる。
+   ＝過去問の音を1声ぶんしか作っていない今は自然にその声になる（設定を増やさない）。 */
+function kvVoice(id){
   if(KVV)return KVV;
+  var M=window.TAKKEN_MEDIA,u=kkUse();
+  if(M&&Object.keys(M).length&&id&&u.length){
+    var ok=u.filter(function(sid){return !!M['voice_k/'+sid+'/'+id+'_s.m4a']});
+    if(ok.length){
+      /* くじは引かない（2026-08-24 本人「ランダムもだからいらない」）。
+         音がある声の先頭を使う＝1声しか作っていない今はその声で固定になる。 */
+      KVV=ok[0];
+      return KVV;
+    }
+  }
   KVV=kkVoice();
   return KVV;
 }
 /* 読む部品を並べる。（）の中を読む設定なら _p 付きのファイルを使う。 */
-function kvItem(name,rate){
-  var sid=kvVoice();
+function kvItem(name,rate,id){
+  var sid=kvVoice(id);
   if(!sid)return null;
   return {src:mediaSrc('voice_k/'+sid+'/'+name+'.m4a'),rate:rate||kkRate(sid)};
 }
 /* 問題が出たとき＝問題文→肢。答えたとき＝正解／不正解→解説。 */
 function kvSay(id,after){
   var st=kvSet();
-  if(!st.on||!kvVoice())return;
+  if(!st.on||!kvVoice(id))return;
   var it=BY[id];if(!it)return;
   var pz=st.paren?'p':'';
   var q=[];
-  if(st.lead&&it.qid)q.push(kvItem('lead_'+it.qid+pz));
-  if(st.stem)q.push(kvItem(id+'_s'+pz));
+  if(st.lead&&it.qid)q.push(kvItem('lead_'+it.qid+pz,null,id));
+  if(st.stem)q.push(kvItem(id+'_s'+pz,null,id));
   q=q.filter(Boolean);
   if(!q.length)return;
   aQueue(q,after||null);
 }
 function kvAfter(id,okq){
   var st=kvSet();
-  if(!st.on||!kvVoice())return;
+  if(!st.on||!kvVoice(id))return;
   var q=[];
-  if(st.judge)q.push({src:mediaSrc('voice/'+kvVoice()+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
-                      rate:kkRate(kvVoice())});
-  if(st.exp)q.push(kvItem(id+'_e'+(st.paren?'p':'')));
+  if(st.judge)q.push({src:mediaSrc('voice/'+kvVoice(id)+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
+                      rate:kkRate(kvVoice(id))});
+  if(st.exp)q.push(kvItem(id+'_e'+(st.paren?'p':''),null,id));
   q=q.filter(Boolean);
   if(q.length)aQueue(q);
 }
@@ -7266,10 +7334,10 @@ function kvSheet(id){
     +'" id="kv-rate"><span class="slv num" id="kv-rv">'
     +kkRate(kkVoice()||0).toFixed(2)+'</span></div>'
     +'<div class="mini" style="margin-bottom:6px">声（2択問題と同じ設定）</div>'
-    +kkVoiceHtml({voice:kkVoice(),lim:5,rate:kkRate(kkVoice()||0)})
+    +kkVoiceHtml({voice:kvVoice(id),lim:5,rate:kkRate(kvVoice(id)||0),noRnd:true})
     +(kvHas(id)?'':'<div class="mini" style="margin-top:8px;color:var(--ngdeep)">'
       +'この肢の読み上げは、いまこの端末にありません。'
-      +'（端末にある読み上げ '+n3(kvCount())+'問／設定＝データ で取り込めます）</div>')
+      +'（端末にある読み上げ '+kvCountText()+'／設定＝データ で取り込めます）</div>')
     +'<button class="btn pri" style="margin-top:12px" data-act="kvplay" data-id="'+esc(id)+'">'
     +'いま読む</button>'
     +'</div>';
