@@ -1386,7 +1386,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='368bc335';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='6e6d787e';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1505,7 +1505,11 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       Object.keys(man.files).forEach(function(p){
         if(!have[p]||have[p].sha!==man.files[p].sha)todo.push(p);
       });
-      Object.keys(rec.parts).forEach(function(p){if(!man.files[p])delete rec.parts[p]});
+      /* 配信から消えたファイルの後片付け。1件ずつ保存する形にしたので、
+         その1件の記録を消す（以前は rec.parts から抜いていた。2026-08-24 の TypeError の原因）。 */
+      Object.keys(have).forEach(function(p){
+        if(!man.files[p]){delete rec.man.files[p];del(pkey(p)).catch(function(){})}
+      });
       if(!todo.length){
         /* 落とすものが無くても**確認した時刻は刻む**。刻まないと版がいつまでも
            「未取得」のままで、チェックのボタンが出ない（2026-08-18 実機）。 */
@@ -1583,6 +1587,12 @@ body{overflow-x:clip;overscroll-behavior-x:none}
   function get(k){return idb().then(function(d){return new Promise(function(res,rej){
     var t=d.transaction(STORE,'readonly').objectStore(STORE).get(k||KEY);
     t.onsuccess=function(){res(t.result||null)};t.onerror=function(){rej(t.error)};
+  })})}
+  /* 1件消す（消えたファイルの後片付け。2026-08-24） */
+  function del(k){return idb().then(function(d){return new Promise(function(res,rej){
+    var t=d.transaction(STORE,'readwrite');
+    t.objectStore(STORE).delete(k);
+    t.oncomplete=function(){res(true)};t.onerror=function(){rej(t.error)};
   })})}
   function put(v,k){return idb().then(function(d){return new Promise(function(res,rej){
     var t=d.transaction(STORE,'readwrite');
@@ -1700,6 +1710,10 @@ body{overflow-x:clip;overscroll-behavior-x:none}
           try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
         }).catch(function(err){
           window.TAKKEN_SRC.busy='';
+          /* ここだけ記録に残していなかった（2026-08-24）。同期の失敗はここを通るので、
+             残さないと私が原因を見られない。 */
+          var t=errText(err,'自動の同期')+'／'+(String((err&&err.stack)||'').split(String.fromCharCode(10))[1]||'');
+          errSave(t);
           window.TAKKEN_SRC.err=(err&&err.message)||'確認できません';
           try{window.dispatchEvent(new Event('takken-data'))}catch(e){}
         });
