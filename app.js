@@ -194,6 +194,32 @@ var THEMES=[['1','桜鼠'],['2','ミント'],['3','藤'],['4','桃'],['5','水']
 function themeNow(){var t=ST&&ST.settings&&ST.settings.theme;return (t&&/^[1-9]$/.test(t))?t:'1'}
 /* 本文の見た目を当てる（設定の値→CSS変数）。触っていない項目は既定のまま。 */
 var TXD={txFont:'mincho',txSize:15.5,txLh:1.95,txLs:0,txPad:14};
+/* 帯の色と濃さ（2026-08-25 本人指定）。表の値は**濃さ1.0のときの色**。
+   画面に出す色は白と混ぜて作る＝透かしにすると後ろの紙と混ざって色が読めないため。
+   既定の濃さ 0.35 が、これまでの淡い色（桜 #f5e8eb 等）とほぼ同じになる。 */
+var RDCOL=[['桜','#e2bdc6'],['水色','#bdd4e8'],['若草','#b8dab2'],
+           ['藤','#c9bae5'],['山吹','#e8d49e'],['灰','#c9c3b8']];
+var RDA=0.35;
+function rdBase(){
+  var v=(ST&&ST.settings&&ST.settings.rdColor)||RDCOL[0][1];
+  for(var i=0;i<RDCOL.length;i++)if(RDCOL[i][1]===v)return v;
+  return RDCOL[0][1];
+}
+function rdAlpha(){
+  var v=+((ST&&ST.settings)?ST.settings.rdAlpha:RDA);
+  if(!(v>0))v=RDA;
+  return Math.min(1,Math.max(0.15,v));
+}
+/* 白と混ぜる（k=1で表の色そのまま、k=0で白） */
+function rdMix(hex,k){
+  var n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;
+  function m(c){return Math.round(255+(c-255)*k)}
+  return 'rgb('+m(r)+','+m(g)+','+m(b)+')';
+}
+function rdColor(){return rdMix(rdBase(),rdAlpha())}
+function applyRdColor(){
+  document.documentElement.style.setProperty('--rdband',rdColor());
+}
 function txSet(){
   var o=(ST&&ST.settings)||{},r={};
   r.font=(o.txFont==='goth')?'goth':'mincho';
@@ -213,6 +239,14 @@ function txRow(id,label,mn,mx,st,val,unit){
 }
 /* スライダーを配線する。動かした瞬間に見本と本文の両方が変わる。 */
 function txWire(){
+  /* 帯の濃さ（2026-08-25）。動かすと帯と見本の両方が変わる。 */
+  var ra=document.getElementById('rd-a');
+  if(ra)ra.oninput=function(){
+    ST.settings.rdAlpha=+this.value; saveST(); applyRdColor();
+    var sw=document.querySelectorAll('#txsheet .rdsw');
+    for(var i=0;i<sw.length;i++)
+      sw[i].style.background=rdMix(sw[i].getAttribute('data-v'),rdAlpha());
+  };
   var map={'tx-size':'txSize','tx-lh':'txLh','tx-ls':'txLs','tx-pad':'txPad'};
   Object.keys(map).forEach(function(id){
     var el=document.getElementById(id); if(!el)return;
@@ -818,6 +852,7 @@ var LSOK=true;
 var ST=loadST();
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
 applyText();           /* 本文の見た目（大きさ・行間・字間・余白・書体）も先に当てる */
+applyRdColor();        /* 読み上げの帯の色 */
 setTimeout(function(){try{ghAuto('boot')}catch(e){}},4000);    /* 起動のたび（中身が変わっていれば） */
 /* 記録が壊れて読めなかったら、**元の文字列を退避してから**空で始める。
    退避しないと直後の saveST() が原本を上書きして、部分的に救えたはずの記録まで消える
@@ -6341,11 +6376,16 @@ document.addEventListener('click',function(e){
   if(a==='ghpull'){ghPull();return}
   /* 配色の切替。色だけを入れ替えるので、開いている画面はそのままでよい */
   /* 本文の見た目（2026-08-24 本人指示）。押した瞬間に当てて、設定を開き直す。 */
+  if(a==='rdcol'){ST.settings.rdColor=t.getAttribute('data-v');saveST();applyRdColor();
+    var sw=document.querySelectorAll('#txsheet .rdsw');
+    for(var i=0;i<sw.length;i++)sw[i].classList.toggle('on',sw[i]===t);
+    return}
   if(a==='txsheet'){txSheet();return}
   if(a==='txfont'){var fv=t.getAttribute('data-v');
     ST.settings.txFont=(fv==='goth')?'goth':'mincho';saveST();applyText();
     if(t.getAttribute('data-back')==='tx')txSheet();else dataSheet();return}
-  if(a==='txreset'){delete ST.settings.txFont;delete ST.settings.txSize;
+  if(a==='txreset'){delete ST.settings.rdColor;delete ST.settings.rdAlpha;applyRdColor();
+delete ST.settings.txFont;delete ST.settings.txSize;
     delete ST.settings.txLh;delete ST.settings.txLs;delete ST.settings.txPad;
     saveST();applyText();
     if(t.getAttribute('data-back')==='tx')txSheet();else dataSheet();return}
@@ -7633,6 +7673,7 @@ function kvAfter(id,okq){
    区切りの規則（本人の確定）：「。」で区切る／2行を超える文だけ「、」で割る／
    12字未満の片は同じ文の中で前（先頭なら後ろ）にくっつける。 */
 var RD={box:null,part:null,spans:null,rects:null,raf:0};
+var RDTXT='';        /* いま帯を出している文字列（切れ目の判定に使う） */
 function rdTiming(id){
   var T=window.TAKKEN_TIMING||{};
   return T[id]||null;
@@ -7648,11 +7689,6 @@ function rdWrap(el){
   }
   el.setAttribute('data-rd','1');
 }
-/* 行の数を数える（同じ上端＝同じ行） */
-function rdLines(rects,a,b){
-  var o={};for(var i=a;i<=b;i++)o[Math.round(rects[i].t)]=1;
-  return Object.keys(o).length;
-}
 /* 帯の区切りを作る */
 function rdPlan(rows,rects){
   /* 時間表は [開始, 終了, 画面の開始, 画面の終了]（2026-08-25 作り替え）。
@@ -7666,21 +7702,55 @@ function rdPlan(rows,rects){
     if(a>=rects.length)continue;
     rng.push({a:a,b:b,s:rows[i][0],e:rows[i][1]});
   }
-  /* 「。」で文にまとめる＝字数で見ると分からないので、行の最後が「。」かは呼び手が渡す。
-     ここでは rows の並びをそのまま使い、2行を超えたら割る形にする。 */
-  var out=[],cur=null;
-  for(var j=0;j<rng.length;j++){
-    var z=rng[j];
-    if(!cur){cur={a:z.a,b:z.b,s:z.s,e:z.e};continue}
-    if(rdLines(rects,cur.a,z.b)<=2){cur.b=z.b;cur.e=z.e;continue}
-    out.push(cur);cur={a:z.a,b:z.b,s:z.s,e:z.e};
+  var txt=RDTXT||'';
+  function endch(i){return txt.charAt(i)}
+  /* ① 「。」で文にまとめる。文の中は「、」の片に分けて持つ。
+     時間表の塊は声の息継ぎ（、。「」）で切れているので、「、」「。」以外で
+     切れている片は前の片に繋ぐ（本人指定「・では割らないで。、と。にして欲しい」）。 */
+  var sent=[],cur=null,prev=-1;
+  for(var q=0;q<rng.length;q++){
+    var z=rng[q],a=Math.max(z.a,prev+1);
+    if(a>z.b)a=z.b;
+    if(!cur)cur={a:a,b:z.b,s:z.s,e:z.e,ps:[]};
+    else{if(z.b>cur.b)cur.b=z.b;cur.e=z.e}
+    var L=cur.ps[cur.ps.length-1];
+    if(L&&endch(L.b)!=='、'&&endch(L.b)!=='。'){L.b=z.b;L.e=z.e}
+    else cur.ps.push({a:a,b:z.b,s:z.s,e:z.e});
+    /* この塊の中の最後の「。」で文が終わる */
+    var cut=-1;
+    for(var w=a;w<=z.b&&w<txt.length;w++)if(txt.charAt(w)==='。')cut=w;
+    if(cut>=0){
+      cur.b=cut;cur.ps[cur.ps.length-1].b=cut;
+      sent.push(cur);cur=null;prev=cut;
+    }
   }
-  if(cur)out.push(cur);
-  /* 12字未満の片は前にくっつける（先頭なら後ろ） */
-  for(var k=out.length-1;k>0;k--){
-    if(out[k].b-out[k].a+1<12){out[k-1].b=out[k].b;out[k-1].e=out[k].e;out.splice(k,1)}
+  if(cur)sent.push(cur);
+  /* ② 2行を超える文だけ「、」で割る。12字未満の片は前（先頭なら後ろ）にくっつける。 */
+  /* 1行の字数を測る（最後の行は短いので除き、中央値を取る）。
+     行数で数えると文が行の途中から始まるぶん水増しされるので、字数で見る。 */
+  var LN={},LK=[];
+  for(var y=0;y<rects.length;y++){
+    var ky=Math.round(rects[y].t);
+    if(LN[ky]===undefined){LN[ky]=0;LK.push(ky)}
+    LN[ky]++;
   }
-  if(out.length>1&&out[0].b-out[0].a+1<12){out[1].a=out[0].a;out[1].s=out[0].s;out.shift()}
+  LK.sort(function(x,y2){return x-y2});
+  var LV=LK.slice(0,Math.max(1,LK.length-1)).map(function(k){return LN[k]});
+  LV.sort(function(x,y2){return x-y2});
+  var LIM=(LV[Math.floor(LV.length/2)]||24)*2;   /* 2行分の字数 */
+  var out=[];
+  for(var j=0;j<sent.length;j++){
+    var f=sent[j];
+    if(f.b-f.a+1<=LIM||f.ps.length<2){
+      out.push({a:f.a,b:f.b,s:f.s,e:f.e});continue;
+    }
+    var ps=f.ps.slice();
+    for(var k=ps.length-1;k>0;k--){
+      if(ps[k].b-ps[k].a+1<12){ps[k-1].b=ps[k].b;ps[k-1].e=ps[k].e;ps.splice(k,1)}
+    }
+    if(ps.length>1&&ps[0].b-ps[0].a+1<12){ps[1].a=ps[0].a;ps[1].s=ps[0].s;ps.shift()}
+    for(var n=0;n<ps.length;n++)out.push(ps[n]);
+  }
   return out;
 }
 function rdMeasure(el){
@@ -7719,6 +7789,7 @@ function rdStart(id,part){
   var band=wrap.querySelector('.rdband');
   if(!band){band=document.createElement('div');band.className='rdband';wrap.insertBefore(band,wrap.firstChild)}
   var rects=rdMeasure(tx);
+  RDTXT=tx.textContent||'';
   RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id};
   rdTick();
 }
@@ -7748,7 +7819,6 @@ function txSheet(){
     +'<div class="spread" style="margin-bottom:10px">'
     +'<div class="h" style="margin:0">本文の見た目</div>'
     +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
-    +'<div class="mini" style="margin-bottom:8px">動かすとうしろの問題文がその場で変わります。</div>'
     +'<div class="kk-row"><span class="lb">書体</span><span class="bs">'
     +'<button class="tog'+(tx.font==='mincho'?' on':'')+'" style="margin:0 6px 0 0"'
     +' data-act="txfont" data-v="mincho" data-back="tx">明朝</button>'
@@ -7758,6 +7828,16 @@ function txSheet(){
     +txRow('tx-lh','行間',1.5,2.4,0.05,tx.lh,'')
     +txRow('tx-ls','字間',0,0.12,0.005,tx.ls,'em')
     +txRow('tx-pad','余白',6,24,1,tx.pad,'px')
+    +'<div class="kk-row"><span class="lb">帯</span><span class="bs">'
+    +RDCOL.map(function(c){
+      return '<button class="rdsw'+(rdBase()===c[1]?' on':'')+'" data-act="rdcol"'
+        +' data-v="'+c[1]+'" aria-label="'+c[0]+'" title="'+c[0]+'"'
+        +' style="background:'+rdMix(c[1],rdAlpha())+'"></button>';}).join('')
+    +'</span></div>'
+    /* 濃さ。数字は出さない（見本の色で分かる） */
+    +'<div class="kk-row"><span class="lb">濃さ</span>'
+    +'<input class="sl" type="range" min="0.15" max="1" step="0.05" value="'
+    +rdAlpha()+'" id="rd-a"></div>'
     +'<button class="btn sm" style="width:auto;margin-top:6px" data-act="txreset"'
     +' data-back="tx">既定に戻す</button>'
     +'</div>';

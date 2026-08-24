@@ -1258,6 +1258,10 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qwrap .stem,.qwrap .exp{position:relative}
 .rdband{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:0}
 .rdband i{position:absolute;border-radius:3px;background:var(--rdband,#f5e8eb)}
+/* 帯の色は問題の画面（Aaのシート）で選べる（2026-08-25 本人指定） */
+.rdsw{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);cursor:pointer;
+  padding:0;margin:0 6px 0 0;position:relative}
+.rdsw.on{box-shadow:0 0 0 2px var(--accd)}
 .qwrap .stem .stemtx,.qwrap .exp .exptx{position:relative;z-index:1}
 /* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない。
    さらに sticky で「タブの上」に貼り付ける。面が短いときは元の位置のまま動かない（sticky なので）。
@@ -1457,7 +1461,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='35374a65';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='418d8996';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
