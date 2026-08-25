@@ -1480,7 +1480,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='352a71b1';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='c10a1271';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1537,33 +1537,74 @@ body{overflow-x:clip;overscroll-behavior-x:none}
      "問題が繰り返し起きました"＝WebKit の強制終了）。
      効果音（0.3MB）と聞き取り2択の声（25MB）はそのまま持つ＝すぐ鳴らす必要があるため。
      voice_k は「どの束に入っているか」だけ覚えて、鳴らす直前に1本だけ取り出す。 */
-  var MEDIA={}, MHAS={}, MWHERE={};
+  var MEDIA={}, MHAS={}, MWHERE={}, MIDX=null, SMALLB=[];
+  /* ★音の索引（2026-08-25）。「どの音がどの束に入っているか」だけを1件で持つ。
+     これが無いと、起動のたびに 2,205個の束を全部読むことになり、
+     実測で2〜5秒かかっていた（本人報告「起動時にこれが出てくるのが嫌」）。
+       MIDX = {音の鍵: 束の名前}    SMALLB = 小さい音を含む束の名前（92個）
+     索引の作り直しは、束を触ったとき（同期・置き換え）に行う。 */
+  var MIDXKEY='_midx';
+  function smallOf(o){
+    for(var k in o)if(k.indexOf('voice_k/')!==0)return true;
+    return false;
+  }
+  function useSmall(o){
+    for(var k in o){
+      if(k.indexOf('voice_k/')===0)continue;
+      var v=o[k];
+      /* Blob で入っている小さい音は、そのままでは src に入れられないので一時URLにする */
+      if(v&&typeof v!=='string'){try{v=URL.createObjectURL(v)}catch(e){}}
+      MEDIA[k]=v;
+    }
+  }
   function loadParts(man){
     var names=Object.keys((man&&man.files)||{}),out={},i=0;
-    function step(){
-      if(i>=names.length)return Promise.resolve(out);
-      var p=names[i++];
+    var med=names.filter(function(x){return x.indexOf('media/')===0});
+    var other=names.filter(function(x){return x.indexOf('media/')!==0});
+    var idx=null;
+    function readOther(){
+      if(i>=other.length)return Promise.resolve();
+      var p=other[i++];
       return get(pkey(p)).then(function(o){
-        if(o===null||o===undefined)return step();
-        if(p.indexOf('media/')===0){
-          for(var k in o){
-            if(k.indexOf('voice_k/')===0){MHAS[k]=1;MWHERE[k]=p}
-            else{
-              var v=o[k];
-              /* Blob で入っている小さい音は、そのままでは src に入れられないので
-                 一時URLにする（数は738本＋効果音8本で少ない。2026-08-25） */
-              if(v&&typeof v!=='string'){try{v=URL.createObjectURL(v)}catch(e){}}
-              MEDIA[k]=v;
-            }
-          }
-          o=null;                     /* 束そのものは捨てる＝ここが要点 */
-          return step();
-        }
-        out[p]=o;
-        return step();
-      },function(){return step()});
+        if(o!==null&&o!==undefined)out[p]=o;
+        return readOther();
+      },function(){return readOther()});
     }
-    return step();
+    function readSmall(list,j){
+      j=j||0;
+      if(j>=list.length)return Promise.resolve();
+      return get(pkey(list[j])).then(function(o){
+        if(o)useSmall(o);
+        return readSmall(list,j+1);
+      },function(){return readSmall(list,j+1)});
+    }
+    /* 索引が無い初回だけ、全部の束を読んで索引を作る（次からは速い） */
+    function buildIdx(j,mi,sb){
+      j=j||0;mi=mi||{};sb=sb||[];
+      if(j>=med.length){
+        MIDX=mi;SMALLB=sb;
+        for(var k in mi){MHAS[k]=1;MWHERE[k]=mi[k]}
+        return put({map:mi,small:sb},pkey(MIDXKEY)).catch(function(){});
+      }
+      var p=med[j];
+      return get(pkey(p)).then(function(o){
+        if(o){
+          if(smallOf(o)){sb.push(p);useSmall(o)}
+          for(var k in o)if(k.indexOf('voice_k/')===0)mi[k]=p;
+        }
+        return buildIdx(j+1,mi,sb);
+      },function(){return buildIdx(j+1,mi,sb)});
+    }
+    return readOther().then(function(){
+      return get(pkey(MIDXKEY)).catch(function(){return null});
+    }).then(function(r){
+      if(r&&r.map){
+        MIDX=r.map;SMALLB=r.small||[];
+        for(var k in MIDX){MHAS[k]=1;MWHERE[k]=MIDX[k]}
+        return readSmall(SMALLB);
+      }
+      return buildIdx(0);
+    }).then(function(){return out});
   }
   /* ---------- 音は**そのままの形（Blob）**で持つ（2026-08-25） ----------
      base64 の文字で持つと元の音の1.33倍に膨らむ。端末に入る音は 834MB あるので、
@@ -1742,7 +1783,15 @@ body{overflow-x:clip;overscroll-behavior-x:none}
           /* ★このファイルだけを保存する。以前は溜めた全部を書き直していたので、
              280件で累計40GB近い書き込みになり IndexedDB が落ちた（2026-08-24）。 */
           /* 音は Blob にして保存する＝base64のふくらみ（1.33倍）を持たない（2026-08-25） */
-          if(p.indexOf('media/')===0)o=toBlobs(o);
+          if(p.indexOf('media/')===0){
+            o=toBlobs(o);
+            /* 索引を直す＝次の起動で読み直さなくて済む（2026-08-25） */
+            if(MIDX){
+              for(var mk in o){if(mk.indexOf('voice_k/')===0){MIDX[mk]=p;MHAS[mk]=1;MWHERE[mk]=p}}
+              if(smallOf(o)&&SMALLB.indexOf(p)<0)SMALLB.push(p);
+              put({map:MIDX,small:SMALLB},pkey(MIDXKEY)).catch(function(){});
+            }
+          }
           return put(o,pkey(p)).then(function(){return true}).catch(function(e){
             /* 音（media/）は学習の本体ではない。保存できなければ**飛ばして続ける**
                ＝1件の失敗で問題も図も入らない、を避ける（2026-08-24）。 */
