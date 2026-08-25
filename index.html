@@ -1480,7 +1480,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='8da05d1e';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='33b99836';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1797,7 +1797,35 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     }catch(e){}
   }
   window.TAKKEN_ERRSAVE=errSave;
+  /* 端末の保存量（2026-08-25）。配っているデータは 1,190MB（音が 1,150MB）あり、
+     携帯の上限に当たっている疑いがある。当たっているなら書き込みが落ちて、
+     毎回取り込み直しになる。推測で終わらせないため、数を画面と記録に残す。 */
+  function measure(){
+    try{
+      if(!navigator.storage||!navigator.storage.estimate)return;
+      navigator.storage.estimate().then(function(e){
+        var mb=function(x){return Math.round((x||0)/1048576)};
+        window.TAKKEN_SRC.store={used:mb(e.usage),quota:mb(e.quota)};
+        try{
+          var k='takken_v1',st=JSON.parse(localStorage.getItem(k)||'{}');
+          st.settings=st.settings||{};
+          st.settings.store={at:stamp(),used:mb(e.usage),quota:mb(e.quota),
+                             media:Object.keys(MHAS).length};
+          localStorage.setItem(k,JSON.stringify(st));
+        }catch(e2){}
+        try{window.dispatchEvent(new Event('takken-data'))}catch(e3){}
+      });
+    }catch(e){}
+  }
+  window.TAKKEN_MEASURE=measure;
   function ask(msg){
+    /* ★すでに問題が読めているなら、この画面は出さない（2026-08-25 本人報告
+       「取り込むっていう画面が邪魔」）。同期がこけただけで取り込み画面を被せると、
+       使える状態なのに毎回それが出る。記録だけ残して黙って続ける。 */
+    if(window.TAKKEN_ITEMS&&window.TAKKEN_ITEMS.length){
+      if(msg)errSave('取り込み画面を出さずに続けた：'+msg);
+      return;
+    }
     var im=$('importer'); im.hidden=false;
     var b=$('m6boot'); if(b)b.style.display='none';
     if(msg)$('impstat').textContent=msg;
@@ -1893,7 +1921,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       /* 版の時刻は**データ自身の builtAt**（サーバ側の事実）を正とする。
          端末側で書く rec.at は、書けなかったときに空になる（2026-08-18 実機）。 */
       window.TAKKEN_SRC.at=((rec.man&&rec.man.builtAt)||rec.at||'');
-      apply(d2);boot();autoSync();return 'ok';
+      apply(d2);boot();measure();autoSync();return 'ok';
     });
   }).then(function(done){
     if(done==='ok')return null;

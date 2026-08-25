@@ -5798,7 +5798,17 @@ function dataSheet(){
       +n3(window.TAKKEN_SRC.n)+'問／'+window.TAKKEN_SRC.files+'ファイル'
       /* 読み上げの音が何問ぶん入っているか（2026-08-24 本人報告「音声は言ってなかった」）。
          音は294MBを順に取るので、途中だと索引だけ届いて無音になる。数で分かるようにする。 */
-      +'／読み上げ '+kvCountText()):'')+'</div>'
+      +'／読み上げ '+kvCountText()):'')
+   /* 端末の保存量（2026-08-25）。配っているデータは 1,190MB（音が 1,150MB）あるので、
+      上限に当たっていればここで分かる。当たっていると書き込みが落ちて毎回取り込み直しになる。 */
+   +((window.TAKKEN_SRC&&window.TAKKEN_SRC.store)
+     ?('<div class="mini" style="margin-top:6px">端末の保存 '
+       +n3(window.TAKKEN_SRC.store.used)+'MB／使える上限 '
+       +n3(window.TAKKEN_SRC.store.quota)+'MB'
+       +((window.TAKKEN_SRC.store.quota&&
+          window.TAKKEN_SRC.store.used/window.TAKKEN_SRC.store.quota>0.9)
+         ?'　<b style="color:var(--ngdeep)">上限にほぼ達しています</b>':'')+'</div>')
+     :'')+'</div>'
    +'<div class="mini" style="margin-top:2px">問題・図は '+esc(GH().repo||'—')
    +' の <b>data</b> ブランチから取り込みます（記録は main。触りません）。'
    +'変わったファイルだけ落とすので数百KBで済みます。</div>'
