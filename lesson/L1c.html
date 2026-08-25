@@ -400,7 +400,7 @@ setInterval(function(){
   document.getElementById('tm').textContent='-'+mmss((TOT-d)/RATE);
 },150);
 function done(){playing=false;ppt();
-  location.href='../app.html#q='+encodeURIComponent(IDQ.join(','));}
+  location.href='../index.html#q='+encodeURIComponent(IDQ.join(','));}
 document.getElementById('start').onclick=function(){
   document.getElementById('gate').classList.add('off');step(0);};
 /* 撮って自分で見るための入口（tools/show.py 用。?open=1&st=a8 など） */

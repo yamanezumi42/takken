@@ -5110,22 +5110,40 @@ var LESSONS=[
    min:'約40秒',q:5,note:'道路・公園・河川・広場・水路は内も外も宅地でない。地目は関係ない。'}
 ];
 function vLesson(){
+  /* 2026-08-25 本人指示「講義タブの中の画面は単元学習のデザインと一緒にして欲しい。
+     じゃないと見づらい」。単元学習と同じ骨格＝大きな枠（details.panel.ub）＋
+     36pxの平らな1行（.vrow）。要点の文は行から外す（1行に収めるため）。 */
   var h='<div class="pad">';
   h+='<div class="h">講義</div>'
     +'<div class="mini" style="margin-bottom:12px">図が動く講義を見て、その範囲の問題をすぐ解きます。</div>';
+  var order=[],grp={};
   for(var i=0;i<LESSONS.length;i++){
-    var L=LESSONS[i],done=(ST.lessonDone||{})[L.id];
-    h+='<button class="frow" data-act="lesson" data-k="'+esc(L.id)+'"'
-      +' style="min-height:auto;padding:13px 14px;align-items:flex-start">'
-      +'<span style="flex:1;text-align:left">'
-      +'<span class="mini" style="display:block;margin-bottom:3px">'+esc(L.cat)+'　'+esc(L.no)+'</span>'
-      +'<b style="font-size:15px">'+esc(L.title)+'</b>'
-      +'<span class="mini" style="display:block;margin-top:4px;line-height:1.7">'+esc(L.note)+'</span>'
-      +'<span class="mini" style="display:block;margin-top:5px">'+esc(L.min)+'　問題 '+L.q+'問'
-      +(done?'　<span style="color:var(--accd)">見た</span>':'')+'</span>'
-      +'</span>'+IC.chev+'</button>';
+    var L=LESSONS[i];
+    if(!grp[L.cat]){grp[L.cat]=[];order.push(L.cat)}
+    grp[L.cat].push(L);
   }
-  h+='<div class="hr"></div><div class="mini">これから単元ごとに増やします。</div>';
+  var om=(ST.settings&&ST.settings.lsOpen)||{};
+  order.forEach(function(cat){
+    var ls=grp[cat],nq=0,nd=0;
+    ls.forEach(function(L){nq+=L.q;if((ST.lessonDone||{})[L.id])nd++});
+    var bo=(om[cat]===undefined)?true:!!om[cat];
+    h+='<details class="panel ub m6-det" data-k="L:'+esc(cat)+'"'+(bo?' open':'')+'>'
+      +'<summary><span class="nm">'+esc(cat)+'</span>'
+      +'<span class="m6-mk">'+IC.chev+'</span>'
+      +'<span class="sm">講義 '+ls.length+'本 ／ 問題 '+nq+'問 ／ 見た '+nd+'本</span>'
+      +'</summary><div class="vlist">';
+    ls.forEach(function(L){
+      var done=!!(ST.lessonDone||{})[L.id];
+      h+='<button class="vrow'+(done?' done':'')+'" data-act="lesson" data-k="'+esc(L.id)+'">'
+        +'<span class="rc"><span class="nm">'+esc(L.no)+'　'+esc(L.title)+'</span>'
+        +'<span class="n2">'+esc(L.min)+'</span>'
+        +'<span class="n2">'+L.q+'問</span>'
+        +(done?'<span class="ck">'+IC.check+'</span>':'<span class="ar">'+IC.chev+'</span>')
+        +'</span></button>';
+    });
+    h+='</div></details>';
+  });
+  h+='<div class="mini" style="margin-top:12px">これから単元ごとに増やします。</div>';
   return h+'</div>';
 }
 function vReview(){
