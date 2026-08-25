@@ -481,6 +481,13 @@ a{color:var(--chipfg)}
 /* ---- モーダル ---- */
 #modal{position:fixed;inset:0;z-index:40;background:rgba(29,33,31,.45);display:flex;align-items:flex-end;justify-content:center}
 #modal[hidden]{display:none}
+.whyl{margin:8px 0 10px}
+.whyl .whyh{display:flex;align-items:center;gap:5px;margin:0 2px 5px}
+.whyl .whyh svg{width:15px;height:15px}
+/* 問いは長いので折り返す。行の高さは中身に合わせる（36px固定にしない） */
+.whyrow{min-height:auto;padding:11px 13px;align-items:flex-start;text-align:left;line-height:1.75}
+.whyrow>span:first-child{flex:1 1 auto;white-space:normal}
+.whyrow .fst{flex:0 0 auto;margin-left:8px}
 /* 設定シート。最下部が「進行状況を全消去」＝取り返しのつかない操作なので、
    ホームインジケータのスワイプ領域に重ねない（下の余白に34pxぶんを足す）。 */
 .sheet{background:var(--bg);border-radius:16px 16px 0 0;width:100%;max-width:520px;max-height:88dvh;overflow:auto;
@@ -1289,6 +1296,18 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .tpop .ym{font-size:11px;color:var(--muted);margin:0 0 10px}
 .tpop p{font-size:13.5px;line-height:1.95;margin:0 0 9px}
 .tpop .ex{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:12.8px;line-height:1.9;margin:0 0 9px}
+/* 補足の段落（2026-08-25）。押すとそこから読む。帯を中に置くので relative。 */
+.tpop .hp{position:relative;margin:9px 0;padding:2px 2px;cursor:pointer;
+  border-radius:6px;-webkit-tap-highlight-color:transparent}
+.tpop .hp:active{background:var(--soft)}
+/* 帯は文字の**後ろ**に置く（2026-08-25 実測：前に出ると文字が隠れて空白に見えた）。
+   出題画面では .stem 側の規則で文字が前に出ているが、ここには無いので明示する。 */
+.tpop .hp .rdband{z-index:0}
+.tpop .hp .rdch{position:relative;z-index:1}
+.tpop .hp.hpttl{font-weight:700;font-size:15px}
+.tpop .hp.hpq{font-size:12px;color:var(--accd);font-weight:700;margin:14px 0 6px}
+.tpop .hp.hph{font-weight:700}
+.tpop .hpn{margin:-4px 0 8px;opacity:.75}
 .tpop .qh{font-size:12px;color:var(--accd);font-weight:700;margin:14px 0 6px}
 .tpop .wy{border-left:3px solid var(--acc);padding-left:10px;margin:0 0 10px}
 .tpop .src{font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:14px;padding-top:8px;line-height:1.7}
@@ -1523,7 +1542,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='172c9c3d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='c86c8e1b';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1751,7 +1770,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             kako:rec.parts['kako_voice.json']||null,
             timing:rec.parts['timing.json']||null,
             terms:rec.parts['terms.json']||null,
-            seido:rec.parts['seido.json']||null};
+            seido:rec.parts['seido.json']||null,
+            hosokuTiming:rec.parts['hosoku_timing.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1908,6 +1928,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_TIMING=d.timing||{};         /* 読み上げの時間表（帯） */
     window.TERMS=d.terms||{};                  /* 用語辞典（そもそも何。2026-08-25） */
     window.SEIDO=d.seido||{};                  /* 制度カード（なぜ・例。2026-08-25） */
+    /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
+    window.TAKKEN_HOSOKU_TIMING=d.hosokuTiming||{};
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
      console に出すだけで画面には出さない（引き算の原則）。 */

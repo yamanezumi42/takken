@@ -1430,6 +1430,21 @@ function closed(cat){
   }
   return true;
 }
+/* ★習ったか（2026-08-25）。見た章（ST.watched の「動画id#秒」）に紐づいていれば習った。
+   これがあると「239件を目で見て探す」が要らなくなる。 */
+function isLearned(it){
+  var w=ST.watched||{};
+  var vs=it.videos||[];
+  for(var i=0;i<vs.length;i++){
+    if(w[vs[i].vid+'#'+vs[i].sec])return true;
+  }
+  return false;
+}
+function learnedCount(cat){
+  var its=itemsOfCat(cat),n=0;
+  for(var i=0;i<its.length;i++)if(isLearned(its[i]))n++;
+  return n;
+}
 function catStat(cat){
   var its=itemsOfCat(cat),n=its.length,a=0,ok=0,ng=0,grad=0,keep=0,okn=0,ready=0;
   its.forEach(function(it){var r=R(it.id);if(!r)return;
@@ -2077,7 +2092,7 @@ function stag(){return ANIMON?' stag':''}
 /* タブは5つ。ゲームは**復習と分析の間**（2026-08-23 本人指示）。 */
 /* ゲームタブは外した（2026-08-25 本人指示。線つなぎ3件・早見表2件・オリジナル4択3件・聞き取り2択は使わない）。
    関数の本体は残してある＝kkRate・kkVoice・kkVol などを過去問の読み上げが使っているため。 */
-var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['lesson','講義',IC.info],['review','復習',IC.again],['analysis','分析',IC.chart]];
+var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
 function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':'動画学習'):x[1]}
@@ -3593,6 +3608,12 @@ function vQuiz(){
       },0);
     }
     ghAuto('done');            /* 完走したら記録を上げる（失敗しても学習は止めない） */
+    /* ★読み上げを止める（2026-08-25 本人「全問終わった後の画面でも読まれ続けるのを止めて」）。
+       完走の画面は S.view が 'quiz' のままなので、下の「出題から離れたら止める」判定に
+       当たらず、最後の問題の解説が鳴り続けていた。帯も消す。 */
+    KVLAST=null;
+    try{if(!GM)aClear()}catch(e){}
+    try{rdStop()}catch(e){}
     return vDone();
   }
   var id=S.queue[S.qi],it=BY[id],r=R(id);
@@ -3643,16 +3664,15 @@ function vQuiz(){
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
     +IC.down+'</button></div><div class="qrule"></div></div>';
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
-  /* 点線（用語辞典）は**答えた後だけ**問題文とリードにも付ける（2026-08-25 本人指示
-     「解説を読んだ後に問題につければいい。問題を解いているときに押したら答えが分かってしまう」）。 */
-  h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'
-    +(S.phase==='exp'?termMark(esc(it.lead)):esc(it.lead))+'</div>';
+  /* 問題文（リード）の枠。**いまはこの形に戻してある**（2026-08-26 本人指示
+     「まずリード文と問題の肢を分けている今の現状のもので音を戻してほしい」）。
+     1文にまとめる案（qSay）は関数として残してあり、長さの目安を決めてから入れる。 */
+  h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+termMark(esc(it.lead))+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
      文字は span に入れて光より前に出す（.m3-hero>*:not(.m3-glow) が z-index:1） */
   h+='<div class="stem m3-hero m5-qr'+ac()+'" id="qstem"'+ad(2)+'>'
     +'<span class="m3-glow" aria-hidden="true"></span>'
-    +'<span class="stemtx">'
-    +(S.phase==='exp'?termMark(esc(it.stem)):esc(it.stem))+'</span></div>';
+    +'<span class="stemtx">'+termMark(esc(it.stem))+'</span></div>';
   /* 条文問題（「〜旨」で終わる肢）は文が切れて見える（2026-08-23 本人報告）。
      過去問の文は変えず、読み取りの助けを薄く1行だけ添える。 */
   if(/旨$/.test(String(it.stem||''))&&/条文に規定/.test(String(it.lead||'')))
@@ -4004,6 +4024,93 @@ function termList(){
   return a;
 }
 /* 逃がした文字列に、用語の所だけ点線の印を付ける。**文字は変えない**。 */
+/* ---------- 肢だけで答えられる文を作る（2026-08-25 本人の案・3回直した） ----------
+   本人の指摘で分かったこと
+     ・根拠句（「宅地建物取引業法第35条の規定により」）を落とすと**いつの話か分からない**
+     ・なお書き・ただし書き（除外の条件）を落とすと**答えが変わる**
+     ・述部は「できないか」に言い換えず「できない」の言い切りでよい
+   だから**落とすのは答え方の定型だけ**。短くはならないが、1つの文になるので
+   戻って問題文を読み直す必要がなくなる。
+   組み立て＝［根拠句］＋［主題・条件］＋［肢］＋［述部］＋［なお書き・ただし書き］ */
+var QA_ANS=/(正しい場合は○|[^、。]{0,16}なら○|であれば○)[^。]*。?/;
+/* 区切りの言い方。**読点の有無に関わらず**当てる（2026-08-25 全数検査で判明）。
+   「…この場合に関する次の記述について宅地建物取引業法の規定によれば、」のように
+   読点が無い型があり、読点つきだけを見ていると区切れずに言い方が重なる。 */
+var QA_MID=['次の記述について','次に掲げる法律行為について','次の業務を行うのに',
+            '次の行為について','次の行為は','次の場合','次の記述のうち',
+            '次に掲げるもののうち','次のうち'];
+var QA_PRE=/(なお、[\s\S]*?ものとする。|ただし、[\s\S]*?ものとする。|なお、[\s\S]*?とする。|ただし、[\s\S]*?とする。)/g;
+/* 根拠句＝どの法律・どの条文の話か。文の先頭に置く。 */
+/* 根拠句＝どの法律・どの条文の話か。文の先頭に置く。
+   言い方を1つずつ並べると取りこぼす（実測：「民法及び借地借家法の規定並びに判例によれば」）。
+   「〜法…の規定（及び／並びに…）によれば／により」をまとめて当てる。 */
+var QA_BASE=new RegExp('([^、。]{0,40}?法(第[0-9]+条(の[0-9]+)?)?の規定'
+ +'((及び|並びに|又は)[^、。]{0,24}?)?(によれば|により|に基づき)|判例によれば)、?','g');
+function qLeadParts(it){
+  var L=String(it.lead||'');
+  /* ①なお書き・ただし書きを先に取り分ける（残す） */
+  var pre=[];
+  var body=L.replace(QA_PRE,function(m){pre.push(m.replace(/^[、。\s]+/,''));return ''});
+  /* ②答え方の定型を落とす */
+  body=body.replace(QA_ANS,'').replace(/[、。\s]+$/,'');
+  var mid=null,k;
+  for(k=0;k<QA_MID.length;k++){if(body.indexOf(QA_MID[k])>=0){mid=QA_MID[k];break}}
+  if(mid===null){
+    /* 「次の記述について」の形が無いとき（末尾が『次の記述について』で切れている等）は、
+       その言い方も落としてから主題として使う（2026-08-25 実物で『についてについて』になった）。 */
+    var hd0=body.replace(/次の記述についての?$|次の記述について$|についての次の記述$/,'')
+                .replace(/[、。\s]+$/,'');
+    var b0=[];
+    hd0=hd0.replace(QA_BASE,function(m){b0.push(m.replace(/、$/,''));return ''})
+           .replace(/^[、。\s]+|[、。\s]+$/g,'');
+    return {head:hd0,pred:'',pre:pre,base:b0.join('、'),only:true};
+  }
+  var head=body.slice(0,body.indexOf(mid));
+  var pred=body.slice(body.indexOf(mid)+mid.length);
+  /* ③根拠句を取り出す（先頭に置くため） */
+  var base=[];
+  var pick=function(t){return t.replace(QA_BASE,function(m){base.push(m.replace(/、$/,''));return ''})};
+  head=pick(head).replace(/^[、。\s]+|[、。\s]+$/g,'');
+  pred=pick(pred).replace(/^[、。\s]+|[、。\s]+$/g,'');
+  /* 「この場合に関する」「〜場合に関する」「〜ときに関する」は**条件**（主題ではない）。
+     ここを主題と見ると「〜がある」で切れて助詞終わりになる（2026-08-25 全数検査で92問）。 */
+  head=head.replace(/この場合に関する$/,'').replace(/[、。\s]+$/,'');
+  var cond=/(場合|とき|場合において|ところ)に関する$/.test(head);
+  if(cond)head=head.replace(/に関する$/,'');
+  /* 「〜行う」「〜する」で終わる主題は条件（連体形で肢に続く）。
+     「その業務に関して行う」を主題と見ると「行う」で切れて助詞終わりになる（実測4問）。 */
+  /* 「〜に関する」は主題（条件ではない）。「する」で終わるので条件と誤判定していた
+     （2026-08-26 実測：「宅地建物取引士に関する宅地建物取引士は、」になった）。 */
+  if(!/に関する$/.test(head)&&/(行う|する|した|される)$/.test(head))cond=true;
+  var only=(!cond)&&(/(に関する|についての|における次の)$/.test(head)||!head);
+  return {head:head,pred:pred,pre:pre,base:base.join('、'),only:only};
+}
+function qSay(it){
+  var st=String(it.stem||'');
+  var p=qLeadParts(it);
+  if(!p)return st;
+  var out='';
+  if(p.base)out+=p.base+'、';
+  if(p.head){
+    var hd=p.head.replace(/[、]$/,'');
+    if(p.only){
+      /* 主題（「〜に関する」）は「〜について、」に言い換えて前置きにする */
+      var h3=hd.replace(/(に関する|についての|における次の)$/,'');
+      /* すでに「について」で終わっているなら足さない（「についてについて」になる） */
+      if(/。$/.test(h3))out+=h3;
+      else if(/について$/.test(h3))out+=h3+'、';
+      else out+=h3+'について、';
+    }else{
+      hd=hd.replace(/(における|において)$/,'');
+      /* 設定文（「〜営業している。」のように句点で終わる）は、そのまま1文として置く */
+      if(/。$/.test(hd))out+=hd;
+      else out+=/(行う|する|した|される|できる|ある|ない|の)$/.test(hd)?hd:(hd+'、');
+    }
+  }
+  out+=p.pred?(st.replace(/。$/,'')+'は、'+p.pred+'。'):st;
+  if(p.pre.length)out+=p.pre.join('');
+  return out;
+}
 function termMark(esced){
   var ws=termList();
   if(!ws.length)return esced;
@@ -4022,13 +4129,18 @@ function termMark(esced){
   return out;
 }
 function seidoFor(id){
-  var S2=window.SEIDO||{};
+  var a=seidoAll(id);
+  return a.length?a[0]:null;
+}
+/* この問題に紐づくカードを**全部**返す（1問に複数枚あることがある。2026-08-25） */
+function seidoAll(id){
+  var S2=window.SEIDO||{},out=[];
   for(var k in S2){
     if(k.charAt(0)==='_')continue;
     var c=S2[k];
-    if((c.for||[]).indexOf(id)>=0)return {key:k,card:c};
+    if((c.for||[]).indexOf(id)>=0)out.push({key:k,card:c});
   }
-  return null;
+  return out;
 }
 /* 補足を開くと、読み上げと自動送りを**止める**。閉じたら元に戻す（2026-08-25 本人指示）。
    止めた事実を覚えておき、閉じたときに止めた分だけ戻す（もともと止まっていたら戻さない）。 */
@@ -4043,11 +4155,104 @@ function hosResume(){
   try{ if(HOS.gauge)nextResume(); }catch(e){}
   HOS.said=false;HOS.gauge=false;
 }
+/* 開いたら読み始める（2026-08-25）。読み上げを切っている人には鳴らさない。 */
+function hosAuto(key){
+  if(!key)return;
+  if(!kvSet().on)return;                 /* 読み上げを切っているなら鳴らさない */
+  setTimeout(function(){hosPlay(key)},260);   /* 開く動きが終わってから */
+}
+/* 開いたら段落ごとに読む（2026-08-25）。段落ごとの音が無ければ、今までの1本を鳴らす。 */
+function hosAuto2(base,ap,from){
+  if(!kvSet().on)return;
+  setTimeout(function(){
+    if(ap&&ap.length)hosRun(base,ap,from||0);
+    else if(base)hosPlay(base);
+  },260);
+}
+/* 閉じたら止める（2026-08-25 本人「閉じるを押したときにはその読み上げを停止してほしい」）。
+   止めたあと、問題の読み上げと自動送りを元に戻す。 */
+function hosStop(){
+  try{hosBandStop()}catch(e){}
+  try{aClear()}catch(e){}
+  hosResume();
+}
 /* 補足の読み上げ（先に作っておいた音を鳴らす）。無ければボタンを出さない。 */
 function hosPlay(key){
   var src=mediaSrc('voice_t/'+(kvVoice()||14)+'/'+key+'.m4a');
   if(!src)return;
   aQueue([{src:src,rate:kkRate(kvVoice()||14)}],function(){});
+}
+/* ---------- 補足（用語・制度カード）を段落ごとに読む（2026-08-25） ----------
+   本人「デフォルトで読む」「閉じたら止める」「帯を付ける」「段落をタップしたらそこから読む」。
+   段落ごとの音＝"ap"（並び）。時間表＝data/hosoku_timing.json（段落ごとの文の区切り）。 */
+var HP={keys:null,base:null,i:-1,raf:0,shown:''};
+function hosTiming(base){
+  var H=window.TAKKEN_HOSOKU_TIMING||{};   /* 段落ごとの時間表（配信で入る） */
+  return (H[base]&&H[base].p)?H[base].p:null;
+}
+/* 段落 n から順に読む。n を省くと先頭から。 */
+function hosRun(base,keys,n){
+  if(!keys||!keys.length)return;
+  HP.keys=keys;HP.base=base;
+  n=n||0;
+  var sid=kvVoice()||14,q=[];
+  for(var i=n;i<keys.length;i++){
+    var src=mediaSrc('voice_t/'+sid+'/'+keys[i]+'.m4a');
+    if(!src)continue;
+    q.push({src:src,rate:kkRate(sid),hp:i});
+  }
+  if(!q.length)return;
+  try{aClear()}catch(e){}
+  aQueue(q,function(){hosBandStop()});
+}
+/* いま鳴っている段落に帯を張る（出題画面と同じ描き方） */
+function hosBandStart(i){
+  hosBandStop();
+  var m=document.getElementById('modal');if(!m)return;
+  var el=m.querySelector('.hp[data-i="'+i+'"]');if(!el)return;
+  var tm=hosTiming(HP.base);
+  var row=null;
+  if(tm)for(var k=0;k<tm.length;k++)if(tm[k].i===i)row=tm[k];
+  if(!row||!row.s||!row.s.length)return;
+  rdWrap(el);
+  var band=el.querySelector('.rdband');
+  if(!band){band=document.createElement('div');band.className='rdband';
+    el.insertBefore(band,el.firstChild)}
+  var rects=rdMeasure(el,band);
+  HP.i=i;HP.shown='';
+  HP.spans=row.s.map(function(x){return {s:x[0],e:x[1],a:x[2],b:Math.min(x[3],rects.length-1)}});
+  HP.rects=rects;HP.box=band;
+  hosTick();
+}
+function hosBandStop(){
+  if(HP.raf){clearInterval(HP.raf);HP.raf=0}
+  /* 枠そのものを外す（2026-08-25）。中身だけ空にすると、次の段落に移ったあとも
+     前の段落に空の枠が残り、どこに帯があるのか分からなくなる。 */
+  if(HP.box&&HP.box.parentNode)HP.box.parentNode.removeChild(HP.box);
+  HP.box=null;
+  HP.i=-1;HP.spans=null;HP.shown='';
+  var m=document.getElementById('modal');
+  if(m){var on=m.querySelector('.hp.on');if(on)on.classList.remove('on')}
+}
+function hosTick(){
+  if(HP.raf)clearInterval(HP.raf);
+  HP.raf=setInterval(function(){
+    var a=AQ&&AQ.cur;
+    if(!a||!HP.spans){return}
+    var t=a.currentTime,hit=null;
+    for(var i=0;i<HP.spans.length;i++){
+      if(t>=HP.spans[i].s&&t<HP.spans[i].e){hit=HP.spans[i];break}
+    }
+    var key=hit?(hit.a+'-'+hit.b):'';
+    if(HP.shown===key)return;
+    HP.shown=key;
+    HP.box.innerHTML=hit?rdRects(HP.rects,hit.a,hit.b):'';
+  },80);
+}
+/* 段落の文字を <p class="hp"> に入れる（点線は付けない＝用語の中で用語を開かせない） */
+function hosP(txt,i,cls){
+  return '<p class="hp'+(cls?' '+cls:'')+'" data-act="hosseek" data-i="'+i+'">'
+    +esc(txt)+'</p>';
 }
 function hosBtn(key){
   if(!key)return '';
@@ -4063,32 +4268,59 @@ function termSheet(w){
   var h='<div class="sheet tpop"><div class="spread" style="margin-bottom:10px">'
     +'<div class="h" style="margin:0">用語</div>'
     +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
-    +'<h4>'+esc(w)+'</h4><div class="ym">'+esc(d.y||'')+'</div>'+hosBtn(d.a);
-  (d.p||[]).forEach(function(x){h+='<p>'+esc(x)+'</p>'});
+    /* 見出しそのものが音の段落0。h4 と別に出すと同じ語が2回並ぶので、h4 を段落にする。 */
+    +'<h4 class="hp hpttl" data-act="hosseek" data-i="0">'+esc(w)+'</h4>'
+    +'<div class="ym">'+esc(d.y||'')+'</div>'
+    +'<div class="mini hpn">文をタップすると、そこから読みます。</div>';
+  var pi=1;
+  (d.p||[]).forEach(function(x){h+=hosP(x,pi++)});
   if(d.ex)h+='<div class="ex">'+esc(d.ex)+'</div>';
   h+='</div>';
   m.innerHTML=h;m6SheetOpen();
+  /* 開いたら読み始める（2026-08-25 本人「デフォルトで読むようにして欲しい」）。
+     段落ごとの音があればそれを順に鳴らす（帯を出せる・途中から聞ける）。 */
+  hosAuto2(d.a,d.ap);
 }
-function seidoSheet(key){
+function seidoSheet(key,sec){
   var c=(window.SEIDO||{})[key];
   if(!c)return;
   var m=document.getElementById('modal');if(!m)return;
   hosPause();
   var h='<div class="sheet tpop"><div class="spread" style="margin-bottom:10px">'
-    +'<div class="h" style="margin:0">'+esc(c.title||'なぜ・例')+'</div>'
-    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
-    +hosBtn(c.a);
+    +'<div class="h hp hpttl" style="margin:0" data-act="hosseek" data-i="0">'
+    +esc(c.title||'なぜ・例')+'</div>'
+    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>';
+  h+='<div class="mini hpn">文をタップすると、そこから読みます。</div>';
+  /* 段落の番号は**音の並び**（題→各節の 問い・見出し・本文…・例）に合わせる。
+     ずれると帯が別の文に付くので、ここは音を作る道具（make_voice_hosoku）と同じ順にする。 */
+  /* 上の見出しが題そのものなので、そこを段落0にする（同じ文を2回出さない） */
+  var pi=1;
   (c.sec||[]).forEach(function(sc){
-    h+='<div class="qh">'+esc(sc.q||'')+'</div>';
-    if(sc.h)h+='<p style="font-weight:700">'+esc(sc.h)+'</p>';
+    h+=hosP(sc.q||'',pi++,'hpq');
+    if(sc.h)h+=hosP(sc.h,pi++,'hph');
     h+='<div class="wy">';
-    (sc.p||[]).forEach(function(x){h+='<p>'+esc(x)+'</p>'});
+    (sc.p||[]).forEach(function(x){h+=hosP(x,pi++)});
     h+='</div>';
-    if(sc.ex)h+='<div class="ex">'+esc(sc.ex)+'</div>';
+    if(sc.ex)h+=hosP(sc.ex,pi++,'hpex');
   });
   if(c.src)h+='<div class="src">'+esc(c.src)+'</div>';
   h+='</div>';
   m.innerHTML=h;m6SheetOpen();
+  /* 押した節へ寄せる（2026-08-25）。行に data-s を持たせてあるので、その番号の見出しへ。 */
+  if(sec!==undefined&&sec!==null&&sec!==''){
+    var qs=m.querySelectorAll('.hpq');
+    if(qs[+sec])try{qs[+sec].scrollIntoView({block:'start'})}catch(e){}
+  }
+  /* 開いたら読み始める。節を押して開いたときは**その節の問いから**読む（2026-08-25）。 */
+  var st=0;
+  if(sec!==undefined&&sec!==null&&sec!==''){
+    st=1;                                     /* 題（段落0）を飛ばす */
+    for(var z=0;z<(+sec);z++){
+      var sc2=(c.sec||[])[z]||{};
+      st+=1+(sc2.h?1:0)+((sc2.p||[]).length)+(sc2.ex?1:0);
+    }
+  }
+  hosAuto2(c.a,c.ap,st);
 }
 function expBlock(it,id){
   var res=S.res||{},r=mk(id);
@@ -4099,10 +4331,21 @@ function expBlock(it,id){
   h+='<div class="exp"><div class="exptx">'
     +(it.exp?termMark(esc(it.exp)):'<span class="mini">解説データがありません。</span>')
     +'</div></div>';
-  /* 制度カード（なぜ・例）。この肢に紐づくカードがあるときだけ出す（2026-08-25） */
-  var sd=seidoFor(id);
-  if(sd)h+='<div class="why2"><button class="btn sm" data-act="seido" data-k="'+esc(sd.key)
-    +'">'+IC.info+'なぜ・例</button></div>';
+  /* 制度カード（なぜ・例）。**押す前に何の話か分かるように**、カードの問いを行にして並べる
+     （2026-08-25 本人「動画のリンクの論点みたいな感じで出してほしい。
+       ボタンを押すまで何について言われてるか全くわからない」）。 */
+  var sda=seidoAll(id);
+  if(sda.length){
+    h+='<div class="whyl"><div class="mini whyh">'+IC.info+'なぜ・例</div>';
+    sda.forEach(function(sd){
+      (sd.card.sec||[]).forEach(function(sc,si){
+        h+='<button class="frow whyrow" data-act="seido" data-k="'+esc(sd.key)
+          +'" data-s="'+si+'"><span>'+esc(sc.q||sd.card.title||'なぜ・例')+'</span>'
+          +'<span class="fst">'+IC.chev+'</span></button>';
+      });
+    });
+    h+='</div>';
+  }
   /* 図表は枠内に収める。表組みで細かいものは横スクロールできる入れ物に入れる（縦横比は保つ） */
   (it.figs||[]).forEach(function(f){
     h+='<div class="figbox"><img class="fig" src="'+esc(figSrc(f))+'" alt="図表" onerror="this.parentNode.style.display=\'none\'"></div>';
@@ -4633,6 +4876,8 @@ function aRun(){
     /* 帯は**この部品が鳴り始めた瞬間**に張る（2026-08-25）。
        行列は「問題文→肢」「判定→解説」の順なので、始めに張ると外れる。 */
     try{ if(it.band)rdStart(it.band.id,it.band.part); else rdStop(); }catch(e){}
+    /* 補足の段落が鳴り始めたら、その段落に帯を張る（2026-08-25） */
+    try{ if(it.hp!==undefined&&it.hp!==null)hosBandStart(it.hp); }catch(e){}
     a.src=url;
     a.playbackRate=it.rate||1;
     if(AQ.paused){try{a.pause()}catch(e){}return}
@@ -5161,31 +5406,10 @@ function filterHtml(opt){
 /* ---------- 講義タブ（2026-08-25 本人指示） ----------
    単元ごとに「図が動く講義 → その範囲の問題」を1本にしたもの。
    いまは1本目（宅地とは・12問）だけ。中身は lesson/ の中の画面で動く。 */
-var LESSONS=[
-  /* 2026-08-25 本人指示「動画も一つにまとめてもいいかもね。12問程度ならすぐ終わるし
-     まとめがあって初めて頭に入って解けるようになるしね」→ 1本にまとめ、最後にまとめを置く。
-     並びは習う順（①宅地→②建物→…）。増やすときは work_figs/<講義>_steps.json を作って
-     tools/make_lesson.py で組み、ここに1行足す。 */
-  {id:'L1',cat:'宅地建物取引業・免許',no:'①',title:'宅地とは',
-   min:'約2分',q:12,note:'用途地域の中・外／例外5つ／地目。最後にまとめ。',
-   ids:["b5_1-014-イ", "b5_1-018-4", "b5_1-027-ア", "b5_1-014-ア", "b5_1-014-ウ", "b5_1-027-ウ", "b5_1-018-3", "b5_1-008-1", "b5_1-014-エ", "b5_1-018-1", "b5_1-008-4", "b5_1-018-2"]},
-  {id:'L2',cat:'宅地建物取引業・免許',no:'②',title:'建物とは',
-   min:'約70秒',q:4,note:'屋根と、柱か壁。未完成・学校病院官公庁・一室も建物。ソーラーパネルは建物でない。',
-   ids:["b5_1-008-3", "b5_1-011-1", "b5_1-017-2", "b5_1-008-2"]}
-,
-  {id:'L3a',cat:'宅地建物取引業・免許',no:'③-1',title:'取引とは',
-   min:'約62秒',q:3,note:'売買・交換は自ら・代理・媒介の3つ全部が取引。工事の請負は取引でない。',
-   ids:["b5_1-005-ウ", "b5_1-011-2", "b5_1-021-4"]},
-  {id:'L3b',cat:'宅地建物取引業・免許',no:'③-2',title:'貸借の取引',
-   min:'約56秒',q:4,note:'貸借は代理と媒介が取引。自ら貸借だけが取引でない。管理も取引でない。',
-   ids:["b5_1-005-ア", "b5_1-021-1", "b5_1-021-2", "b5_1-021-3"]},
-  {id:'L3c',cat:'宅地建物取引業・免許',no:'③-3',title:'転貸・サブリース',
-   min:'約45秒',q:4,note:'転貸もサブリースも自ら貸借。所有者も転貸する人も免許はいらない。',
-   ids:["b5_1-030-ア", "b5_1-035-3", "b5_1-036-2", "b5_1-038-2"]},
-  {id:'L3d',cat:'宅地建物取引業・免許',no:'③-4',title:'業者に頼んだとき',
-   min:'約46秒',q:5,note:'頼んだ貸主は取引をしていない。頼まれた業者は代理・媒介で取引。',
-   ids:["b5_1-035-2", "b5_1-046-2", "b5_1-052-2", "b5_1-058-4", "b5_1-059-3"]}
-];
+/* 講義は端末に出さない（2026-08-26 本人指示「使わないみたいだから消してほしい」）。
+   作った道具と中身は**PCに残す**（lesson/*.html・lesson/_stage_*.svg・work_figs/L*・
+   tools/make_lesson.py・tools/make_voice_lesson.py）。戻すときはここに1行足せばよい。 */
+var LESSONS=[];
 /* 講義はアプリの**中**で開く（2026-08-25 本人指摘）。
    前は lesson/*.html へ画面ごと移していたので、戻るときにアプリを読み直し、
    ①起動の演出が毎回挟まる ②「指で触った」記録が消えて携帯が読み上げを止める、
@@ -6467,7 +6691,7 @@ document.addEventListener('click',function(e){
   if(a==='kvsheet'){kvSheet(S.queue[S.qi]);return}
   if(a==='kvtog'){
     /* 設定の名前（kvOn など）→ いまの値の名前（on など）の対応表。素直に書く。 */
-    var KVMAP={kvOn:'on',kvLead:'lead',kvStem:'stem',kvJudge:'judge',kvExp:'exp',kvParen:'paren',kvAuto:'auto'};
+    var KVMAP={kvOn:'on',kvLead:'lead',kvStem:'stem',kvJudge:'judge',kvExp:'exp',kvAuto:'auto'};
     var kk2=t.getAttribute('data-k');
     kvPut(kk2,!kvSet()[KVMAP[kk2]]);
     kvSheet(S.queue[S.qi]);return;
@@ -6653,6 +6877,11 @@ document.addEventListener('click',function(e){
     var sw=document.querySelectorAll('#txsheet .rdsw');
     for(var i=0;i<sw.length;i++)sw[i].classList.toggle('on',sw[i]===t);
     return}
+  if(a==='hosseek'){
+    /* 段落をタップしたら、そこから読む（2026-08-25 本人指示「長すぎるもんね」） */
+    var hi=+(t.getAttribute('data-i')||0);
+    if(HP.keys&&HP.base)hosRun(HP.base,HP.keys,hi);
+    return}
   if(a==='hosplay'){hosPlay(t.getAttribute('data-k'));return}
   if(a==='lesson'){
     var k=t.getAttribute('data-k');
@@ -6660,7 +6889,7 @@ document.addEventListener('click',function(e){
     if(!k){S.lessonId=null;S.view='lesson';render();return}
     openLesson(k);return}
   if(a==='term'){termSheet(t.getAttribute('data-w'));return}
-  if(a==='seido'){seidoSheet(t.getAttribute('data-k'));return}
+  if(a==='seido'){seidoSheet(t.getAttribute('data-k'),t.getAttribute('data-s'));return}
   if(a==='txsheet'){txSheet();return}
   if(a==='txfont'){var fv=t.getAttribute('data-v');
     ST.settings.txFont=(fv==='goth')?'goth':'mincho';saveST();applyText();
@@ -6842,8 +7071,9 @@ delete ST.settings.txFont;delete ST.settings.txSize;
   if(a==='again'){S.qi=0;S.phase='q';S.res=null;saveRun(true);S.anim='card';S.enter=true;render();return}
   if(a==='data'){dataSheet();return}
   if(a==='closeModal'){
-    /* 補足で止めた読み上げ・自動送りを、閉じたときに元へ戻す（2026-08-25 本人指示） */
-    try{ if(HOS.said||HOS.gauge)hosResume(); }catch(e){}
+    /* ★閉じたら補足の読み上げを止める（2026-08-25 本人「閉じるを押したときには
+       その読み上げを停止してほしい」）。止めてから、問題の読み上げと自動送りを元へ戻す。 */
+    try{hosStop()}catch(e){}
     m6SheetClose(0,function(){render()});return}
   if(a==='selall'){var ta=document.getElementById('ta');ta.focus();ta.setSelectionRange(0,ta.value.length);
     markExport();msg('全選択しました。長押し→コピーでも取れます。');return}
@@ -7829,7 +8059,7 @@ function kvSet(){
           stem:(o.kvStem===undefined?true:!!o.kvStem),
           judge:(o.kvJudge===undefined?true:!!o.kvJudge),
           exp:(o.kvExp===undefined?true:!!o.kvExp),
-          paren:!!o.kvParen,
+
           /* 自動で次へ（2026-08-24 本人指示）。既定＝する・4秒 */
           auto:(o.kvAuto===undefined?true:!!o.kvAuto),
           wait:Math.min(15,Math.max(1,+o.kvWait||4))};
@@ -7918,7 +8148,7 @@ function kvSay(id,after){
   var st=kvSet();
   if(!st.on||!kvVoice(id))return;
   var it=BY[id];if(!it)return;
-  var pz=st.paren?'p':'';
+  var pz='';   /* かっこ版は作っていない（2026-08-26 機能を外した） */
   var q=[];
   if(st.lead&&it.qid)q.push(kvItem('lead_'+it.qid+pz,null,id));
   if(st.stem){
@@ -7938,7 +8168,7 @@ function kvAfter(id,okq){
   if(st.judge)q.push({src:mediaSrc('voice/'+kvVoice(id)+'/'+(okq?'v_ok':'v_ng')+'.m4a'),
                       rate:kkRate(kvVoice(id))});
   if(st.exp){
-    var qe=kvItem(id+'_e'+(st.paren?'p':''),null,id);
+    var qe=kvItem(id+'_e',null,id);
     if(qe){qe.band={id:id,part:'e'};q.push(qe)}      /* 解説に帯を出す */
   }
   q=q.filter(Boolean);
@@ -8101,6 +8331,15 @@ function rdStart(id,part,tryn){
   if(!band){band=document.createElement('div');band.className='rdband';wrap.insertBefore(band,wrap.firstChild)}
   var rects=rdMeasure(tx,band);
   RDTXT=tx.textContent||'';
+  /* ★音の文と画面の文がずれている間は帯を出さない（2026-08-26）。
+     画面を「肢だけで答えられる1文」に切り替えたが、音の作り直しは順に進むので、
+     古い音のままの問題では時間表の字の位置が画面と合わない＝別の場所に帯が付く。
+     時間表の最後の字の位置が画面の字数を超えていたら、ずれているので出さない。 */
+  var rows=tb[part]||[],mx=-1;
+  for(var z=0;z<rows.length;z++){if(rows[z][3]!=null&&rows[z][3]>mx)mx=rows[z][3]}
+  /* 時間表は音の文の字数で作られている。画面の字数と**一致しない**なら、
+     音と画面がずれている＝帯が別の場所に付くので出さない（多い・少ないの両方を見る）。 */
+  if(mx<0||Math.abs((mx+1)-RDTXT.length)>2){rdStop();return}
   RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id,shown:''};
   rdTick();
 }
@@ -8190,8 +8429,8 @@ function kvSheet(id){
     +tg2b('kvJudge',st.judge,'正解／不正解')
     +tg2b('kvExp',st.exp,'解説（答えた後）')
     +'</div>'
-    +'<div class="kk-row"><span class="lb">かっこ</span><span class="bs">'
-    +tg2b('kvParen',st.paren,st.paren?'（）の中も読む':'（）の中は読まない')+'</span></div>'
+    /* 「かっこ」の設定は外した（2026-08-26 本人指示）。かっこ版の音を1本も作っていないのに
+       選べたため、選ぶと無音になった（本人「読み上げが鳴ってない」の原因）。 */
     +'<div class="hr"></div><div class="kk-row"><span class="lb">速さ</span>'
     +'<input class="sl" type="range" min="0.7" max="2" step="0.05" value="'+kkRate(kkVoice()||0)
     +'" id="kv-rate"><span class="slv num" id="kv-rv">'
