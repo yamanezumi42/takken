@@ -7794,24 +7794,33 @@ function rdStart(id,part){
   if(!band){band=document.createElement('div');band.className='rdband';wrap.insertBefore(band,wrap.firstChild)}
   var rects=rdMeasure(tx,band);
   RDTXT=tx.textContent||'';
-  RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id};
+  RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id,shown:''};
   rdTick();
 }
 function rdStop(){
   if(RD.raf)cancelAnimationFrame(RD.raf);
   if(RD.box)RD.box.innerHTML='';
-  RD.raf=0;RD.spans=null;
+  RD.raf=0;RD.spans=null;RD.shown='';
 }
 function rdTick(){
   if(!RD.spans||!RD.box){return}
   var a=AQ&&AQ.cur;
-  if(!a){RD.box.innerHTML='';RD.raf=requestAnimationFrame(rdTick);return}
+  if(!a){rdPaint(null);RD.raf=requestAnimationFrame(rdTick);return}
   var t=a.currentTime,hit=null;
   for(var i=0;i<RD.spans.length;i++){
     if(t>=RD.spans[i].s&&t<RD.spans[i].e){hit=RD.spans[i];break}
   }
-  RD.box.innerHTML=hit?rdRects(RD.rects,hit.a,hit.b):'';
+  rdPaint(hit);
   RD.raf=requestAnimationFrame(rdTick);
+}
+/* ★変わったときだけ描き直す（2026-08-25 本人報告「タップの利きが悪い」）。
+   前は毎フレーム innerHTML を作り直していた（1秒に約60回）。見た目は塊が変わるまで
+   同じなのに毎回HTMLを組み立て直すので、指の入力の処理が後回しになっていた。 */
+function rdPaint(hit){
+  var key=hit?(hit.a+'-'+hit.b):'';
+  if(RD.shown===key)return;
+  RD.shown=key;
+  RD.box.innerHTML=hit?rdRects(RD.rects,hit.a,hit.b):'';
 }
 /* 設定のシート（出典と同じ形で下から出す） */
 /* 本文の見た目のシート（2026-08-24 本人指示）。出題画面から開く。
