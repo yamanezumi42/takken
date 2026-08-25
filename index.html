@@ -1421,6 +1421,9 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     <button class="acc" type="button" data-act="nextchap" id="r-nextchap" hidden>次の章へ</button>
     <!-- 単元・小見出しから入ったときの導線。動画側（次の章へ・次の動画へ）とは排他で出す -->
     <button class="acc" type="button" data-act="nextcat" id="r-nextcat" hidden>次の単元へ</button>
+    <!-- 講義から来たときの導線（2026-08-25 本人指示「問題が終わった後の画面は
+         講義なら次の講義に行けるようにして欲しい」）。次が無ければ講義の一覧へ。 -->
+    <button class="acc" type="button" data-act="lesson" id="r-lesson" hidden>次の講義へ</button>
     <button class="acc" type="button" data-act="nextvid" id="r-next" hidden>次の動画へ</button>
     <!-- いま解いた範囲の動画をYouTubeで開く。『次の動画へ』は問題に飛ぶだけなので別に置く -->
     <a class="btn" id="r-watch" target="_blank" rel="noreferrer" data-act="vwatch" hidden></a>
@@ -1474,7 +1477,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b51c5080';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='0a19cbd7';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

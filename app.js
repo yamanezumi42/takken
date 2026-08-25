@@ -1789,6 +1789,8 @@ function startQueue(list,label,withSneak,baseVid,keepGrad,keepRound){
      **宅建士と無関係の「次の章へ」**が点灯していた。ここで「いま解いている単位」の印を
      まとめて落とす（roundCat/roundSub＝単元・小見出しから入った印も同じ扱い）。 */
   if(!keepRound){S.round=0;S.roundSec=null;S.roundCat=null;S.roundSub=null}
+  /* 講義から来た印。間違い直し（keepRound）では残す＝直し終わってから次の講義へ行ける */
+  if(!keepRound)S.lessonId=null;
   S.baseVid=baseVid||null;                 /* 基準の動画（指定が無ければ既定のチャンネル基準） */
   /* 科目基準（解禁の保険）は「次の1回だけ効く」受け渡しにする。
      2026-08-15 検証：startCat が S.baseBig を入れてから startQueue を呼んでいたのに、
@@ -4147,12 +4149,26 @@ function setResultBtns(wn,nx,perfect,nc,nu){
     }
   }
   if(nb){nb.hidden=!nx;if(nx){nb.setAttribute('data-v',nx.vid);nb.className=(wn||nc)?'pri':'acc'}}
+  /* 講義から来たとき。間違いが残っているうちは出さない＝先に直させる。 */
+  var lb=document.getElementById('r-lesson');
+  if(lb){
+    var LL=(!wn&&S.lessonId)?nextLesson(S.lessonId):null;
+    lb.hidden=!(!wn&&S.lessonId);
+    if(!lb.hidden){
+      if(LL){lb.setAttribute('data-k',LL.id);lb.textContent='次の講義へ（'+LL.no+' '+LL.title+'）'}
+      else{lb.removeAttribute('data-k');lb.textContent='講義の一覧へ'}
+      lb.className='acc';
+    }
+  }
   /* パスで解き残しがあるときだけ「もう一度この範囲を解く」を残す
      （全問正解なら不要、間違いがあるなら上の「間違えた…」がその役目） */
   if(ag)ag.hidden=(wn>0||perfect);
 }
 function vDone(){
   var tot=S.queue.length,nw=S.wrongs.length,sT=S.sT||0,sR=S.sR||0;
+  /* 講義の問題をやり切ったら「見た」印を立てる（講義の一覧に✓が付く）。2026-08-25 */
+  if(S.lessonId&&!nw){if(!ST.lessonDone)ST.lessonDone={};
+    if(!ST.lessonDone[S.lessonId]){ST.lessonDone[S.lessonId]=today();saveST()}}
   var vs=S.roundVid?videoStat(S.roundVid):null;
   var nc=nextChap(S.roundVid,S.roundSec);
   var vdone=!!(vs&&(vs.done||(S.roundVid&&restCount(videoItemsUp(S.roundVid))===0)));
@@ -4180,6 +4196,14 @@ function vDone(){
   if(nu)h+='<button class="btn '+(nw?'':'acc')+'" style="margin-top:10px" data-act="nextcat" data-c="'+esc(nu.cat)+'"'
     +(nu.sub?' data-i="'+nu.i+'"':'')+'>'+(nu.sub?'次の小見出しへ（':'次の単元へ（')+esc(nu.label)+'）</button>';
   if(nx)h+='<button class="btn '+((nw||nc)?'':'acc')+'" style="margin-top:10px" data-act="nextvid" data-v="'+esc(nx.vid)+'">次の動画へ</button>';
+  /* 講義から来たときは、終わったら次の講義へ（無ければ講義の一覧へ）。2026-08-25 本人指示。
+     間違いが残っているうちは出さない＝先に直させる。 */
+  if(!nw&&S.lessonId){
+    var nl=nextLesson(S.lessonId);
+    h+='<button class="btn acc" style="margin-top:10px" data-act="lesson"'
+      +(nl?' data-k="'+esc(nl.id)+'"':'')+'>'
+      +(nl?'次の講義へ（'+esc(nl.no+' '+nl.title)+'）':'講義の一覧へ')+'</button>';
+  }
   /* 静的な #r-btns と同じものを出す（片方だけだと本人には見えない＝検査Z1） */
   var rw=resultWatch();
   if(rw)h+='<a class="btn" style="margin-top:10px" href="'+vurl(rw.vid,rw.sec)+'" target="_blank"'
@@ -5102,12 +5126,12 @@ function filterHtml(opt){
    単元ごとに「図が動く講義 → その範囲の問題」を1本にしたもの。
    いまは1本目（宅地とは・12問）だけ。中身は lesson/ の中の画面で動く。 */
 var LESSONS=[
-  {id:'L1a',cat:'宅地建物取引業・免許',no:'①-1',title:'用途地域の中なら宅地',
-   min:'約60秒',q:3,note:'中にあれば建物や地目に関係なく宅地。準工業・工業専用も用途地域。'},
-  {id:'L1b',cat:'宅地建物取引業・免許',no:'①-2',title:'用途地域の外は建物の敷地か目的',
-   min:'約25秒',q:4,note:'外は「建物の敷地」か「建てる目的」なら宅地。市街化調整区域もここ。'},
-  {id:'L1c',cat:'宅地建物取引業・免許',no:'①-3',title:'例外5つと地目のひっかけ',
-   min:'約40秒',q:5,note:'道路・公園・河川・広場・水路は内も外も宅地でない。地目は関係ない。'}
+  /* 2026-08-25 本人指示「動画も一つにまとめてもいいかもね。12問程度ならすぐ終わるし
+     まとめがあって初めて頭に入って解けるようになるしね」→ 3本を1本に戻し、
+     最後にまとめ（宅地はこれ／宅地でないものはこれ）を置いた。 */
+  {id:'L1',cat:'宅地建物取引業・免許',no:'①',title:'宅地とは',
+   min:'約2分',q:12,note:'用途地域の中・外／例外5つ／地目。最後にまとめ。',
+   ids:["b5_1-014-イ", "b5_1-018-4", "b5_1-027-ア", "b5_1-014-ア", "b5_1-014-ウ", "b5_1-027-ウ", "b5_1-018-3", "b5_1-008-1", "b5_1-014-エ", "b5_1-018-1", "b5_1-008-4", "b5_1-018-2"]}
 ];
 function vLesson(){
   /* 2026-08-25 本人指示「講義タブの中の画面は単元学習のデザインと一緒にして欲しい。
@@ -6537,6 +6561,8 @@ document.addEventListener('click',function(e){
   if(a==='hosplay'){hosPlay(t.getAttribute('data-k'));return}
   if(a==='lesson'){
     var k=t.getAttribute('data-k');
+    /* data-k が無い＝「講義の一覧へ」（次の講義が無いとき）。2026-08-25 */
+    if(!k){S.lessonId=null;S.view='lesson';render();return}
     ST.lessonDone=ST.lessonDone||{};ST.lessonDone[k]=today();saveST();
     location.href='lesson/'+k+'.html';return}
   if(a==='term'){termSheet(t.getAttribute('data-w'));return}
@@ -8410,11 +8436,26 @@ if(ST.settings&&ST.settings.fmode1!==true){
    #q=id,id… で開くと、その問題だけを**既存の出題画面**で出す。出題の作りは1つのまま。
    ★名前を付けた関数にしてある＝配信の関門（check_spec の Z2/Z3）が
      「どの入口の呼び出しか」を関数名で見るため。無名だと別の入口と誤認される。 */
+function lessonOf(ids){
+  /* どの講義の問題かを、渡された id の集合から言い当てる（講義側に持たせない＝ずれない） */
+  var k=ids.slice().sort().join(',');
+  for(var i=0;i<LESSONS.length;i++){
+    if((LESSONS[i].ids||[]).slice().sort().join(',')===k)return LESSONS[i];
+  }
+  return null;
+}
+function nextLesson(id){
+  for(var i=0;i<LESSONS.length;i++)if(LESSONS[i].id===id)return LESSONS[i+1]||null;
+  return null;
+}
 function startLesson(ids){
   ids=(ids||[]).filter(function(x){return !!BY[x]});
   if(!ids.length)return false;
+  var L=lessonOf(ids);
   S.pickExplicit=true;S.keepOrder=true;S.kind='review';
   startQueue(ids.map(function(i){return BY[i]}),'講義の問題',false,null,true,false);
+  /* startQueue の後に入れる＝startQueue が消すので順番が要る。間違い直し（keepRound）は残す */
+  S.lessonId=L?L.id:null;
   return true;
 }
 (function(){

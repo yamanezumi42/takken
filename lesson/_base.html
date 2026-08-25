@@ -1,0 +1,411 @@
+<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#f6f2ec;--panel:#fdfbf7;--fg:#332e28;--muted:#8a8074;--acc:#c98b9b;--accd:#a9647a;
+ --line:#e8e0d8;--soft:#f2ece4;--chip:#f5e8eb;--ok:#5c8a63;--ng:#c4736c;--gnd:#cfc3b2;
+ --in:#dbe8f2;--ind:#4a6579}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+ font-family:system-ui,"Yu Gothic UI",sans-serif;min-height:100vh;padding:0 0 116px;
+ display:flex;flex-direction:column}
+/* 図と字幕をひとまとめにして、上下の中央に置く（2026-08-25 本人指示） */
+.mid{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}
+.w{max-width:430px;margin:0 auto;padding:0 14px;width:100%;
+ flex:1 0 auto;display:flex;flex-direction:column}
+header{padding:14px 0 6px;text-align:center}
+.kick{font-size:10.5px;color:var(--accd);letter-spacing:.14em;font-weight:700}
+h1{font-size:19px;margin:4px 0 0}
+.stage{margin:6px 0 0}
+svg{width:100%;height:auto;display:block}
+/* 字幕 */
+.sub{padding:12px 4px 4px;text-align:center;min-height:5.2em}
+.sub .l{font-size:15px;font-weight:600;line-height:1.85;
+ opacity:0;transform:translateY(6px);transition:opacity .3s ease,transform .3s ease}
+.sub .l.in{opacity:1;transform:none}
+/* 操作 */
+footer{position:fixed;left:0;right:0;bottom:0;background:rgba(246,242,236,.97);
+ border-top:1px solid var(--line);padding:9px 14px 14px;z-index:5}
+.in2{max-width:430px;margin:0 auto;display:flex;gap:11px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);
+ background:var(--panel);color:var(--fg);border-radius:99px;padding:10px 15px;font-size:13px;
+ cursor:pointer;font-family:inherit}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.btn:active{transform:scale(.97)}
+.ico{width:16px;height:16px;flex:0 0 auto}
+.pg{flex:1;height:5px;background:var(--line);border-radius:99px;overflow:hidden}
+.pg i{display:block;height:100%;background:var(--acc);width:0;transition:width .25s linear}
+.tm{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
+.btn.ic{padding:9px 12px;font-size:12px}
+.seek{flex:1;-webkit-appearance:none;appearance:none;height:22px;background:transparent;margin:0}
+.seek::-webkit-slider-runnable-track{height:5px;border-radius:99px;background:var(--line)}
+.seek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;
+ border-radius:50%;background:var(--acc);border:2px solid #fff;margin-top:-5.5px;
+ box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.seek::-moz-range-track{height:5px;border-radius:99px;background:var(--line)}
+.seek::-moz-range-thumb{width:16px;height:16px;border:2px solid #fff;border-radius:50%;
+ background:var(--acc)}
+/* 舞台 */
+#st g{transition:opacity .45s ease,transform .55s cubic-bezier(.2,.85,.3,1)}
+#st .o{opacity:0}
+#st .o.on{opacity:1}
+#st .rise{transform:translateY(22px)}
+#st .rise.on{transform:none}
+#st .pop{transform:scale(.66);transform-origin:center}
+#st .pop.on{transform:none}
+.lbl rect{fill:var(--panel);stroke:var(--acc);stroke-width:1.6}
+.lbl text{fill:var(--accd);font-weight:700}
+.lbl.b rect{fill:var(--chip)}
+.lbl.n rect{stroke:var(--ng)}
+.lbl.n text{fill:var(--ng)}
+.lbl.i rect{stroke:#7fa7c4}
+.lbl.i text{fill:var(--ind)}
+.chip rect{fill:#e7f0e8;stroke:#8fb596;stroke-width:1.6}
+.chip text{fill:#3f6b46;font-weight:700}
+.gate{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;align-items:center;
+ justify-content:center;padding:22px}
+.gate.off{display:none}
+.gin{max-width:380px;text-align:center;background:linear-gradient(180deg,#f9eef1,#fdfbf7);
+ border:1px solid var(--line);border-radius:20px;padding:28px 20px 24px}
+.gt{font-size:24px;font-weight:700;line-height:1.45;margin:10px 0 12px}
+.gs{font-size:12.5px;color:var(--muted);line-height:1.95;margin:0 0 20px}
+</style>
+
+<div class="gate" id="gate"><div class="gin">
+ <div class="kick">__KICK__</div>
+ <div class="gt">用途地域の中なら宅地</div>
+ <div class="gs">図が動きます。字幕も出ます。<br>約59秒 → そのあと3問。</div>
+ <button class="btn pri" id="start" style="padding:14px 28px;font-size:15px">
+ <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>はじめる</button>
+</div></div>
+
+<div class="w">
+<header><div class="kick">宅地建物取引業・免許　①</div><h1>__HEAD__</h1></header>
+
+<div class="mid">
+<div class="stage">
+<svg id="st" viewBox="0 0 360 300" role="img" aria-label="用途地域の内と外で宅地かどうかを分ける図">
+
+ <!-- 導入：4語 -->
+ <g class="o pop intro">
+  <rect x="14" y="90" width="332" height="112" rx="14" fill="var(--panel)" stroke="var(--line)" stroke-width="2"/>
+  <g class="o pop i1"><rect x="30" y="112" width="88" height="34" rx="10" fill="var(--chip)" stroke="var(--acc)" stroke-width="1.8"/>
+   <text x="74" y="128" font-size="12" fill="var(--accd)" text-anchor="middle" font-weight="700">宅地</text>
+   <text x="74" y="140" font-size="9.5" fill="var(--accd)" text-anchor="middle">または建物</text></g>
+  <g class="o pop i2"><rect x="132" y="112" width="70" height="34" rx="10" fill="var(--panel)" stroke="var(--line)" stroke-width="1.8"/>
+   <text x="167" y="134" font-size="12" fill="var(--fg)" text-anchor="middle" font-weight="700">取引</text></g>
+  <g class="o pop i3"><rect x="216" y="112" width="70" height="34" rx="10" fill="var(--panel)" stroke="var(--line)" stroke-width="1.8"/>
+   <text x="251" y="134" font-size="12" fill="var(--fg)" text-anchor="middle" font-weight="700">業</text></g>
+  <g class="o pop i4"><rect x="140" y="164" width="136" height="26" rx="13" fill="var(--acc)"/>
+   <text x="208" y="182" font-size="12" fill="#fff" text-anchor="middle" font-weight="700">免許が必要</text></g>
+  <text x="125" y="134" font-size="11" fill="var(--muted)" text-anchor="middle">×</text>
+  <text x="209" y="134" font-size="11" fill="var(--muted)" text-anchor="middle">×</text>
+  <g class="o pop i5"><rect x="30" y="150" width="88" height="18" rx="7" fill="none" stroke="var(--acc)"
+    stroke-width="1.6" stroke-dasharray="4 3"/>
+   <text x="74" y="163" font-size="9.5" fill="var(--accd)" text-anchor="middle">今日はここ</text></g>
+ </g>
+
+ <!-- 内と外の枠 -->
+ <g class="o zin">
+  <rect x="10" y="86" width="196" height="176" rx="12" fill="var(--in)" stroke="#7fa7c4" stroke-width="2.6"/>
+  <text x="24" y="106" font-size="12" fill="var(--ind)" font-weight="700">用途地域の中</text>
+ </g>
+ <g class="o zout">
+  <rect x="214" y="86" width="136" height="176" rx="12" fill="#f4f0ea" stroke="#ddd4c8" stroke-width="2.2"/>
+  <text x="226" y="106" font-size="12" fill="#7d7365" font-weight="700">用途地域の外</text>
+ </g>
+ <g class="o pop zbal">
+  <rect x="16" y="14" width="328" height="52" rx="13" fill="var(--panel)" stroke="#7fa7c4" stroke-width="1.8"/>
+  <path d="M100 66 l14 0 -7 11z" fill="var(--panel)" stroke="#7fa7c4" stroke-width="1.8"/>
+  <text x="180" y="34" font-size="12.5" fill="var(--ind)" text-anchor="middle" font-weight="700">用途地域とは</text>
+  <text x="180" y="53" font-size="11" fill="var(--ind)" text-anchor="middle">都市計画で「住宅地」「お店」と用途を決めた区域</text>
+ </g>
+
+ <!-- 中：それだけで宅地 -->
+ <g class="o pop inrule"><rect x="22" y="114" width="172" height="24" rx="9" fill="var(--panel)" stroke="#7fa7c4" stroke-width="1.6"/>
+  <text x="108" y="130" font-size="11.5" fill="var(--ind)" text-anchor="middle" font-weight="700">中にあれば、それだけで宅地</text></g>
+ <g class="o rise iy1"><rect x="30" y="196" width="48" height="18" rx="3" fill="#e9e2d6" stroke="#cbbba3" stroke-width="1.6"/>
+  <rect x="38" y="188" width="10" height="9" fill="#d9cfc2"/><rect x="54" y="184" width="10" height="13" fill="#d9cfc2"/>
+  <text x="54" y="228" font-size="10" fill="var(--ind)" text-anchor="middle">資材置き場</text></g>
+ <g class="o rise iy2"><path d="M96 208 q10 -8 20 0 q10 8 20 0" fill="none" stroke="#8fb596" stroke-width="2.2"/>
+  <path d="M96 198 q10 -8 20 0 q10 8 20 0" fill="none" stroke="#8fb596" stroke-width="2.2"/>
+  <text x="116" y="228" font-size="10" fill="var(--ind)" text-anchor="middle">農地</text></g>
+ <g class="o rise iy3"><rect x="150" y="192" width="40" height="22" fill="#efe6d8" stroke="#cbbba3" stroke-width="1.6"/>
+  <path d="M146 192 170 178 194 192Z" fill="#c98b9b"/>
+  <text x="170" y="228" font-size="10" fill="var(--ind)" text-anchor="middle">家</text></g>
+ <g class="o pop ichip"><rect x="84" y="240" width="48" height="20" rx="9" fill="#e7f0e8" stroke="#8fb596" stroke-width="1.6"/>
+  <text x="108" y="254" font-size="11" fill="#3f6b46" text-anchor="middle" font-weight="700">全部 宅地</text></g>
+ <g class="o pop iname"><rect x="22" y="142" width="172" height="40" rx="9" fill="var(--panel)" stroke="#7fa7c4" stroke-width="1.6"/>
+  <text x="108" y="158" font-size="10.5" fill="var(--ind)" text-anchor="middle">準工業地域・工業専用地域も</text>
+  <text x="108" y="174" font-size="10.5" fill="var(--ind)" text-anchor="middle">用途地域の一種</text></g>
+
+ <!-- 外：建物の敷地かどうか -->
+ <g class="o pop outrule"><rect x="220" y="114" width="124" height="24" rx="9" fill="var(--panel)" stroke="#ddd4c8" stroke-width="1.6"/>
+  <text x="282" y="130" font-size="11" fill="#7d7365" text-anchor="middle" font-weight="700">建物の敷地なら宅地</text></g>
+ <g class="o rise oy1"><rect x="230" y="192" width="36" height="22" fill="#efe6d8" stroke="#cbbba3" stroke-width="1.6"/>
+  <path d="M226 192 248 178 270 192Z" fill="#c98b9b"/>
+  <text x="248" y="228" font-size="10" fill="#7d7365" text-anchor="middle">家</text>
+  <g class="o pop"><rect x="228" y="238" width="40" height="18" rx="8" fill="#e7f0e8" stroke="#8fb596" stroke-width="1.4"/>
+   <text x="248" y="251" font-size="10" fill="#3f6b46" text-anchor="middle" font-weight="700">宅地</text></g></g>
+ <g class="o rise oy2"><rect x="290" y="192" width="36" height="22" fill="none" stroke="var(--accd)"
+   stroke-width="1.8" stroke-dasharray="5 4"/>
+  <path d="M286 192 308 178 330 192Z" fill="none" stroke="var(--accd)" stroke-width="1.8" stroke-dasharray="5 4"/>
+  <text x="308" y="228" font-size="10" fill="#7d7365" text-anchor="middle">建てる目的</text>
+  <g class="o pop"><rect x="288" y="238" width="40" height="18" rx="8" fill="#e7f0e8" stroke="#8fb596" stroke-width="1.4"/>
+   <text x="308" y="251" font-size="10" fill="#3f6b46" text-anchor="middle" font-weight="700">宅地</text></g></g>
+ <g class="o pop oy3"><rect x="220" y="146" width="124" height="34" rx="9" fill="#fdf3f2" stroke="#e0bdb9" stroke-width="1.6"/>
+  <text x="282" y="162" font-size="10.5" fill="#a1524b" text-anchor="middle">それ以外は</text>
+  <text x="282" y="176" font-size="11" fill="#a1524b" text-anchor="middle" font-weight="700">宅地ではない</text></g>
+ <g class="o pop chosei"><rect x="214" y="66" width="136" height="24" rx="9" fill="var(--panel)" stroke="#ddd4c8" stroke-width="1.6"/>
+  <text x="282" y="82" font-size="10.5" fill="#7d7365" text-anchor="middle">市街化調整区域もここ</text></g>
+
+ <!-- 例外5つ（内も外も×） -->
+ <g class="o pop exlab"><rect x="70" y="14" width="220" height="24" rx="9" fill="var(--panel)" stroke="var(--ng)" stroke-width="1.6"/>
+  <text x="180" y="30" font-size="12" fill="var(--ng)" text-anchor="middle" font-weight="700">内も外も 宅地でない 5つ</text></g>
+ <g class="o pop e1"><rect x="12" y="48" width="64" height="52" rx="9" fill="var(--panel)" stroke="#e0bdb9" stroke-width="1.6"/>
+  <rect x="24" y="76" width="40" height="6" rx="2" fill="#ddd6cc"/>
+  <line x1="44" y1="60" x2="44" y2="76" stroke="#fdfbf7" stroke-width="2" stroke-dasharray="4 4"/>
+  <rect x="24" y="60" width="40" height="16" fill="#ddd6cc"/>
+  <text x="44" y="94" font-size="10.5" fill="#a1524b" text-anchor="middle">道路</text></g>
+ <g class="o pop e2"><rect x="82" y="48" width="64" height="52" rx="9" fill="var(--panel)" stroke="#e0bdb9" stroke-width="1.6"/>
+  <circle cx="106" cy="68" r="9" fill="#cfe0cd" stroke="#8fb596" stroke-width="1.4"/>
+  <rect x="96" y="80" width="20" height="5" rx="2" fill="#cfe0cd" stroke="#8fb596" stroke-width="1.2"/>
+  <text x="114" y="94" font-size="10.5" fill="#a1524b" text-anchor="middle">公園</text></g>
+ <g class="o pop e3"><rect x="152" y="48" width="64" height="52" rx="9" fill="var(--panel)" stroke="#e0bdb9" stroke-width="1.6"/>
+  <path d="M162 74 q10 -9 20 0 q10 9 20 0" fill="none" stroke="#7fa7c4" stroke-width="2.4"/>
+  <text x="184" y="94" font-size="10.5" fill="#a1524b" text-anchor="middle">河川</text></g>
+ <g class="o pop e4"><rect x="222" y="48" width="64" height="52" rx="9" fill="var(--panel)" stroke="#e0bdb9" stroke-width="1.6"/>
+  <rect x="234" y="62" width="40" height="20" rx="3" fill="#efe9df" stroke="#cbbba3" stroke-width="1.3"/>
+  <text x="254" y="94" font-size="10.5" fill="#a1524b" text-anchor="middle">広場</text></g>
+ <g class="o pop e5"><rect x="292" y="48" width="56" height="52" rx="9" fill="var(--panel)" stroke="#e0bdb9" stroke-width="1.6"/>
+  <path d="M304 60 q10 14 0 26 M336 60 q-10 14 0 26" fill="none" stroke="#cbbba3" stroke-width="1.8"/>
+  <path d="M312 66 q8 10 0 18" fill="none" stroke="#7fa7c4" stroke-width="2.2"/>
+  <text x="320" y="94" font-size="10.5" fill="#a1524b" text-anchor="middle">水路</text></g>
+ <g class="o pop exboth">
+  <rect x="14" y="116" width="150" height="60" rx="10" fill="var(--in)" stroke="#7fa7c4" stroke-width="2"/>
+  <text x="89" y="136" font-size="11" fill="var(--ind)" text-anchor="middle">用途地域の中</text>
+  <path d="M64 146 l50 22 M114 146 l-50 22" stroke="var(--ng)" stroke-width="3.4" stroke-linecap="round"/>
+  <rect x="196" y="116" width="150" height="60" rx="10" fill="#f4f0ea" stroke="#ddd4c8" stroke-width="2"/>
+  <text x="271" y="136" font-size="11" fill="#7d7365" text-anchor="middle">用途地域の外</text>
+  <path d="M246 146 l50 22 M296 146 l-50 22" stroke="var(--ng)" stroke-width="3.4" stroke-linecap="round"/>
+  <text x="180" y="200" font-size="12" fill="var(--ng)" text-anchor="middle" font-weight="700">どちらでも宅地にならない</text>
+ </g>
+
+ <!-- 地目 -->
+ <g class="o pop toki">
+  <rect x="112" y="70" width="136" height="112" rx="8" fill="var(--panel)" stroke="#d9cfc2" stroke-width="2"/>
+  <text x="180" y="92" font-size="11.5" fill="var(--muted)" text-anchor="middle" font-weight="700">登記簿</text>
+  <line x1="126" y1="100" x2="234" y2="100" stroke="var(--line)" stroke-width="1.6"/>
+  <text x="132" y="122" font-size="10.5" fill="var(--muted)">所在</text>
+  <text x="228" y="122" font-size="10.5" fill="var(--fg)" text-anchor="end">◯◯市1-2</text>
+  <rect x="126" y="134" width="108" height="24" rx="7" fill="var(--chip)" stroke="var(--acc)" stroke-width="1.4"/>
+  <text x="136" y="151" font-size="10.5" fill="var(--accd)" font-weight="700">地目</text>
+  <text x="224" y="151" font-size="12" fill="var(--accd)" text-anchor="end" font-weight="700">田</text>
+ </g>
+ <g class="o pop tokix"><path d="M124 78 l112 96 M236 78 l-112 96" stroke="var(--ng)"
+   stroke-width="5" stroke-linecap="round"/></g>
+ <g class="o pop tokilab"><rect x="82" y="196" width="196" height="24" rx="9" fill="var(--panel)" stroke="var(--ng)" stroke-width="1.6"/>
+  <text x="180" y="212" font-size="12" fill="var(--ng)" text-anchor="middle" font-weight="700">地目は関係ない</text></g>
+
+
+ <!-- 都市計画法の線引き（ざっくり） -->
+ <g class="o pop toshi">
+  <rect x="12" y="86" width="336" height="132" rx="12" fill="var(--panel)" stroke="var(--line)" stroke-width="2"/>
+  <text x="180" y="106" font-size="12" fill="var(--fg)" text-anchor="middle" font-weight="700">都市計画法＝街をどう作るかを決める法律</text>
+  <g class="o pop t1"><rect x="26" y="118" width="150" height="86" rx="10" fill="#dbe8f2" stroke="#7fa7c4" stroke-width="2"/>
+   <text x="101" y="138" font-size="11" fill="var(--ind)" text-anchor="middle" font-weight="700">街にしていく側</text>
+   <rect x="38" y="148" width="126" height="44" rx="8" fill="var(--panel)" stroke="#7fa7c4" stroke-width="1.5"/>
+   <text x="101" y="166" font-size="10.5" fill="var(--ind)" text-anchor="middle">この中に</text>
+   <text x="101" y="182" font-size="11" fill="var(--ind)" text-anchor="middle" font-weight="700">用途地域がある</text></g>
+  <g class="o pop t2"><rect x="184" y="118" width="150" height="86" rx="10" fill="#f4f0ea" stroke="#ddd4c8" stroke-width="2"/>
+   <text x="259" y="138" font-size="11" fill="#7d7365" text-anchor="middle" font-weight="700">街を広げない側</text>
+   <rect x="196" y="148" width="126" height="44" rx="8" fill="var(--panel)" stroke="#ddd4c8" stroke-width="1.5"/>
+   <text x="259" y="166" font-size="10.5" fill="#7d7365" text-anchor="middle">市街化調整区域</text>
+   <text x="259" y="182" font-size="10" fill="#7d7365" text-anchor="middle">自然や農地を残す</text></g>
+ </g>
+ <g class="o pop tnote"><rect x="30" y="228" width="300" height="26" rx="9" fill="var(--panel)" stroke="var(--line)" stroke-width="1.6"/>
+  <text x="180" y="245" font-size="10.5" fill="var(--muted)" text-anchor="middle">細かい種類は、あとの「法令上の制限」で習います</text></g>
+ <!-- 市街化調整区域でも建物の敷地なら宅地 -->
+ <g class="o pop chosei2">
+  <rect x="90" y="96" width="180" height="76" rx="11" fill="#f4f0ea" stroke="#ddd4c8" stroke-width="2"/>
+  <text x="180" y="116" font-size="11" fill="#7d7365" text-anchor="middle" font-weight="700">市街化調整区域</text>
+  <rect x="140" y="132" width="44" height="26" fill="#efe6d8" stroke="#cbbba3" stroke-width="1.6"/>
+  <path d="M136 132 162 116 188 132Z" fill="#c98b9b"/>
+  <g class="o pop"><rect x="196" y="134" width="52" height="22" rx="10" fill="#e7f0e8" stroke="#8fb596" stroke-width="1.6"/>
+   <text x="222" y="149" font-size="11" fill="#3f6b46" text-anchor="middle" font-weight="700">宅地</text></g>
+ </g>
+ <g class="o pop chosei3"><rect x="46" y="188" width="268" height="42" rx="10" fill="var(--panel)" stroke="var(--acc)" stroke-width="1.6"/>
+  <text x="180" y="206" font-size="11.5" fill="var(--accd)" text-anchor="middle" font-weight="700">建物の敷地なら、それだけで宅地</text>
+  <text x="180" y="222" font-size="10.5" fill="var(--accd)" text-anchor="middle">用途地域かどうかを迷わなくてよい</text></g>
+
+ <!-- まとめ -->
+ <g class="o sum">
+  <rect x="10" y="14" width="164" height="130" rx="11" fill="var(--in)" stroke="#7fa7c4" stroke-width="2"/>
+  <text x="92" y="34" font-size="12" fill="var(--ind)" text-anchor="middle" font-weight="700">用途地域の中</text>
+  <rect x="186" y="14" width="164" height="130" rx="11" fill="#f4f0ea" stroke="#ddd4c8" stroke-width="2"/>
+  <text x="268" y="34" font-size="12" fill="#7d7365" text-anchor="middle" font-weight="700">用途地域の外</text>
+ </g>
+ <g class="o pop m1"><rect x="20" y="44" width="144" height="42" rx="8" fill="var(--panel)" stroke="#a9c6dc" stroke-width="1.5"/>
+  <text x="92" y="62" font-size="10.5" fill="var(--fg)" text-anchor="middle">建物・地目に関係なく</text>
+  <text x="92" y="78" font-size="11" fill="#3f6b46" text-anchor="middle" font-weight="700">それだけで宅地</text></g>
+ <g class="o pop m2"><rect x="20" y="94" width="144" height="40" rx="8" fill="var(--panel)" stroke="#a9c6dc" stroke-width="1.5"/>
+  <text x="92" y="111" font-size="10" fill="var(--muted)" text-anchor="middle">準工業・工業専用も</text>
+  <text x="92" y="126" font-size="10" fill="var(--muted)" text-anchor="middle">用途地域の一種</text></g>
+ <g class="o pop m3"><rect x="196" y="44" width="144" height="42" rx="8" fill="var(--panel)" stroke="#ddd4c8" stroke-width="1.5"/>
+  <text x="268" y="62" font-size="10.5" fill="var(--fg)" text-anchor="middle">建物の敷地 or 建てる目的</text>
+  <text x="268" y="78" font-size="11" fill="#3f6b46" text-anchor="middle" font-weight="700">なら宅地</text></g>
+ <g class="o pop m4"><rect x="196" y="94" width="144" height="40" rx="8" fill="var(--panel)" stroke="#ddd4c8" stroke-width="1.5"/>
+  <text x="268" y="111" font-size="10" fill="var(--muted)" text-anchor="middle">市街化調整区域もここ</text>
+  <text x="268" y="126" font-size="10.5" fill="#a1524b" text-anchor="middle" font-weight="700">それ以外は宅地でない</text></g>
+ <g class="o pop m5"><rect x="24" y="156" width="312" height="34" rx="10" fill="#fdf3f2" stroke="#e0bdb9" stroke-width="1.8"/>
+  <text x="180" y="170" font-size="11" fill="#a1524b" text-anchor="middle" font-weight="700">道路・公園・河川・広場・水路</text>
+  <text x="180" y="184" font-size="10.5" fill="#a1524b" text-anchor="middle">内も外も 宅地にならない</text></g>
+ <g class="o pop m6"><rect x="24" y="200" width="312" height="26" rx="10" fill="var(--panel)" stroke="var(--line)" stroke-width="1.6"/>
+  <text x="180" y="217" font-size="11" fill="var(--fg)" text-anchor="middle">登記簿の地目は関係ない</text></g>
+</svg>
+</div>
+
+<div class="sub" id="sub"></div>
+</div>
+</div>
+
+<footer>
+<div class="in2" style="margin-bottom:7px">
+ <span class="tm" id="tmn">0:00</span>
+ <input class="seek" id="seek" type="range" min="0" max="1000" value="0" aria-label="位置">
+ <span class="tm" id="tm">—</span>
+</div>
+<div class="in2">
+ <button class="btn ic" id="back" aria-label="10秒戻る"><svg class="ico" viewBox="0 0 24 24"
+  fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 3.5V7h3.5"/></svg>10秒</button>
+ <button class="btn pri" id="pp" style="min-width:104px"><svg class="ico" viewBox="0 0 24 24"
+  fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 5v14M16 5v14"/></svg>
+  <span id="ppt">一時停止</span></button>
+ <button class="btn ic" id="rate">1.3倍</button>
+ <button class="btn ic" id="vol" aria-label="音量"><svg class="ico" viewBox="0 0 24 24" fill="none"
+  stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 9h3l4-3v12l-4-3H4z"/>
+  <path d="M15.5 9.5a4 4 0 0 1 0 5"/></svg></button>
+</div>
+<div class="in2 volrow" id="volrow" hidden>
+ <span class="tm">音量</span>
+ <input class="seek" id="volr" type="range" min="0" max="100" value="100" aria-label="音量">
+ <span class="tm" id="volv">100</span>
+</div>
+</footer>
+
+<script>
+var L1 = __SAY__;
+var STEPS=__STEPS__;
+var IDQ=__IDQ__;
+var ALL=['intro','i1','i2','i3','i4','i5','zin','zout','zbal','inrule','toshi','t1','t2','tnote','chosei2','chosei3','iy1','iy2','iy3','ichip',
+ 'iname','outrule','oy1','oy2','oy3','chosei','exlab','e1','e2','e3','e4','e5','exboth',
+ 'toki','tokix','tokilab','sum','m1','m2','m3','m4','m5','m6'];
+var AU=__AU__;
+var RATE=1.30;
+var st=document.getElementById('st'),sub=document.getElementById('sub');
+var A=new Audio(),ci=0,playing=false,subT=[];
+var TOT=STEPS.reduce(function(a,s){return a+((L1[s.id]||{}).d||0)},0);
+function setScene(list){
+  ALL.forEach(function(k){
+    if(list.indexOf(k)<0){var e=st.querySelector('.'+k);if(e)e.classList.remove('on')}
+  });
+  list.forEach(function(k,i){
+    setTimeout(function(){
+      var e=st.querySelector('.'+k);
+      if(e){e.classList.add('on');
+        e.querySelectorAll('.o').forEach(function(c){c.classList.add('on')})}
+    },i*200);
+  });
+}
+function setSub(lines,sec){
+  subT.forEach(clearTimeout);subT=[];sub.innerHTML='';
+  var each=Math.max(1.0,(sec/RATE)/lines.length);
+  lines.forEach(function(t,i){
+    subT.push(setTimeout(function(){
+      sub.innerHTML='<div class="l">'+t+'</div>';
+      var e=sub.querySelector('.l');setTimeout(function(){if(e)e.classList.add('in')},20);
+    },i*each*1000));
+  });
+}
+function step(n){
+  ci=n;
+  if(n>=STEPS.length){done();return}
+  var s=STEPS[n],r=L1[s.id]||{d:5,say:['']};
+  setScene(s.show);setSub(r.say,r.d);
+  A.src=AU[s.id]||'';A.playbackRate=RATE;
+  A.play().then(function(){playing=true;A.playbackRate=RATE;ppt()})
+          .catch(function(){playing=false;ppt()});
+}
+A.addEventListener('ended',function(){step(ci+1)});
+function ppt(){document.getElementById('ppt').textContent=playing?'一時停止':'再生'}
+document.getElementById('pp').onclick=function(){
+  if(playing){A.pause();playing=false}else{A.play().catch(function(){});playing=true}ppt();
+};
+/* ---- 全体を1本の時間軸として扱う（どこへでも飛べるように。2026-08-25 本人指示） ---- */
+function startOf(n){return STEPS.slice(0,n).reduce(function(a,s){return a+((L1[s.id]||{}).d||0)},0)}
+function nowSec(){return startOf(ci)+(A.currentTime||0)}
+function seekTo(sec){
+  sec=Math.max(0,Math.min(TOT-0.05,sec));
+  for(var i=STEPS.length-1;i>=0;i--){
+    if(sec>=startOf(i)){
+      var off=sec-startOf(i);
+      if(i===ci){A.currentTime=off}
+      else{
+        var was=playing;
+        ci=i;
+        var r=L1[STEPS[i].id]||{d:5,say:['']};
+        setScene(STEPS[i].show);setSub(r.say,r.d);
+        A.src=AU[STEPS[i].id]||'';
+        A.playbackRate=RATE;
+        A.addEventListener('loadedmetadata',function h(){
+          A.removeEventListener('loadedmetadata',h);A.currentTime=off;
+          if(was){A.play().catch(function(){})}
+        });
+      }
+      break;
+    }
+  }
+}
+var drag=false;
+var seek=document.getElementById('seek');
+seek.addEventListener('input',function(){drag=true});
+seek.addEventListener('change',function(){
+  drag=false;seekTo(TOT*(+seek.value)/1000);
+});
+document.getElementById('back').onclick=function(){seekTo(nowSec()-10*RATE)};
+var RATES=[1.0,1.15,1.3,1.5,1.75],ri=2;
+document.getElementById('rate').onclick=function(){
+  ri=(ri+1)%RATES.length;RATE=RATES[ri];A.playbackRate=RATE;
+  this.textContent=RATE.toFixed(2).replace(/0$/,'').replace(/\.$/,'')+'倍';
+};
+var vr=document.getElementById('volr');
+document.getElementById('vol').onclick=function(){
+  var r=document.getElementById('volrow');r.hidden=!r.hidden;
+};
+vr.addEventListener('input',function(){
+  A.volume=(+vr.value)/100;document.getElementById('volv').textContent=vr.value;
+});
+function mmss(x){x=Math.max(0,Math.round(x));return Math.floor(x/60)+':'+('0'+(x%60)).slice(-2)}
+setInterval(function(){
+  var d=nowSec();
+  if(!drag)seek.value=Math.round(TOT?d/TOT*1000:0);
+  document.getElementById('pgi')&&(document.getElementById('pgi').style.width='');
+  document.getElementById('tmn').textContent=mmss(d/RATE);
+  document.getElementById('tm').textContent='-'+mmss((TOT-d)/RATE);
+},150);
+function done(){playing=false;ppt();
+  location.href='../index.html#q='+encodeURIComponent(IDQ.join(','));}
+document.getElementById('start').onclick=function(){
+  document.getElementById('gate').classList.add('off');step(0);};
+/* 撮って自分で見るための入口（tools/show.py 用。?open=1&st=a8 など） */
+if(/[?&]open=1/.test(location.search)){
+  document.getElementById('gate').classList.add('off');
+  var m=/[?&]st=(a\d+)/.exec(location.search),to=m?m[1]:'a10';
+  for(var k=0;k<STEPS.length;k++){
+    if(STEPS[k].id===to){setScene(STEPS[k].show);
+      setSub([(L1[to]||{say:['']}).say[0]],2);break}
+  }
+}
+</script>
+<div style="text-align:center;font-size:11px;color:#9a9288;padding:10px 12px 16px;line-height:1.7">読み上げ：VOICEVOX：冥鳴ひまり</div>
