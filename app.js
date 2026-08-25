@@ -3621,12 +3621,16 @@ function vQuiz(){
     +'<button class="btn sm" style="min-height:28px;padding:0 8px" data-act="togsrc" aria-label="出典と根拠">'
     +IC.down+'</button></div><div class="qrule"></div></div>';
   /* 出典・根拠・他の章はシートで開く（その場で開かない＝問題文の座標が動かない＝SPEC §5-1／§5-2） */
-  h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+esc(it.lead)+'</div>';
+  /* 点線（用語辞典）は**答えた後だけ**問題文とリードにも付ける（2026-08-25 本人指示
+     「解説を読んだ後に問題につければいい。問題を解いているときに押したら答えが分かってしまう」）。 */
+  h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'
+    +(S.phase==='exp'?termMark(esc(it.lead)):esc(it.lead))+'</div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
      文字は span に入れて光より前に出す（.m3-hero>*:not(.m3-glow) が z-index:1） */
   h+='<div class="stem m3-hero m5-qr'+ac()+'" id="qstem"'+ad(2)+'>'
     +'<span class="m3-glow" aria-hidden="true"></span>'
-    +'<span class="stemtx">'+esc(it.stem)+'</span></div>';
+    +'<span class="stemtx">'
+    +(S.phase==='exp'?termMark(esc(it.stem)):esc(it.stem))+'</span></div>';
   /* 条文問題（「〜旨」で終わる肢）は文が切れて見える（2026-08-23 本人報告）。
      過去問の文は変えず、読み取りの助けを薄く1行だけ添える。 */
   if(/旨$/.test(String(it.stem||''))&&/条文に規定/.test(String(it.lead||'')))
@@ -3830,6 +3834,13 @@ function applyExpDom(it,id){
   var sp=w.querySelector('.qsp');
   if(sp){w.insertBefore(ew,sp);sp.style.height='76px';}   /* 固定した「次の問題」のぶん末尾を空ける */
   else w.appendChild(ew);
+  /* 答えたので、問題文とリードにも点線を付ける（2026-08-25 本人指示）。
+     読み上げの帯は問題文を読み終わってから解説に移るので、ここで中身を差し替えても
+     帯には影響しない（帯は rdStart で解説側に張り替わる）。 */
+  var stx=w.querySelector('.stem .stemtx');
+  if(stx&&it.stem)stx.innerHTML=termMark(esc(it.stem));
+  var ld=w.querySelector('.lead');
+  if(ld&&it.lead)ld.innerHTML=termMark(esc(it.lead));
   m4BoxPlay(id);
   return true;
 }
@@ -4129,7 +4140,10 @@ function setResultBtns(wn,nx,perfect,nc,nu){
       wb=document.getElementById('r-watch');
   /* いま解いた範囲の動画（あこ課長）を開くリンク。最後に答えた肢の章を使う。 */
   if(wb){
-    var wv=resultWatch();
+    /* 講義から来たときは出さない（2026-08-25 本人指摘
+       「最後の問題終わりの画面で講義動画に行くみたいなやつはこれ YouTube のやつだからだめ」）。
+       行き先は「次の講義へ」なので、YouTube の導線は混ぜない。 */
+    var wv=S.lessonId?null:resultWatch();
     wb.hidden=!wv;
     if(wv){wb.href=vurl(wv.vid,wv.sec);wb.setAttribute('data-k',wv.vid+'#'+wv.sec);
       wb.innerHTML=IC.yt+'動画を見る（'+esc(wv.label)+' '+mmss(wv.sec)+'）'}
@@ -4205,7 +4219,7 @@ function vDone(){
       +(nl?'次の講義へ（'+esc(nl.no+' '+nl.title)+'）':'講義の一覧へ')+'</button>';
   }
   /* 静的な #r-btns と同じものを出す（片方だけだと本人には見えない＝検査Z1） */
-  var rw=resultWatch();
+  var rw=S.lessonId?null:resultWatch();   /* 講義から来たら YouTube は出さない（2026-08-25） */
   if(rw)h+='<a class="btn" style="margin-top:10px" href="'+vurl(rw.vid,rw.sec)+'" target="_blank"'
     +' rel="noreferrer" data-act="vwatch" data-k="'+esc(rw.vid+'#'+rw.sec)+'">'
     +IC.yt+'動画を見る（'+esc(rw.label)+' '+mmss(rw.sec)+'）</a>';
@@ -5133,6 +5147,38 @@ var LESSONS=[
    min:'約2分',q:12,note:'用途地域の中・外／例外5つ／地目。最後にまとめ。',
    ids:["b5_1-014-イ", "b5_1-018-4", "b5_1-027-ア", "b5_1-014-ア", "b5_1-014-ウ", "b5_1-027-ウ", "b5_1-018-3", "b5_1-008-1", "b5_1-014-エ", "b5_1-018-1", "b5_1-008-4", "b5_1-018-2"]}
 ];
+/* 講義はアプリの**中**で開く（2026-08-25 本人指摘）。
+   前は lesson/*.html へ画面ごと移していたので、戻るときにアプリを読み直し、
+   ①起動の演出が毎回挟まる ②「指で触った」記録が消えて携帯が読み上げを止める、
+   の2つが起きていた。同じ画面の中に覆いとして出せば、どちらも起きない。 */
+var LESOV=null;
+function openLesson(k){
+  if(LESOV)return;
+  var ov=document.createElement('div');
+  ov.id='lesov';
+  ov.innerHTML='<iframe src="lesson/'+k+'.html?embed=1" title="講義"></iframe>';
+  document.body.appendChild(ov);
+  LESOV={el:ov,id:k};
+  document.documentElement.style.overflow='hidden';
+}
+function closeLesson(){
+  if(!LESOV)return;
+  if(LESOV.el.parentNode)LESOV.el.parentNode.removeChild(LESOV.el);
+  LESOV=null;
+  document.documentElement.style.overflow='';
+}
+addEventListener('message',function(e){
+  var d=e&&e.data;
+  if(!d||!d.takken||!LESOV)return;
+  var k=LESOV.id;
+  if(d.takken==='home'){closeLesson();S.lessonId=null;S.view='home';render();return}
+  if(d.takken==='lessonDone'){
+    ST.lessonDone=ST.lessonDone||{};ST.lessonDone[k]=today();saveST();
+    closeLesson();
+    /* いきなり問題に入る＝間に何も挟まない（2026-08-25 本人指示） */
+    startLesson(d.ids||[]);
+  }
+});
 function vLesson(){
   /* 2026-08-25 本人指示「講義タブの中の画面は単元学習のデザインと一緒にして欲しい。
      じゃないと見づらい」。単元学習と同じ骨格＝大きな枠（details.panel.ub）＋
@@ -6563,8 +6609,7 @@ document.addEventListener('click',function(e){
     var k=t.getAttribute('data-k');
     /* data-k が無い＝「講義の一覧へ」（次の講義が無いとき）。2026-08-25 */
     if(!k){S.lessonId=null;S.view='lesson';render();return}
-    ST.lessonDone=ST.lessonDone||{};ST.lessonDone[k]=today();saveST();
-    location.href='lesson/'+k+'.html';return}
+    openLesson(k);return}
   if(a==='term'){termSheet(t.getAttribute('data-w'));return}
   if(a==='seido'){seidoSheet(t.getAttribute('data-k'));return}
   if(a==='txsheet'){txSheet();return}
@@ -7872,11 +7917,27 @@ function rdTiming(id){
 /* 文字を1つずつ span に入れる（帯の位置を測るため）。文字は変えない。 */
 function rdWrap(el){
   if(!el||el.getAttribute('data-rd'))return;
-  var t=el.textContent;
-  el.textContent='';
-  for(var i=0;i<t.length;i++){
-    var c=document.createElement('span');c.className='rdch';c.textContent=t[i];
-    el.appendChild(c);
+  /* ★中の作りを壊さずに包む（2026-08-25 実測で判明）。
+     前は el.textContent を丸ごと取って入れ直していたので、
+     用語辞典の点線（<span data-act="term">）が**消えていた**。
+     読み上げを入れている間は解説の点線が出ない、という状態だった。
+     文字の入っている所（テキスト節）だけを1文字ずつ包む。 */
+  var tn=[],st=[el];
+  while(st.length){
+    var n=st.pop();
+    for(var k=0;k<n.childNodes.length;k++){
+      var c=n.childNodes[k];
+      if(c.nodeType===3){if(c.nodeValue)tn.push(c)}
+      else if(c.nodeType===1)st.push(c);
+    }
+  }
+  for(var j=0;j<tn.length;j++){
+    var node=tn[j],txt=node.nodeValue,frag=document.createDocumentFragment();
+    for(var i=0;i<txt.length;i++){
+      var sp=document.createElement('span');sp.className='rdch';sp.textContent=txt[i];
+      frag.appendChild(sp);
+    }
+    if(node.parentNode)node.parentNode.replaceChild(frag,node);
   }
   el.setAttribute('data-rd','1');
 }

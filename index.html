@@ -585,6 +585,9 @@ input[type=date],input[type=number]{font-family:var(--num);font-size:14px;min-he
    z-index：#fx 30 / #m1fx 35 / #modal 40 より上、タブ(20)も覆って区切りを強く出す */
 /* 完走のオーバーレイ。唯一の出口「ホームへ戻る」が下端に来るので、
    ホームインジケータのスワイプ領域（iPhone15で34px）に入らないよう底を上げる。 */
+/* 講義の覆い（アプリの中で講義を開く。2026-08-25） */
+#lesov{position:fixed;inset:0;z-index:60;background:var(--bg)}
+#lesov iframe{width:100%;height:100%;border:0;display:block}
 .m5-ov{position:fixed;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;
   padding-bottom:env(safe-area-inset-bottom)}
 .m5-ov[hidden]{display:none}
@@ -1477,7 +1480,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='0a19cbd7';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='8da05d1e';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

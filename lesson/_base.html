@@ -69,18 +69,23 @@ footer{position:fixed;left:0;right:0;bottom:0;background:rgba(246,242,236,.97);
  border:1px solid var(--line);border-radius:20px;padding:28px 20px 24px}
 .gt{font-size:24px;font-weight:700;line-height:1.45;margin:10px 0 12px}
 .gs{font-size:12.5px;color:var(--muted);line-height:1.95;margin:0 0 20px}
+.gbtns{display:flex;flex-direction:column;gap:9px;align-items:center}
 </style>
 
 <div class="gate" id="gate"><div class="gin">
  <div class="kick">__KICK__</div>
- <div class="gt">用途地域の中なら宅地</div>
- <div class="gs">図が動きます。字幕も出ます。<br>約59秒 → そのあと3問。</div>
- <button class="btn pri" id="start" style="padding:14px 28px;font-size:15px">
- <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>はじめる</button>
+ <div class="gt">__HEAD__</div>
+ <div class="gs">図が動きます。字幕も出ます。<br>約__MIN__ → そのあと__NQ__問。</div>
+ <div class="gbtns">
+  <button class="btn pri" id="start" style="padding:14px 28px;font-size:15px">
+  <svg class="ico" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>講義を始める</button>
+  <button class="btn" id="toq" style="padding:12px 22px">問題を解く（__NQ__問）</button>
+  <button class="btn" id="tohome" style="padding:12px 22px">ホームへ戻る</button>
+ </div>
 </div></div>
 
 <div class="w">
-<header><div class="kick">宅地建物取引業・免許　①</div><h1>__HEAD__</h1></header>
+<header><div class="kick">__KICK__</div><h1>__HEAD__</h1></header>
 
 <div class="mid">
 <div class="stage">
@@ -394,10 +399,22 @@ setInterval(function(){
   document.getElementById('tmn').textContent=mmss(d/RATE);
   document.getElementById('tm').textContent='-'+mmss((TOT-d)/RATE);
 },150);
-function done(){playing=false;ppt();
-  location.href='../index.html#q='+encodeURIComponent(IDQ.join(','));}
+/* アプリの中に埋め込まれているか（?embed=1）。埋め込みなら画面を読み直さず、
+   親（アプリ）に知らせて閉じてもらう＝起動演出が挟まらず、読み上げも鳴る。 */
+var EMB=/[?&]embed=1/.test(location.search);
+function toApp(msg){
+  if(EMB){try{parent.postMessage({takken:msg,ids:IDQ},'*')}catch(e){}return}
+  if(msg==='home'){location.href='../app.html';return}
+  location.href='../index.html#q='+encodeURIComponent(IDQ.join(','));
+}
+function done(){playing=false;ppt();toApp('lessonDone');}
 document.getElementById('start').onclick=function(){
   document.getElementById('gate').classList.add('off');step(0);};
+document.getElementById('toq').onclick=function(){
+  /* 講義を飛ばして問題へ（2026-08-25 本人指示） */
+  playing=false;try{A.pause()}catch(e){}toApp('lessonDone');};
+document.getElementById('tohome').onclick=function(){
+  playing=false;try{A.pause()}catch(e){}toApp('home');};
 /* 撮って自分で見るための入口（tools/show.py 用。?open=1&st=a8 など） */
 if(/[?&]open=1/.test(location.search)){
   document.getElementById('gate').classList.add('off');
