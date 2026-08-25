@@ -9,6 +9,20 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f6f2ec">
+<link rel="apple-touch-startup-image" href="splash/1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/640x1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1536x2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/1668x2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="splash/2048x2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
 <title>宅建 一問一答</title>
 <style>
 :root{
@@ -1351,7 +1365,36 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- M6：初回のスケルトン。単一HTML（宅建.html）はデータが十数MBあるため、body を描いてから
      JS が動き出すまでに実際の待ちがある。その間だけ見えている静的な骨組み。
      明滅は 0.9秒×2＝1.8秒で止まる（infinite にしない）。最初の render() でクロスフェードして消える。 -->
-<div id="m6boot" class="pad" aria-hidden="true">
+<script>
+/* ★前回のホームを最初の1フレームで描く（2026-08-25 本人「一瞬でも表示されるのが嫌」）。
+   localStorage は待ちが無いので、ここで描けば骨組みは一度も見えない。
+   ・押しても何も起きない（データが来るまで触れない）
+   ・本物が描かれたら消える（下の m6BootSwap と同じ道で消す） */
+(function(){
+  try{
+    var h=localStorage.getItem('takken_home');
+    if(!h)return;
+    var d=document.createElement('div');
+    d.id='m6prev';d.setAttribute('aria-hidden','true');
+    d.style.cssText='position:absolute;left:0;right:0;top:0;max-width:520px;margin:0 auto;'
+      +'z-index:2;pointer-events:none';
+    d.innerHTML=h;
+    var f=function(){
+      var v=document.getElementById('view');
+      if(v&&v.parentNode)v.parentNode.insertBefore(d,v);
+      else document.body.appendChild(d);
+    };
+    var f2=function(){
+      f();
+      /* 控えを出したら骨組みは出さない（同じものが二重に見えるのを避ける） */
+      var b=document.getElementById('m6boot');
+      if(b)b.style.display='none';
+    };
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',f2);else f2();
+  }catch(e){}
+})();
+</script>
+<div id="m6boot" class="pad" aria-hidden="true" data-hide-if-prev="1">
   <div class="m6-skel on" style="margin:2px 0 12px">
     <i class="m6-sk t" style="height:26px;max-width:132px"></i>
     <i class="m6-sk" style="width:58px;height:13px"></i></div>
@@ -1480,7 +1523,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='c10a1271';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='172c9c3d';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

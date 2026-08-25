@@ -2000,6 +2000,12 @@ function render(){
   else if(S.view==='lesson')h=vLesson();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
+  /* ★ホームの見た目を控える（2026-08-25 本人「一瞬でも表示されるのが嫌」）。
+     次の起動の最初の1フレームでこれを描く＝骨組みを見せない。
+     控えるのはホームだけ。問題文・解説は入らない。 */
+  if(S.view==='home'&&h&&h.length<80000){
+    try{localStorage.setItem('takken_home',h)}catch(e){}
+  }
   /* 出題中と通し演習のときだけ時計を回す（他の画面では止める＝無駄に動かさない）。 */
   if(S.view==='quiz'||S.view==='mock')qtStart();else qtStop();
   /* ゲームは描いたあとに当たり判定を付ける（SVGの座標を実測するので描画後でないと測れない）。 */
@@ -8330,6 +8336,10 @@ function bootFx(){
 }
 function m6BootSwap(){
   if(!M6BOOT)return; M6BOOT=false;
+  /* 前回のホームの控えを外す（2026-08-25）。本物が描かれたので要らない。
+     見た目が同じなので、そのまま消せば切り替わりは見えない。 */
+  var pv=document.getElementById('m6prev');
+  if(pv&&pv.parentNode)pv.parentNode.removeChild(pv);
   var b=document.getElementById('m6boot'),v=document.getElementById('view');
   if(!b){return}
   var sk=b.querySelectorAll('.m6-skel'),i;
