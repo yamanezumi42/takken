@@ -1480,7 +1480,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='caf925e8';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='deeac5cd';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1548,7 +1548,13 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         if(p.indexOf('media/')===0){
           for(var k in o){
             if(k.indexOf('voice_k/')===0){MHAS[k]=1;MWHERE[k]=p}
-            else MEDIA[k]=o[k];
+            else{
+              var v=o[k];
+              /* Blob で入っている小さい音は、そのままでは src に入れられないので
+                 一時URLにする（数は738本＋効果音8本で少ない。2026-08-25） */
+              if(v&&typeof v!=='string'){try{v=URL.createObjectURL(v)}catch(e){}}
+              MEDIA[k]=v;
+            }
           }
           o=null;                     /* 束そのものは捨てる＝ここが要点 */
           return step();
@@ -1558,6 +1564,50 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       },function(){return step()});
     }
     return step();
+  }
+  /* ---------- 音は**そのままの形（Blob）**で持つ（2026-08-25） ----------
+     base64 の文字で持つと元の音の1.33倍に膨らむ。端末に入る音は 834MB あるので、
+     文字だと 1,112MB になり iPhone の保存上限に当たる（実測で「Load failed」）。
+     保存する直前に Blob へ変えて、約280MB を削る。動きは変わらない。 */
+  function d2b(d){
+    /* data:audio/mp4;base64,xxxx → Blob。fetch を使わない（同期で軽い） */
+    var i=String(d).indexOf(',');
+    if(i<0)return null;
+    var head=d.slice(0,i),b64=d.slice(i+1);
+    var mime=(head.match(/^data:([^;]+)/)||[])[1]||'audio/mp4';
+    var bin=atob(b64),n=bin.length,u=new Uint8Array(n);
+    for(var k=0;k<n;k++)u[k]=bin.charCodeAt(k);
+    return new Blob([u],{type:mime});
+  }
+  function toBlobs(o){
+    if(!o||typeof o!=='object')return o;
+    var out={},n=0;
+    for(var k in o){
+      var v=o[k];
+      if(typeof v==='string'&&v.slice(0,5)==='data:'){
+        var b=null;try{b=d2b(v)}catch(e){b=null}
+        out[k]=b||v; if(b)n++;
+      }else out[k]=v;
+    }
+    return out;
+  }
+  /* すでに文字で入っている束を、静かに置き換える（取り直しをさせない）。
+     1束ずつ・ゆっくり。失敗しても学習は止めない。 */
+  var MIGQ=[],MIGON=false;
+  function migrateBlobs(){
+    if(MIGON||!MIGQ.length)return;
+    MIGON=true;
+    var p=MIGQ.shift();
+    get(pkey(p)).then(function(o){
+      if(!o)return;
+      var need=false;
+      for(var k in o){if(typeof o[k]==='string'&&o[k].slice(0,5)==='data:'){need=true;break}}
+      if(!need)return;
+      return put(toBlobs(o),pkey(p));
+    }).catch(function(){}).then(function(){
+      MIGON=false;
+      if(MIGQ.length)setTimeout(migrateBlobs,400);
+    });
   }
   /* 鳴らす直前に1本だけ取り出す。直近8本だけ一時URLを持ち、古いものは解放する
      （解放しないと一時URLが溜まって同じことになる）。 */
@@ -1569,7 +1619,10 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     return get(pkey(p)).then(function(o){
       var d=o&&o[key];
       if(!d)throw new Error('束の中に音がありません');
-      return fetch(d).then(function(r){return r.blob()}).then(function(b){
+      /* Blob ならそのまま（2026-08-25）。文字（古い形）なら今までどおり読む。 */
+      var pb=(typeof d==='string')?fetch(d).then(function(r){return r.blob()})
+                                  :Promise.resolve(d);
+      return pb.then(function(b){
         var url=URL.createObjectURL(b);
         MCACHE.push({key:key,url:url});
         while(MCACHE.length>8){
@@ -1688,6 +1741,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         return ghGet(p).then(function(o){
           /* ★このファイルだけを保存する。以前は溜めた全部を書き直していたので、
              280件で累計40GB近い書き込みになり IndexedDB が落ちた（2026-08-24）。 */
+          /* 音は Blob にして保存する＝base64のふくらみ（1.33倍）を持たない（2026-08-25） */
+          if(p.indexOf('media/')===0)o=toBlobs(o);
           return put(o,pkey(p)).then(function(){return true}).catch(function(e){
             /* 音（media/）は学習の本体ではない。保存できなければ**飛ばして続ける**
                ＝1件の失敗で問題も図も入らない、を避ける（2026-08-24）。 */
@@ -1921,7 +1976,13 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       /* 版の時刻は**データ自身の builtAt**（サーバ側の事実）を正とする。
          端末側で書く rec.at は、書けなかったときに空になる（2026-08-18 実機）。 */
       window.TAKKEN_SRC.at=((rec.man&&rec.man.builtAt)||rec.at||'');
-      apply(d2);boot();measure();autoSync();return 'ok';
+      apply(d2);boot();measure();autoSync();
+      /* 文字で入っている音の束を、静かに Blob へ置き換える（2026-08-25）。
+         起動の邪魔をしないよう、少し待ってから1束ずつ。 */
+      MIGQ=Object.keys((rec.man&&rec.man.files)||{}).filter(function(x){
+        return x.indexOf('media/')===0});
+      setTimeout(migrateBlobs,4000);
+      return 'ok';
     });
   }).then(function(done){
     if(done==='ok')return null;
