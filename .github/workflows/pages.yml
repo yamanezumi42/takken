@@ -25,12 +25,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: 問題データが混ざっていないか確認する
         run: |
+          # ★大きさだけで見るのはやめた（2026-08-25）。講義の音を埋め込んだら
+          #   中身は正しいのに 2MB を超えて止まり、配信が黙って落ちた。
+          #   見るべきは大きさではなく**問題データが混ざっていないか**そのもの。
           if ls *.json 1> /dev/null 2>&1; then
             echo "JSON が含まれています。問題データの混入を疑ってください。"; exit 1
           fi
+          # 問題データの鍵（解説・問題文・選択肢）が平文で入っていないこと。
+          # 殻は IndexedDB から読むので、これらが本文にあれば混入。
+          if grep -rlE '"(exp|stem|choices|qtext)"[[:space:]]*:' \
+               --include=*.html --include=*.js --include=*.css . ; then
+            echo "問題データらしい鍵が見つかりました。混入を疑ってください。"; exit 1
+          fi
           total=$(du -sk . --exclude=.git | cut -f1)
-          if [ "$total" -gt 2048 ]; then
-            echo "2MB を超えています（${total}KB）。データ混入の疑い。"; exit 1
+          if [ "$total" -gt 8192 ]; then
+            echo "8MB を超えました（${total}KB）。置き場所を見直してください。"; exit 1
           fi
           echo "OK: ${total}KB"
       - uses: actions/configure-pages@v5
