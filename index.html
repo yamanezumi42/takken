@@ -1474,7 +1474,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='1293c5e8';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='96a87303';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1907,9 +1907,23 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     ask('保存領域を読めませんでした。'+t+'　［設定＝データ から取り込み直せます］');
   });
 
-  /* オフラインで起動できるようにする（殻だけキャッシュ。データは上のIndexedDB） */
+  /* オフラインで起動できるようにする（殻だけキャッシュ。データは上のIndexedDB）。
+     ★2026-08-25：配信しても本人の端末に届かなかった。理由は2つ。
+       ①sw.js そのものがブラウザのキャッシュから返る（GitHub Pages は max-age=600）。
+         → updateViaCache:'none' で殻の台本だけは必ず取りに行かせる。
+       ②新しい殻に入れ替わっても画面はそのままなので、**次に開くまで古い画面**が出る。
+         → 入れ替わりを見て1回だけ読み直す（初回の取り付けでは読み直さない）。 */
   if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost'))
-    addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+    addEventListener('load',function(){
+      var sw=navigator.serviceWorker, had=!!sw.controller, done=false;
+      sw.addEventListener('controllerchange',function(){
+        if(done||!had||!sw.controller)return;   /* 初回の取り付けでは読み直さない */
+        done=true;try{location.reload()}catch(e){}
+      });
+      sw.register('sw.js',{updateViaCache:'none'}).then(function(reg){
+        try{reg.update()}catch(e){}
+      }).catch(function(){});
+    });
   /* ★ここまで動いた印（2026-08-24）。文字列が割れて SyntaxError になると**この行に来ない**。
      tools/check_shell.py はこの印だけを見る＝IndexedDB の読み込み（非同期）を待たずに
      判定できる。前は「取り込み画面が出たか」を見ていて、写す時機で NG/OK が揺れた（実測）。 */
