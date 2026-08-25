@@ -1263,6 +1263,18 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
   padding:0;margin:0 6px 0 0;position:relative}
 .rdsw.on{box-shadow:0 0 0 2px var(--accd)}
 .qwrap .stem .stemtx,.qwrap .exp .exptx{position:relative;z-index:1}
+/* ---------- 補足（用語のポップアップ＋制度カード）2026-08-25 ---------- */
+.tw{border-bottom:2px dotted var(--acc);cursor:pointer;padding:0 1px}
+.tw:active{background:var(--chipbg)}
+.why2{margin-top:10px}
+.why2 .btn{width:auto}
+.tpop h4{font-size:15px;margin:0 0 2px;color:var(--accd)}
+.tpop .ym{font-size:11px;color:var(--muted);margin:0 0 10px}
+.tpop p{font-size:13.5px;line-height:1.95;margin:0 0 9px}
+.tpop .ex{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:12.8px;line-height:1.9;margin:0 0 9px}
+.tpop .qh{font-size:12px;color:var(--accd);font-weight:700;margin:14px 0 6px}
+.tpop .wy{border-left:3px solid var(--acc);padding-left:10px;margin:0 0 10px}
+.tpop .src{font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:14px;padding-top:8px;line-height:1.7}
 /* 余った空間は下にまとまる＝○×の位置が問題の長さで動かない。
    さらに sticky で「タブの上」に貼り付ける。面が短いときは元の位置のまま動かない（sticky なので）。
    下の余白（padding-bottom）だけでは、面が画面より高い問題では○×の位置が変わらず、
@@ -1438,6 +1450,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- ゲーム（線つなぎ・2択問題）と早見表のデータ。2026-08-23 -->
 <!-- 使える声の一覧（VOICEVOX。make_voice.py が書く） -->
 <!-- 過去問の読み上げを持っている肢の一覧 -->
+<!-- 補足：用語辞典（そもそも何）と制度カード（なぜ・例）。2026-08-25 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1461,7 +1474,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='c0c9897b';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='1293c5e8';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1593,7 +1606,9 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             tables:rec.parts['tables.json']||null,
             voices:rec.parts['voices.json']||null,
             kako:rec.parts['kako_voice.json']||null,
-            timing:rec.parts['timing.json']||null};
+            timing:rec.parts['timing.json']||null,
+            terms:rec.parts['terms.json']||null,
+            seido:rec.parts['seido.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
   function ghSync(onStat){
@@ -1738,6 +1753,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_VOICES=d.voices||[];         /* 使える声の一覧（2026-08-23） */
     window.TAKKEN_KAKO=d.kako||{};             /* 過去問の読み上げを持つ肢 */
     window.TAKKEN_TIMING=d.timing||{};         /* 読み上げの時間表（帯） */
+    window.TERMS=d.terms||{};                  /* 用語辞典（そもそも何。2026-08-25） */
+    window.SEIDO=d.seido||{};                  /* 制度カード（なぜ・例。2026-08-25） */
   }
   /* 起動にかかった時間。実機（iPhone）で重いかを後から確かめるために残す。
      console に出すだけで画面には出さない（引き算の原則）。 */

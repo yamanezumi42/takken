@@ -285,6 +285,10 @@ var IC={
  home:svg('<path d="M3.5 10.5 12 4l8.5 6.5V20a.5.5 0 0 1-.5.5h-5v-6h-6v6H4a.5.5 0 0 1-.5-.5z"/>'),
  book:svg('<path d="M4 4.5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 4.5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/>'),
  again:svg('<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.5V7h-3.5"/>'),
+ /* 補足（なぜ・例）。電球＝理由が分かる、の意（2026-08-25 自作・絵文字は使わない） */
+ info:svg('<path d="M9.5 17.5h5"/><path d="M10 20.5h4"/>'
+   +'<path d="M12 3.5a5.5 5.5 0 0 0-3.2 9.97c.5.36.8.94.8 1.56v.47h4.8v-.47c0-.62.3-1.2.8-1.56'
+   +'A5.5 5.5 0 0 0 12 3.5z"/>'),
  /* 本文の見た目（2026-08-24）。大きいAと小さいaで「文字の見た目」を表す。 */
  aa:svg('<path d="M2.5 19 7 5.5 11.5 19"/><path d="M4 14.5h6"/>'
         +'<path d="M20.5 12.8v6.2"/>'
@@ -1979,6 +1983,7 @@ function render(){
   else if(S.view==='mock')h=vMock();
   else if(S.view==='review')h=vReview();
   else if(S.view==='game'){S.view='home';h=vHome();}   /* 外したタブ */
+  else if(S.view==='lesson')h=vLesson();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* 出題中と通し演習のときだけ時計を回す（他の画面では止める＝無駄に動かさない）。 */
@@ -2052,7 +2057,7 @@ function stag(){return ANIMON?' stag':''}
 /* タブは5つ。ゲームは**復習と分析の間**（2026-08-23 本人指示）。 */
 /* ゲームタブは外した（2026-08-25 本人指示。線つなぎ3件・早見表2件・オリジナル4択3件・聞き取り2択は使わない）。
    関数の本体は残してある＝kkRate・kkVoice・kkVol などを過去問の読み上げが使っているため。 */
-var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
+var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['lesson','講義',IC.info],['review','復習',IC.again],['analysis','分析',IC.chart]];
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
 function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':'動画学習'):x[1]}
@@ -3954,6 +3959,102 @@ function comboHtml(sk){
     +' style="--rh:16px;font-size:11px;font-weight:600" data-m6id="streak" data-fmt="'
     +new Array(Math.max(2,String(sk).length)+1).join('_')+'" data-m6r="'+sk+'"></span>連続正解</span>';
 }
+/* ---------- 補足（2026-08-25 本人指示） ----------
+   用語＝window.TERMS（そもそも何）。制度カード＝window.SEIDO（なぜ・例）。
+   出すのは**答えた後の解説の中だけ**。肢の本文には引かない（読む邪魔になるため）。 */
+function termList(){
+  var T=window.TERMS||{},a=[];
+  for(var k in T)if(k.charAt(0)!=='_')a.push(k);
+  a.sort(function(x,y){return y.length-x.length});   /* 長い語から当てる＝入れ子を防ぐ */
+  return a;
+}
+/* 逃がした文字列に、用語の所だけ点線の印を付ける。**文字は変えない**。 */
+function termMark(esced){
+  var ws=termList();
+  if(!ws.length)return esced;
+  var out=esced,used={};
+  for(var i=0;i<ws.length;i++){
+    var w=ws[i];
+    if(used[w])continue;
+    var j=out.indexOf(w);
+    if(j<0)continue;
+    /* 既に印を付けた中に入り込まないよう、1語につき最初の1か所だけにする */
+    if(out.slice(0,j).lastIndexOf('<span class="tw"')>out.slice(0,j).lastIndexOf('</span>'))continue;
+    used[w]=1;
+    out=out.slice(0,j)+'<span class="tw" data-act="term" data-w="'+w+'">'+w+'</span>'
+        +out.slice(j+w.length);
+  }
+  return out;
+}
+function seidoFor(id){
+  var S2=window.SEIDO||{};
+  for(var k in S2){
+    if(k.charAt(0)==='_')continue;
+    var c=S2[k];
+    if((c.for||[]).indexOf(id)>=0)return {key:k,card:c};
+  }
+  return null;
+}
+/* 補足を開くと、読み上げと自動送りを**止める**。閉じたら元に戻す（2026-08-25 本人指示）。
+   止めた事実を覚えておき、閉じたときに止めた分だけ戻す（もともと止まっていたら戻さない）。 */
+var HOS={said:false,gauge:false};
+function hosPause(){
+  HOS.said=false;HOS.gauge=false;
+  try{ if(AQ.cur||AQ.list.length){aPause();HOS.said=true} }catch(e){}
+  try{ if(nextFreeze())HOS.gauge=true; }catch(e){}
+}
+function hosResume(){
+  try{ if(HOS.said)aResume(); }catch(e){}
+  try{ if(HOS.gauge)nextResume(); }catch(e){}
+  HOS.said=false;HOS.gauge=false;
+}
+/* 補足の読み上げ（先に作っておいた音を鳴らす）。無ければボタンを出さない。 */
+function hosPlay(key){
+  var src=mediaSrc('voice_t/'+(kvVoice()||14)+'/'+key+'.m4a');
+  if(!src)return;
+  aQueue([{src:src,rate:kkRate(kvVoice()||14)}],function(){});
+}
+function hosBtn(key){
+  if(!key)return '';
+  if(!mediaSrc('voice_t/'+(kvVoice()||14)+'/'+key+'.m4a'))return '';
+  return '<button class="btn sm" style="width:auto;margin-bottom:10px" data-act="hosplay"'
+    +' data-k="'+esc(key)+'">'+IC.sound+'読む</button>';
+}
+function termSheet(w){
+  var d=(window.TERMS||{})[w];
+  if(!d)return;
+  var m=document.getElementById('modal');if(!m)return;
+  hosPause();
+  var h='<div class="sheet tpop"><div class="spread" style="margin-bottom:10px">'
+    +'<div class="h" style="margin:0">用語</div>'
+    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+    +'<h4>'+esc(w)+'</h4><div class="ym">'+esc(d.y||'')+'</div>'+hosBtn(d.a);
+  (d.p||[]).forEach(function(x){h+='<p>'+esc(x)+'</p>'});
+  if(d.ex)h+='<div class="ex">'+esc(d.ex)+'</div>';
+  h+='</div>';
+  m.innerHTML=h;m6SheetOpen();
+}
+function seidoSheet(key){
+  var c=(window.SEIDO||{})[key];
+  if(!c)return;
+  var m=document.getElementById('modal');if(!m)return;
+  hosPause();
+  var h='<div class="sheet tpop"><div class="spread" style="margin-bottom:10px">'
+    +'<div class="h" style="margin:0">'+esc(c.title||'なぜ・例')+'</div>'
+    +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+    +hosBtn(c.a);
+  (c.sec||[]).forEach(function(sc){
+    h+='<div class="qh">'+esc(sc.q||'')+'</div>';
+    if(sc.h)h+='<p style="font-weight:700">'+esc(sc.h)+'</p>';
+    h+='<div class="wy">';
+    (sc.p||[]).forEach(function(x){h+='<p>'+esc(x)+'</p>'});
+    h+='</div>';
+    if(sc.ex)h+='<div class="ex">'+esc(sc.ex)+'</div>';
+  });
+  if(c.src)h+='<div class="src">'+esc(c.src)+'</div>';
+  h+='</div>';
+  m.innerHTML=h;m6SheetOpen();
+}
 function expBlock(it,id){
   var res=S.res||{},r=mk(id);
   /* 出すのは正解の1行だけ。当たり外れは演出で伝える。 */
@@ -3961,7 +4062,12 @@ function expBlock(it,id){
   /* 文字は .exptx で包む＝枠（.exp の背景・罫線）は元の幅のまま、中の文字だけを
      全角の整数倍の幅にして左右の余白を揃えるため（CSSの「本文の左右の余白」の節を参照）。 */
   h+='<div class="exp"><div class="exptx">'
-    +(it.exp?esc(it.exp):'<span class="mini">解説データがありません。</span>')+'</div></div>';
+    +(it.exp?termMark(esc(it.exp)):'<span class="mini">解説データがありません。</span>')
+    +'</div></div>';
+  /* 制度カード（なぜ・例）。この肢に紐づくカードがあるときだけ出す（2026-08-25） */
+  var sd=seidoFor(id);
+  if(sd)h+='<div class="why2"><button class="btn sm" data-act="seido" data-k="'+esc(sd.key)
+    +'">'+IC.info+'なぜ・例</button></div>';
   /* 図表は枠内に収める。表組みで細かいものは横スクロールできる入れ物に入れる（縦横比は保つ） */
   (it.figs||[]).forEach(function(f){
     h+='<div class="figbox"><img class="fig" src="'+esc(figSrc(f))+'" alt="図表" onerror="this.parentNode.style.display=\'none\'"></div>';
@@ -4991,6 +5097,36 @@ function filterHtml(opt){
   h+='</div>';
 
   return h;
+}
+/* ---------- 講義タブ（2026-08-25 本人指示） ----------
+   単元ごとに「図が動く講義 → その範囲の問題」を1本にしたもの。
+   いまは1本目（宅地とは・12問）だけ。中身は lesson/ の中の画面で動く。 */
+var LESSONS=[
+  {id:'L1a',cat:'宅地建物取引業・免許',no:'①-1',title:'用途地域の中なら宅地',
+   min:'約60秒',q:3,note:'中にあれば建物や地目に関係なく宅地。準工業・工業専用も用途地域。'},
+  {id:'L1b',cat:'宅地建物取引業・免許',no:'①-2',title:'用途地域の外は建物の敷地か目的',
+   min:'約25秒',q:4,note:'外は「建物の敷地」か「建てる目的」なら宅地。市街化調整区域もここ。'},
+  {id:'L1c',cat:'宅地建物取引業・免許',no:'①-3',title:'例外5つと地目のひっかけ',
+   min:'約40秒',q:5,note:'道路・公園・河川・広場・水路は内も外も宅地でない。地目は関係ない。'}
+];
+function vLesson(){
+  var h='<div class="pad">';
+  h+='<div class="h">講義</div>'
+    +'<div class="mini" style="margin-bottom:12px">図が動く講義を見て、その範囲の問題をすぐ解きます。</div>';
+  for(var i=0;i<LESSONS.length;i++){
+    var L=LESSONS[i],done=(ST.lessonDone||{})[L.id];
+    h+='<button class="frow" data-act="lesson" data-k="'+esc(L.id)+'"'
+      +' style="min-height:auto;padding:13px 14px;align-items:flex-start">'
+      +'<span style="flex:1;text-align:left">'
+      +'<span class="mini" style="display:block;margin-bottom:3px">'+esc(L.cat)+'　'+esc(L.no)+'</span>'
+      +'<b style="font-size:15px">'+esc(L.title)+'</b>'
+      +'<span class="mini" style="display:block;margin-top:4px;line-height:1.7">'+esc(L.note)+'</span>'
+      +'<span class="mini" style="display:block;margin-top:5px">'+esc(L.min)+'　問題 '+L.q+'問'
+      +(done?'　<span style="color:var(--accd)">見た</span>':'')+'</span>'
+      +'</span>'+IC.chev+'</button>';
+  }
+  h+='<div class="hr"></div><div class="mini">これから単元ごとに増やします。</div>';
+  return h+'</div>';
 }
 function vReview(){
   var fl=filtered(),sev=severeTopics(),pl=plan();
@@ -6380,6 +6516,13 @@ document.addEventListener('click',function(e){
     var sw=document.querySelectorAll('#txsheet .rdsw');
     for(var i=0;i<sw.length;i++)sw[i].classList.toggle('on',sw[i]===t);
     return}
+  if(a==='hosplay'){hosPlay(t.getAttribute('data-k'));return}
+  if(a==='lesson'){
+    var k=t.getAttribute('data-k');
+    ST.lessonDone=ST.lessonDone||{};ST.lessonDone[k]=today();saveST();
+    location.href='lesson/'+k+'.html';return}
+  if(a==='term'){termSheet(t.getAttribute('data-w'));return}
+  if(a==='seido'){seidoSheet(t.getAttribute('data-k'));return}
   if(a==='txsheet'){txSheet();return}
   if(a==='txfont'){var fv=t.getAttribute('data-v');
     ST.settings.txFont=(fv==='goth')?'goth':'mincho';saveST();applyText();
@@ -6560,7 +6703,10 @@ delete ST.settings.txFont;delete ST.settings.txSize;
   }
   if(a==='again'){S.qi=0;S.phase='q';S.res=null;saveRun(true);S.anim='card';S.enter=true;render();return}
   if(a==='data'){dataSheet();return}
-  if(a==='closeModal'){m6SheetClose(0,function(){render()});return}
+  if(a==='closeModal'){
+    /* 補足で止めた読み上げ・自動送りを、閉じたときに元へ戻す（2026-08-25 本人指示） */
+    try{ if(HOS.said||HOS.gauge)hosResume(); }catch(e){}
+    m6SheetClose(0,function(){render()});return}
   if(a==='selall'){var ta=document.getElementById('ta');ta.focus();ta.setSelectionRange(0,ta.value.length);
     markExport();msg('全選択しました。長押し→コピーでも取れます。');return}
   if(a==='copy'){var ta2=document.getElementById('ta');ta2.focus();ta2.setSelectionRange(0,ta2.value.length);
@@ -7674,6 +7820,7 @@ function kvAfter(id,okq){
    12字未満の片は同じ文の中で前（先頭なら後ろ）にくっつける。 */
 var RD={box:null,part:null,spans:null,rects:null,raf:0};
 var RDTXT='';        /* いま帯を出している文字列（切れ目の判定に使う） */
+var RDWAIT=0;        /* 文がまだ画面に出ていないときのやり直し（下の rdStart） */
 function rdTiming(id){
   var T=window.TAKKEN_TIMING||{};
   return T[id]||null;
@@ -7781,14 +7928,20 @@ function rdRects(rects,a,b){
   return o;
 }
 /* 読み上げが始まったら呼ぶ。part＝'s'（肢）か 'e'（解説） */
-function rdStart(id,part){
+function rdStart(id,part,tryn){
   rdStop();
   var tb=rdTiming(id);
   if(!tb||!tb[part])return;
   var wrap=document.querySelector(part==='s'?'.qwrap .stem':'.qwrap .exp');
-  if(!wrap)return;
-  var tx=wrap.querySelector(part==='s'?'.stemtx':'.exptx');
-  if(!tx)return;
+  var tx=wrap&&wrap.querySelector(part==='s'?'.stemtx':'.exptx');
+  /* ★文がまだ画面に出ていないことがある（2026-08-25 実測）。
+     「判定の読み上げ」を切っていると、解説の音が**画面より先に**鳴り始めるので、
+     ここで諦めると解説の帯が最後まで出ない。少し待って数回だけやり直す。
+     rdStop() が待ちを打ち消すので、次の音に移れば自然に止まる。 */
+  if(!tx){
+    if((tryn||0)<12)RDWAIT=setTimeout(function(){rdStart(id,part,(tryn||0)+1)},100);
+    return;
+  }
   rdWrap(tx);
   var band=wrap.querySelector('.rdband');
   if(!band){band=document.createElement('div');band.className='rdband';wrap.insertBefore(band,wrap.firstChild)}
@@ -7798,6 +7951,7 @@ function rdStart(id,part){
   rdTick();
 }
 function rdStop(){
+  if(RDWAIT){clearTimeout(RDWAIT);RDWAIT=0}
   if(RD.raf)cancelAnimationFrame(RD.raf);
   if(RD.box)RD.box.innerHTML='';
   RD.raf=0;RD.spans=null;RD.shown='';
@@ -8234,6 +8388,24 @@ if(ST.settings&&ST.settings.fmode1!==true){
   ST.settings.fmode1=true;ST.settings.fmode='cat';S.fmode='cat';
   if(!STBROKEN)saveST();
 }
+/* 講義から渡された問題を出す入口（2026-08-25 本人指示）。
+   #q=id,id… で開くと、その問題だけを**既存の出題画面**で出す。出題の作りは1つのまま。
+   ★名前を付けた関数にしてある＝配信の関門（check_spec の Z2/Z3）が
+     「どの入口の呼び出しか」を関数名で見るため。無名だと別の入口と誤認される。 */
+function startLesson(ids){
+  ids=(ids||[]).filter(function(x){return !!BY[x]});
+  if(!ids.length)return false;
+  S.pickExplicit=true;S.keepOrder=true;S.kind='review';
+  startQueue(ids.map(function(i){return BY[i]}),'講義の問題',false,null,true,false);
+  return true;
+}
+(function(){
+  var m=/[#&]q=([^&]+)/.exec(location.hash||'');
+  if(!m)return;
+  var ids=decodeURIComponent(m[1]).split(',');
+  try{history.replaceState(null,'',location.pathname)}catch(e){}
+  startLesson(ids);
+})();
 render();
 /* 起動の区切り。初回だけ長め（0.77秒）、2回目以降は0.39秒（毎回長い演出を強制しない） */
 var m5first=!(ST.settings&&ST.settings.launched);
