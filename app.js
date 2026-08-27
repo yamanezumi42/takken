@@ -1177,14 +1177,27 @@ function vpMark(id,ok){
   });
 }
 /* 動画1本の状況：n問中いくつ正解・残り何問・完了したか */
+/* 見出しの1行を組む（2026-08-27 本人報告「24/176が正解率と同じ行に来ない」）。
+   語の途中で折り返して問数と正解率が別の行に分かれていた。
+   塊ごとに折り返しを止め、区切り（／）でだけ折る。**問数と正解率は同じ塊**にして必ず並べる。 */
+function heroLine(parts){
+  return parts.filter(function(x){return x!==null&&x!==undefined&&x!==''})
+    .map(function(x){return '<span style="white-space:nowrap">'+x+'</span>'})
+    .join('<span aria-hidden="true"> ／ </span>');
+}
 function videoStat(vid){
   var its=videoItemsUp(vid),okn=0,ngn=0;
+  /* 正解率は他の画面と同じ決め方＝**通算の 正答/(正答+誤答)**（2026-08-27）。
+     上の okn は「いま出来ている問題の数」で別物なので、混ぜずに数え分ける。 */
+  var sok=0,sng=0,attn=0;
   its.forEach(function(it){
     var r=R(it.id);if(!r||att(r)===0)return;
+    attn++;sok+=r.ok||0;sng+=r.ng||0;
     if((r.streak||0)>0||r.state==='卒業')okn++;else ngn++;
   });
   var p=ST.vp[vid]||{};
   return {n:its.length,ok:okn,wrong:ngn,left:its.length-okn,
+          att:attn,sok:sok,sng:sng,rate:(sok+sng)?sok/(sok+sng):null,
           done:its.length>0&&okn===its.length,round:p.round||0,completedAt:p.completedAt||null};
 }
 /* 次の動画＝同じチャンネルの公開順（あこ課長のシリーズ番号順） */
@@ -2085,6 +2098,19 @@ function render(){
   Array.prototype.forEach.call(v.querySelectorAll('.qin'),function(el){
     el.addEventListener('animationend',function(){el.classList.remove('qin')},{once:true});
   });
+  rdRebind();              /* ★読み上げ中に組み直したら帯を張り直す（2026-08-27） */
+}
+/* 画面を組み直すと帯の要素（.rdband）ごと消える。RD.box は外れた要素を指したままなので、
+   描いても見えない＝「帯が消える」（本人報告：解説の読み上げ中に「なぜ間違えた？」を押すと消える）。
+   まだ鳴っているなら張り直す。位置は音の currentTime から決まるので続きから正しく出る。 */
+function rdRebind(){
+  try{
+    if(!RD||!RD.id||!RD.part)return;
+    if(!RD.spans)return;                           /* 帯が動いていない＝張り直さない */
+    if(!(AQ&&AQ.cur))return;                       /* もう鳴っていない＝張り直さない */
+    if(RD.box&&document.body.contains(RD.box))return;  /* まだ画面にある＝そのまま */
+    rdStart(RD.id,RD.part);
+  }catch(e){}
 }
 var LASTVIEW=null,ANIMON=false;
 /* 段差クラス（入場時だけ付ける） */
@@ -3410,11 +3436,12 @@ function vStudy(){
    +esc(S.studyVid?(vlab(S.studyVid)||c):c)+'</div>'
    +'<div class="sub" style="margin:6px 0 0">'
    +(S.studyVid
-     ?(esc(CINFO[c].big)+' ／ '+esc(c)+' ／ '+vv0.ok+'/'+vv0.n+'問'
-       +(vidMs(S.studyVid)?' ／ '+mmss(vidMs(S.studyVid)/1000):''))
-     :(esc(CINFO[c].big)+' ／ '+s.n+'問 ／ 出題済 '+s.att+'問'
-       +(s.rate===null?'':' ／ 正解率 '+pct(s.rate))
-       +(closed(c)?' ／ <b style="color:var(--chipfg)">閉じた</b>':'')))
+     ?heroLine([esc(CINFO[c].big), esc(c),
+        vv0.ok+'/'+vv0.n+'問'+(vv0.rate===null?'':' ／ 正解率 '+pct(vv0.rate)),
+        (vidMs(S.studyVid)?mmss(vidMs(S.studyVid)/1000):null)])
+     :heroLine([esc(CINFO[c].big), s.n+'問',
+        '出題済 '+s.att+'問'+(s.rate===null?'':' ／ 正解率 '+pct(s.rate)),
+        (closed(c)?'<b style="color:var(--chipfg)">閉じた</b>':null)]))
    +'</div></div>';
   /* この動画の記録をリセット（2026-08-18 本人指示）。
      図と動画リンクを付け直した動画は、正解率や卒業が**誤った材料の上**で付いている。
@@ -3667,12 +3694,15 @@ function vQuiz(){
   /* 問題文（リード）の枠。**いまはこの形に戻してある**（2026-08-26 本人指示
      「まずリード文と問題の肢を分けている今の現状のもので音を戻してほしい」）。
      1文にまとめる案（qSay）は関数として残してあり、長さの目安を決めてから入れる。 */
-  h+='<div class="lead m5-qr'+ac()+'"'+ad(1)+'>'+termMark(esc(it.lead))+'</div>';
+  /* ★合体文（2026-08-27 本人指示）＝リードと問題文を1文にして出す。
+     (※ ) は側注＝薄く出す。読み上げの音と画面の文が一致するので帯が合う。
+     切り替える直前の控え＝_backup/20260827_2320/app.html */
+  var _qs=(window.TAKKEN_QSAY||{})[id];
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
      文字は span に入れて光より前に出す（.m3-hero>*:not(.m3-glow) が z-index:1） */
   h+='<div class="stem m3-hero m5-qr'+ac()+'" id="qstem"'+ad(2)+'>'
     +'<span class="m3-glow" aria-hidden="true"></span>'
-    +'<span class="stemtx">'+termMark(esc(it.stem))+'</span></div>';
+    +'<span class="stemtx">'+(_qs?qsayHtml(_qs):termMark(esc(it.stem)))+'</span></div>';
   /* 条文問題（「〜旨」で終わる肢）は文が切れて見える（2026-08-23 本人報告）。
      過去問の文は変えず、読み取りの助けを薄く1行だけ添える。 */
   if(/旨$/.test(String(it.stem||''))&&/条文に規定/.test(String(it.lead||'')))
@@ -4144,16 +4174,33 @@ function seidoAll(id){
 }
 /* 補足を開くと、読み上げと自動送りを**止める**。閉じたら元に戻す（2026-08-25 本人指示）。
    止めた事実を覚えておき、閉じたときに止めた分だけ戻す（もともと止まっていたら戻さない）。 */
-var HOS={said:false,gauge:false};
+var HOS={said:false,gauge:false,snap:null,open:false};
 function hosPause(){
-  HOS.said=false;HOS.gauge=false;
-  try{ if(AQ.cur||AQ.list.length){aPause();HOS.said=true} }catch(e){}
+  HOS.said=false;HOS.gauge=false;HOS.snap=null;HOS.open=true;
+  /* ★2026-08-27：補足の音は aQueue→aClear を通るため、止めるだけでは
+     問題の行列（AQ.list）と次へ進む処理（AQ.after）ごと捨てられていた。
+     実測＝用語を開いて閉じると読み上げが戻らず、次へも進まなかった。
+     ここで**行列を丸ごと控える**。 */
+  try{ if(AQ.cur||AQ.list.length){
+        var t=0;try{t=(AQ.cur&&AQ.cur.currentTime)||0}catch(e){}
+        HOS.snap={list:AQ.list.slice(), after:AQ.after, it:AQ.curIt, t:t};
+        aPause();HOS.said=true;
+      } }catch(e){}
   try{ if(nextFreeze())HOS.gauge=true; }catch(e){}
 }
 function hosResume(){
-  try{ if(HOS.said)aResume(); }catch(e){}
+  try{
+    if(HOS.said){
+      var sn=HOS.snap;
+      if(sn&&(sn.it||sn.list.length)){
+        var q=[];
+        if(sn.it){var c={};for(var k in sn.it)c[k]=sn.it[k];c.seek=sn.t;q.push(c)}
+        aQueue(q.concat(sn.list),sn.after);   /* 控えた行列を戻して続きから鳴らす */
+      }else{aResume()}
+    }
+  }catch(e){}
   try{ if(HOS.gauge)nextResume(); }catch(e){}
-  HOS.said=false;HOS.gauge=false;
+  HOS.said=false;HOS.gauge=false;HOS.snap=null;
 }
 /* 開いたら読み始める（2026-08-25）。読み上げを切っている人には鳴らさない。 */
 function hosAuto(key){
@@ -4172,6 +4219,12 @@ function hosAuto2(base,ap,from){
 /* 閉じたら止める（2026-08-25 本人「閉じるを押したときにはその読み上げを停止してほしい」）。
    止めたあと、問題の読み上げと自動送りを元に戻す。 */
 function hosStop(){
+  /* ★2026-08-27：ここは**すべてのシートの「閉じる」**から呼ばれる。
+     以前は無条件に aClear() していたので、読み上げ設定を開いて閉じただけで
+     問題の行列が消え、二度と読み上げされなかった（本人報告）。
+     補足（用語・制度カード）を開いたときだけ音に触る。 */
+  if(!HOS.open)return;
+  HOS.open=false;
   try{hosBandStop()}catch(e){}
   try{aClear()}catch(e){}
   hosResume();
@@ -4321,6 +4374,17 @@ function seidoSheet(key,sec){
     }
   }
   hosAuto2(c.a,c.ap,st);
+}
+/* 合体文をHTMLにする。(※ … ) の中だけ薄い字にして、他は今までと同じ扱い。
+   文字は一字も変えない（絶対ルール③）。 */
+function qsayHtml(t){
+  var out='',i=0,re=/\(※([^()]*)\)/g,m;
+  while((m=re.exec(t))){
+    out+=termMark(esc(t.slice(i,m.index)));
+    out+='<span class="soku">('+termMark(esc(m[1]))+')</span>';
+    i=m.index+m[0].length;
+  }
+  return out+termMark(esc(t.slice(i)));
 }
 function expBlock(it,id){
   var res=S.res||{},r=mk(id);
@@ -4842,10 +4906,10 @@ function vDict(){
    鳴らすものは必ずここを通す＝**同時に鳴るのは1つだけ**。
    行列に積んだ一連が終わったら after を呼ぶ（次の段へ進むのはここだけ）。 */
 var KKT=null;
-var AQ={list:[], cur:null, after:null, paused:false};
+var AQ={list:[], cur:null, curIt:null, after:null, paused:false};
 function aClear(){
   if(AQ.cur){try{AQ.cur.pause()}catch(e){}}
-  AQ.cur=null;AQ.list=[];AQ.after=null;AQ.paused=false;
+  AQ.cur=null;AQ.curIt=null;AQ.list=[];AQ.after=null;AQ.paused=false;
   /* 要素そのものは捨てない（捨てると次の再生でまた許可が要る）。 */
 }
 /* 音の要素は**1つを使い回す**（2026-08-23 本人報告「読み上げてくれる時とくれない時がある」）。
@@ -4864,8 +4928,9 @@ function ael(){
 function aRun(){
   if(AQ.paused)return;
   if(AQ.cur)return;                       /* まだ鳴っている＝重ねない */
-  if(!AQ.list.length){var f=AQ.after;AQ.after=null;if(f)f();return}
+  if(!AQ.list.length){var f=AQ.after;AQ.after=null;AQ.curIt=null;if(f)f();return}
   var it=AQ.list.shift();
+  AQ.curIt=it;                    /* いま鳴っている部品を控える（2026-08-27） */
   var a=ael();
   /* 読み上げの音量（2026-08-23 本人報告 d38）。行列に流れるのは読み上げだけ。 */
   a.volume=Math.min(1,Math.max(0,((it.vol===undefined)?1:it.vol)*kkVol('v')));
@@ -4880,6 +4945,9 @@ function aRun(){
     try{ if(it.hp!==undefined&&it.hp!==null)hosBandStart(it.hp); }catch(e){}
     a.src=url;
     a.playbackRate=it.rate||1;
+    /* 止めた位置から戻す（補足を開いて閉じたとき。2026-08-27） */
+    if(it.seek){var sk=it.seek;it.seek=0;
+      a.onloadedmetadata=function(){try{if(a.currentTime<sk-0.2)a.currentTime=sk}catch(e){}};}
     if(AQ.paused){try{a.pause()}catch(e){}return}
     var pr=a.play();
     if(pr&&pr.catch)pr.catch(function(){AQ.cur=null;aRun()});
@@ -8337,9 +8405,15 @@ function rdStart(id,part,tryn){
      時間表の最後の字の位置が画面の字数を超えていたら、ずれているので出さない。 */
   var rows=tb[part]||[],mx=-1;
   for(var z=0;z<rows.length;z++){if(rows[z][3]!=null&&rows[z][3]>mx)mx=rows[z][3]}
+  /* ★2026-08-27：時間表が持っている「作った時の画面の字数」と比べる。
+     合体文では末尾の側注 (※ ) や出典の括弧が音に無いので、帯は文の途中で終わる。
+     「帯の最後＋1 と 画面の字数」を比べる古いやり方だと、正しくても落ちた（実測266件）。
+     持っている字数と比べれば、時間表が古いかを見る役目はそのままで誤検出が消える。 */
+  var want=tb["n"+part];
   /* 時間表は音の文の字数で作られている。画面の字数と**一致しない**なら、
      音と画面がずれている＝帯が別の場所に付くので出さない（多い・少ないの両方を見る）。 */
-  if(mx<0||Math.abs((mx+1)-RDTXT.length)>2){rdStop();return}
+  if(want==null)want=mx+1;              /* 古い時間表との行き来のため */
+  if(mx<0||Math.abs(want-RDTXT.length)>2){rdStop();return}
   RD={box:band,part:part,spans:rdPlan(tb[part],rects),rects:rects,raf:0,id:id,shown:''};
   rdTick();
 }

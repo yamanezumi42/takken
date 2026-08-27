@@ -1275,6 +1275,9 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 .qwrap .exp{font-family:var(--txfont);font-size:var(--txsize);line-height:var(--txlh);
   padding:15px var(--txpad)}
 .qwrap .exp .exptx{font-family:var(--txfont);letter-spacing:var(--txls)}
+/* 側注（※）＝判断に効かないなお書き。画面には残すが**色を薄くする**
+   （2026-08-27 本人「一応残すけど色薄くしたら」）。読み上げでは読まない。 */
+.soku{opacity:.45;font-size:.92em}
 /* ---------- 読み上げ中の帯（2026-08-25 本人指定） ----------
    いま読んでいる所を淡い帯で示す。**文字は一切いじらない**（薄くも小さくもしない）。
    帯は文字の後ろに長方形を敷く＝行をまたいでも段が出ない。
@@ -1542,7 +1545,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='c86c8e1b';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b21c8436';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
