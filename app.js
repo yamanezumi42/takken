@@ -4381,7 +4381,9 @@ function qsayHtml(t){
   var out='',i=0,re=/\(※([^()]*)\)/g,m;
   while((m=re.exec(t))){
     out+=termMark(esc(t.slice(i,m.index)));
-    out+='<span class="soku">('+termMark(esc(m[1]))+')</span>';
+    /* ★「※」も出す（2026-08-28）。落とすと画面の文が合体文より短くなり、
+       側注より後ろの帯が1文字ずれる。 */
+    out+='<span class="soku">(※'+termMark(esc(m[1]))+')</span>';
     i=m.index+m[0].length;
   }
   return out+termMark(esc(t.slice(i)));
@@ -8218,7 +8220,11 @@ function kvSay(id,after){
   var it=BY[id];if(!it)return;
   var pz='';   /* かっこ版は作っていない（2026-08-26 機能を外した） */
   var q=[];
-  if(st.lead&&it.qid)q.push(kvItem('lead_'+it.qid+pz,null,id));
+  /* ★2026-08-28：合体文の音にはリードが入っているので、別のリード音は鳴らさない。
+     鳴らすと**リードを2回読む**（本人報告「読むときと読まない時がある」）。
+     合体文が無い問題（配信が届いていない等）では今まで通りリードを鳴らす。 */
+  var _hasQsay=!!((window.TAKKEN_QSAY||{})[id]);
+  if(st.lead&&it.qid&&!_hasQsay)q.push(kvItem('lead_'+it.qid+pz,null,id));
   if(st.stem){
     var qs=kvItem(id+'_s'+pz,null,id);
     if(qs){qs.band={id:id,part:'s'};q.push(qs)}      /* 肢の本文に帯を出す */
