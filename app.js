@@ -1041,7 +1041,22 @@ function baseSt(){
   var st=JSON.parse(JSON.stringify(ST));
   delete st.settings;delete st.run;delete st.wpend;delete st.lastChap;
   delete st.mockRun;                 /* 途中の模試は端末ごと（焼き付くと生き返る） */
-  delete st.log;delete st.logn;
+  delete st.log;delete st.logn;delete st.gen;
+  /* ★軽くする（2026-08-29 実機で 0.76MB＝GitHubがそのまま返す上限1MBに近いと判明）。
+     一時的な値・再計算できる欄・空の欄は持たない。実データで 220→94バイト/問。 */
+  var it=st.items||{};
+  Object.keys(it).forEach(function(k){
+    var r=it[k];
+    delete r._pre;delete r._why;delete r._preStreak;   /* 一時的な値 */
+    delete r.star;                                     /* 機能を外した */
+    delete r.state;delete r.box;delete r.due;          /* refreshRec で作り直せる */
+    if(r.why&&!r.why.length)delete r.why;
+    if(!r.memo)delete r.memo;
+    if(r.lastNg===null||r.lastNg===undefined)delete r.lastNg;
+    /* grad は落とさない：誤答のときに null が入る（卒業を取り消した印）ので、
+       落とすと live と数え直しが食い違う（2026-08-29 実測） */
+    if(!r.ng)delete r.ng;
+  });
   return st;
 }
 /* 土台を確定する。cand を渡すと、それを土台にする（起動直後に控えたもと）。 */
@@ -1084,6 +1099,13 @@ function replay(log){
   /* 端末ごとのものを控える */
   var keep={settings:ST.settings,run:ST.run,wpend:ST.wpend,lastChap:ST.lastChap,
              mockRun:ST.mockRun,logn:ST.logn};   /* 途中の模試も端末ごと（2026-08-29 批評） */
+  /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
+  var tmp={};
+  Object.keys(ST.items||{}).forEach(function(k){
+    var r=ST.items[k];
+    if(r&&(r._pre!==undefined||r._preStreak!==undefined||r._why!==undefined))
+      tmp[k]={_pre:r._pre,_preStreak:r._preStreak,_why:r._why};
+  });
   var st=base&&base.st?JSON.parse(JSON.stringify(base.st)):{};
   if(st.settings)delete st.settings;      /* 土台の設定は使わない（端末ごと） */
   delete st.run;delete st.wpend;delete st.lastChap;delete st.log;delete st.logn;
@@ -1093,6 +1115,23 @@ function replay(log){
   ST.mockRun=keep.mockRun||null;
   ST.logn=keep.logn||0;
   ST.log=L;
+  /* ★土台から作り直した記録は state / box / due を持っていない（軽くしたため）。
+     出来事が当たらない問題のぶんもここで作り直す（2026-08-29）。 */
+  Object.keys(ST.items).forEach(function(k){
+    var r=ST.items[k];
+    /* mk() と同じ形に揃える（揃えないと live と数え直しが別物になる） */
+    if(r.ok===undefined)r.ok=0;
+    if(r.ng===undefined)r.ng=0;
+    if(r.streak===undefined)r.streak=0;
+    if(r.lastNg===undefined)r.lastNg=null;
+    if(r.memo===undefined)r.memo='';
+    if(!r.why)r.why=[];
+    if(r.state===undefined||r.box===undefined||r.due===undefined)refreshRec(r);
+    var t=tmp[k];
+    if(t){if(t._pre!==undefined)r._pre=t._pre;
+          if(t._preStreak!==undefined)r._preStreak=t._preStreak;
+          if(t._why!==undefined)r._why=t._why;}
+  });
   for(var j=0;j<evs.length;j++){
     var E=evs[j];
     try{ applyEvent(E,false) }catch(e){}   /* 1件で全部を止めない */
@@ -1264,7 +1303,8 @@ function saveST(){
 function R(id){return ST.items[id]||null}
 function mk(id){
   var r=ST.items[id];
-  if(!r){r={ok:0,ng:0,streak:0,last:null,lastNg:null,box:1,due:null,state:'新規',why:[],star:false,memo:''};ST.items[id]=r}
+  /* star は 2026-08-29 に機能ごと外した＝新しい記録には持たせない（記録を軽くするため） */
+  if(!r){r={ok:0,ng:0,streak:0,last:null,lastNg:null,box:1,due:null,state:'新規',why:[],memo:''};ST.items[id]=r}
   if(!r.why)r.why=[];
   return r;
 }
@@ -6461,7 +6501,8 @@ function dataSheet(){
    +'<div class="rowx" style="gap:8px;margin-top:8px">'
    +'<button class="btn pri" style="width:auto" data-act="syncnow">今すぐ同期</button>'
    +'<button class="btn sm" style="width:auto" data-act="ghpush">今すぐ上げる（古い形）</button>'
-   +'<button class="btn sm" style="width:auto" data-act="ghpull">古い記録を取り戻す</button></div>'
+   +'<button class="btn sm" style="width:auto" data-act="ghpull">古い記録を取り戻す</button>'
+   +'<button class="btn sm" style="width:auto" data-act="synccompact">畳んで軽くする</button></div>'
    /* 2台で共有する同期の状態（2026-08-29） */
    +'<div class="mini" style="margin-top:6px">'
    +'2台で共有：出来事 '+n3((ST.log||[]).length)+'件'
@@ -6721,6 +6762,48 @@ function syncReplace(){
         SYNC.err='';SYNC.at=nowStamp();SYNC.n=(ST.log||[]).length;
         msg('共有をこの端末の記録で置き換えました');return true;
       });
+  });
+}
+/* 記録を畳み直す（並びを1つの土台にまとめて軽くする）。
+   ★他の端末にまだ上がっていない分があると失われるので、
+     必ず先に同期し、共有と同じになったことを確かめてから畳む。 */
+function syncCompact(){
+  var g=GH();
+  if(!g.repo||!g.token){msg('リポジトリとトークンを先に保存してください');return Promise.resolve(false)}
+  if(!confirm('記録を畳み直して軽くします。\n\n先に同期してから畳みます。'
+             +'\n他の端末に、まだ上げていない分があると、その分は失われます。'
+             +'\nすべての端末で同期を済ませてから行ってください。\n\n進めますか。'))
+    return Promise.resolve(false);
+  msg('同期しています…');
+  return syncNow(true).then(function(ok){
+    if(!ok){msg('先に同期できませんでした。畳んでいません。');return false}
+    return syncRead().then(function(R){
+      if(!R){msg('読めませんでした。畳んでいません。');return false}
+      /* 共有と端末が同じ並びであることを確かめる（違えば畳まない） */
+      var rk={};for(var i=0;i<R.log.length;i++)rk[evk(R.log[i])]=1;
+      var same=true;
+      for(var j=0;j<(ST.log||[]).length;j++){if(!rk[evk(ST.log[j])]){same=false;break}}
+      if(!same||R.log.length!==(ST.log||[]).length){
+        msg('共有と食い違っています。もう一度同期してから畳んでください。');return false;
+      }
+      var before=(ST.log||[]).length;
+      var st=baseSt();
+      ST.log=[{k:'base',e:'base',t:Date.now(),d:DEVP,n:0,st:st}];
+      ST.logn=0;
+      ST.gen=(R.gen||0)+1;                   /* 世代を進める＝他の端末も必ず乗り換える */
+      saveST();
+      var body={message:'宅建の記録（畳み直し） '+nowStamp(),
+                content:b64(JSON.stringify({v:1,gen:ST.gen,log:ST.log}))};
+      if(R.sha)body.sha=R.sha;
+      return fetch(ghUrl(LOGFILE),{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)})
+        .then(function(res){
+          if(!res.ok){msg(ghErr(res.status));return false}
+          SYNC.err='';SYNC.at=nowStamp();SYNC.n=1;
+          msg('畳みました（'+n3(before)+'件 → 1件）');
+          try{render()}catch(e){}
+          return true;
+        });
+    });
   });
 }
 /* やり直しつきの同期（衝突しても壊さない） */
@@ -7264,6 +7347,7 @@ document.addEventListener('click',function(e){
     return;
   }
   if(a==='syncnow'){syncNow(false);return}
+  if(a==='synccompact'){syncCompact();return}
   if(a==='fclear'){F.wrong=false;F.ngMin=0;F.recent=0;F.unseen=false;F.rateMax=null;F.difs=[];F.cats=[];F.topics=[];render();return}
   if(a==='togFilter'){S.openFilter=!S.openFilter;render();return}
   if(a==='togchaps'){S.openChaps=!S.openChaps;render();return}
