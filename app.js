@@ -1621,13 +1621,12 @@ function newQueue(n){
    2026-08-14 本人の指示で廃止した。trapPool と「ひっかけ」の入口はここで削除している。 */
 
 /* ---------- 絞り込み ---------- */
-var F={wrong:false,ngMin:0,recent:0,star:false,unseen:false,rateMax:null,difs:[],cats:[],topics:[]};
+var F={wrong:false,ngMin:0,recent:0,unseen:false,rateMax:null,difs:[],cats:[],topics:[]};
 function matchF(it){
   var r=R(it.id),a=att(r);
   if(F.cats.length&&F.cats.indexOf(it.cat)<0)return false;
   if(F.topics.length&&F.topics.indexOf(it.cat+'|:|'+(it.topic||'未分類'))<0)return false;
   if(F.difs.length&&F.difs.indexOf(d3(it))<0)return false;   /* 難易度の絞り込みは3段階（未評価は該当しない） */
-  if(F.star&&!(r&&r.star))return false;
   if(F.unseen&&a>0)return false;
   if(F.wrong&&!(r&&r.ng>0))return false;
   if(F.ngMin&&!(r&&(r.ng||0)>=F.ngMin))return false;
@@ -1637,7 +1636,7 @@ function matchF(it){
 }
 function filtered(){return ITEMS.filter(matchF)}
 function fActive(){
-  return !!(F.wrong||F.ngMin||F.recent||F.star||F.unseen||F.rateMax!==null||F.difs.length||F.cats.length||F.topics.length);
+  return !!(F.wrong||F.ngMin||F.recent||F.unseen||F.rateMax!==null||F.difs.length||F.cats.length||F.topics.length);
 }
 
 /* ---------- 出題順 ---------- */
@@ -3662,8 +3661,17 @@ function vQuiz(){
      出題中は論点名を出さない（答えが読めるため）ので、そのときは付けない。
      付けたままだと短い章名でも2段になり、小花だけ上に残って 1/90・星・∨ が下へ落ちる
      （2026-08-16 本人指摘の「上の方の変な線」の正体）。 */
+  /* 問題数と経過時間のひとかたまり。章名の行ではなく**上の行**に置く（2026-08-29）。 */
+  function _cnt(){
+    return '<span class="qcnt"><span class="m6-roll" style="--rh:16px;font-size:12px"'
+      +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
+      +'<span class="qtot"> / '+n3(tot)+'</span></span>'
+      +'<span class="qtime num" id="qtime">'+mmss(runSec())+'</span>';
+  }
   var qj=(chs[0]&&chs[0].jt&&!(S.view==='quiz'&&S.phase==='q'))?' j':'';
-  h+='<div class="qhead m5-qr'+ac()+'"'+ad(0)+'><div class="qrow'+qj+'">'+flw(16)
+  h+='<div class="qhead m5-qr'+ac()+'"'+ad(0)+'>'
+    +'<div class="qtoprow">'+_cnt()+'</div>'
+    +'<div class="qrow'+qj+' wrapname">'+flw(16)
     +'<span class="qname'+qj+'">'
     /* 出題中は**単元名だけ**（2026-08-18 本人指摘「上の方の論点で答えが推察できてしまう」）。
        論点名は既に隠していたが、隠すと小見出し・章名に落ちるので、そこも答えを示していた
@@ -3672,15 +3680,10 @@ function vQuiz(){
          :((chs[0]&&chs[0].label)||it.topic||it.cat))+'</span>'
     +'<span class="sdot s'+STG[stateOf(id)]+' m4-badge" id="stBadge" data-stage="'+STG[stateOf(id)]
     +'" title="'+stateOf(id)+'" aria-label="'+stateOf(id)+'"></span>'
-    +'<span class="qcnt"><span class="m6-roll" style="--rh:16px;font-size:12px"'
-    +' data-m6id="qprog" data-fmt="'+new Array(String(tot).length+1).join('_')+'" data-m6r="'+(S.qi+1)+'"></span>'
-    /* 「/ 2」も桁ロールと同じ 16px の箱に入れる。素のテキストのままだと、行の高さを
-       まわりから受け継ぐので左右で行箱の高さが変わり、上下がずれる（2026-08-16 本人指摘・3度目）。 */
-    +'<span class="qtot"> / '+n3(tot)+'</span></span>'
-    /* 経過時間（2026-08-23 本人指示）。中身は qtTick() が1秒ごとに入れる。
-       ここに初期値を入れておくのは、1秒待たずに出すため。 */
-    +'<span class="qtime num" id="qtime">'+mmss(runSec())+'</span>'
-    +'<button class="star'+(r&&r.star?' on':'')+'" data-act="star" data-id="'+esc(id)+'">'+IC.star+'</button>'
+
+    /* ★は外した（2026-08-29 本人「星を消した状態のP3」）。
+       絞り込みの「★」は残っているので、すでに星が付いている問題は絞れる。
+       新しく星を付ける手段は無くなる。 */
     /* 読み上げ（★と出典の間・アイコンだけ）。2026-08-23 本人指示 */
     /* 本文の見た目（2026-08-24 本人指示「問題のところでいじれるように」）。
        出題画面から開く＝実際の問題文を見ながら決められる。 */
@@ -3698,6 +3701,17 @@ function vQuiz(){
      (※ ) は側注＝薄く出す。読み上げの音と画面の文が一致するので帯が合う。
      切り替える直前の控え＝_backup/20260827_2320/app.html */
   var _qs=(window.TAKKEN_QSAY||{})[id];
+  /* ★出典をリード文と同じ枠で問題文の上に置く（2026-08-29 本人指示）。
+     合体文にしてリードの枠が無くなり、問題が上に寄って寂しくなったのを埋める。
+         権利関係　　動画 #55
+         令和7年 問1（1）
+     上の段は**答えが読めないもの**だけ（論点名・動画の章名は入れない）。 */
+  var _vd=(it.videos||[])[0];
+  var _sq=(it.first_seq!=null?'動画 #'+it.first_seq:'');
+  var _up=[esc(it.big||''), _sq].filter(Boolean).join('　');
+  h+='<div class="lead srcbox m5-qr'+ac()+'"'+ad(1)+'>'
+    +'<div class="srcup">'+_up+'</div>'
+    +'<div class="srcdn">'+esc(srcLabel(it))+'</div></div>';
   /* 肢＝主役（m3-hero）。光は主役の子要素にして中心を必ず一致させる。
      文字は span に入れて光より前に出す（.m3-hero>*:not(.m3-glow) が z-index:1） */
   h+='<div class="stem m3-hero m5-qr'+ac()+'" id="qstem"'+ad(2)+'>'
@@ -5386,7 +5400,7 @@ function filterHtml(opt){
       +'<div class="frow2"><span class="lb">正解率</span><span class="bs">'
       +tg2('rateMax',50,'50%以下',F.rateMax===50,1)
       +tg2('rateMax',70,'70%以下',F.rateMax===70,1)
-      +tg('star',IC.star,F.star,1)        /* ★も自作SVG（記号文字を使わない） */
+      /* ★の条件は外した（2026-08-29 本人指示）。星を付ける手段が無くなったため。 */
       +tg('unseen','未出題',F.unseen,1)
       +'</span></div>';
     /* 難易度の絞り込み＝3段階の3チップ（易＝A・B／普＝C／難＝D・E。未評価は該当しない） */
@@ -6738,7 +6752,7 @@ document.addEventListener('click',function(e){
   if(a==='fdif'){var d=t.getAttribute('data-d'),m=F.difs.indexOf(d);if(m<0)F.difs.push(d);else F.difs.splice(m,1);render();return}
   if(a==='ftog'){var kk=t.getAttribute('data-k');F[kk]=!F[kk];render();return}
   if(a==='fset'){var k2=t.getAttribute('data-k'),v2=+t.getAttribute('data-v');F[k2]=(F[k2]===v2)?(k2==='rateMax'?null:0):v2;render();return}
-  if(a==='fclear'){F.wrong=false;F.ngMin=0;F.recent=0;F.star=false;F.unseen=false;F.rateMax=null;F.difs=[];F.cats=[];F.topics=[];render();return}
+  if(a==='fclear'){F.wrong=false;F.ngMin=0;F.recent=0;F.unseen=false;F.rateMax=null;F.difs=[];F.cats=[];F.topics=[];render();return}
   if(a==='togFilter'){S.openFilter=!S.openFilter;render();return}
   if(a==='togchaps'){S.openChaps=!S.openChaps;render();return}
   if(a==='togsc'){S.openSc=!S.openSc;render();return}
@@ -6810,7 +6824,8 @@ document.addEventListener('click',function(e){
   /* 章の開閉は <details> が自分でやる（state は toggle で写す）。ここでは何もしない */
   if(a==='openchap'){return}
   if(a==='basesrc'){S.baseVid=null;S.baseSrc=t.getAttribute('data-v')||DEFSRC;render();return}
-  if(a==='star'){var sid=t.getAttribute('data-id'),r=mk(sid);r.star=!r.star;saveST();render();return}
+  /* 星の切り替えは外した（2026-08-29 本人指示）。押す所が無いので届かない処理だった。
+     記録の star の欄は消していない＝過去に付けた印は残る。 */
   /* 押した感（0.12s）が演出より先に返るように、判定は入力確認の後 */
   if(a==='ans'){
     if(ANSLOCK)return;

@@ -1208,6 +1208,15 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 
 /* ---- 出題（A2＝章名の下に一本線／B1＝面は文章の高さに合わせて上に寄せる） ---- */
 .qhead{margin-bottom:14px}
+/* ★2026-08-29 本人指示：問題数（3/47）と経過時間が章名の行と重なり、
+   「重要事項説明」等が「…」で切れていた。数と時間を**上の行**に出し、
+   章名は折り返して最後まで見せる。 */
+.qhead .qtoprow{display:flex;justify-content:flex-end;align-items:center;margin-bottom:4px}
+.qhead .qtoprow .qcnt{margin-left:0}
+.qhead .qtoprow .qtime{margin-left:12px}
+/* 出典の枠＝2段（上＝大分類と動画の番号／下＝出典）。リード文と同じ枠に出す。 */
+.srcbox .srcup{font-size:11.5px;opacity:.62;letter-spacing:.04em}
+.srcbox .srcdn{font-size:12.5px;letter-spacing:.03em}
 .qhead .qrow{display:flex;align-items:center;gap:9px;margin-bottom:8px}
 .qhead .qname{font-size:13.5px;letter-spacing:.06em;color:var(--accd);font-weight:600}
 /* 1段のとき（＝出題中）は絶対に2段にしない。名前だけ縮めて「…」で切り、
@@ -1215,6 +1224,10 @@ body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
    割れてチップまで折り返す（2026-08-16 本人指摘）。 */
 .qhead .qrow:not(.j) .qname{flex:0 1 auto;min-width:0;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
+/* ★章名は折り返して最後まで出す（2026-08-29 本人指示）。
+   数と時間を上の行に出したので、1行に押し込む理由が無くなった。 */
+.qhead .qrow.wrapname:not(.j) .qname{white-space:normal;overflow:visible;
+  text-overflow:clip;overflow-wrap:anywhere;line-height:1.45;flex:1 1 auto}
 .qhead .qrow:not(.j)>*{flex:0 0 auto}
 .qhead .qrow:not(.j) .chip{white-space:nowrap}
 /* 論点名から作ったチップだけ折り返しを許す（.j）。章名は短いので今までどおり1行。
@@ -1545,7 +1558,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='7d2f04ae';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='bd255334';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
