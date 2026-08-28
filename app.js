@@ -863,13 +863,291 @@ function dnum(s){if(!s)return null;var p=String(s).slice(0,10).split('-');if(p.l
 function dgap(a,b){var x=dnum(a),y=dnum(b);return (x===null||y===null)?0:Math.round(y-x)}
 function addD(day,n){var d=new Date((dnum(day)+n)*86400000);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())}
 
+/* =========================================================
+   2台で記録を共有する（2026-08-29 本人指示。docs/SYNC_SPEC.md が正本）
+   ---------------------------------------------------------
+   なぜ要るか
+     1問あたりの記録は {ok,ng,streak,...} ＝**積み上げた数**で、混ぜられない。
+     いまの ghPull は「丸ごと置き換え」なので、2台で使うと後から上げた方が
+     相手の分を消す。特に起動時の自動アップが危ない。
+   どうするか
+     記録を「**出来事の並び**」で持つ。混ぜ方＝鍵の足し合わせだけ。
+     画面に出す数は、混ぜた並びを時刻順に**数え直して**作る。
+     ★live（いま解いた）と replay（数え直し）は**同じ関数**を通す。
+       別々に書くと必ずずれるので、ここを分けない。
+   ========================================================= */
+var DEVK='takken_dev';
+function devId(){
+  var v=null;
+  try{v=localStorage.getItem(DEVK)}catch(e){}
+  if(!v){
+    /* 端末ごとに1回だけ作る。鍵の重なりを避けるためだけのもの。 */
+    v=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,6);
+    try{localStorage.setItem(DEVK,v)}catch(e){}
+  }
+  return v;
+}
+var DEV=devId();
+/* ★この画面（タブ）だけの番号（2026-08-29 検証）。
+   同じ端末で2つのタブを開くと、連番が別々に進んで**同じ鍵**ができ、
+   混ぜるときに片方が「もう見た」として捨てられていた。 */
+var PAGE=Math.random().toString(36).slice(2,6);
+var DEVP=DEV+'.'+PAGE;
+/* 並びに1件足して返す。k＝世界で1つの鍵。
+   ★名前を logEv にしてある：アプリの中に ev という局所変数（マウスの出来事・完走の判定）が
+     既にあり、ev だと中で隠れて壊れる（2026-08-29 発見）。 */
+function logEv(kind,o){
+  var E=o||{};
+  E.e=kind;
+  E.t=Date.now();
+  E.d=DEVP;                                   /* どの端末のどの画面で起きたか（並べるときの決め手） */
+  E.n=(ST.logn=(ST.logn||0)+1);               /* その端末の中での連番（数で比べる） */
+  /* ★鍵は持たない（2026-08-29）。端末id・時刻・連番から作れる。
+     2万件で3.24MBになり、GitHubの通常の読み取り上限（1MB）を超えたため軽くした。 */
+  if(!Array.isArray(ST.log))ST.log=[];
+  ST.log.push(E);
+  return E;
+}
+/* 出来事の鍵。持っていなければ端末id・時刻・連番から作る（軽くするため持たせない）。 */
+function evk(E){
+  /* ★壊れた1件（null・数・文字列）で落ちない（2026-08-29 検証）。
+     1か所ずつ見張るのではなく、ここで受け止める。 */
+  if(!E||typeof E!=='object')return '';
+  return E.k||((E.d||'')+'-'+(E.t||0)+'-'+(E.n||0));
+}
+/* 出来事の時刻を「YYYY-MM-DD HH:MM:SS」にする（stamp を持たせない代わり）。 */
+function stampOf(E){
+  if(E.stamp)return E.stamp;
+  var d=new Date(E.t||0);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '
+        +pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
+/* 並びを足し合わせる（鍵が同じものは1つ）。順番も回数も結果に影響しない。 */
+function logMerge(a,b){
+  var seen={},out=[];
+  function put(L){
+    if(!Array.isArray(L))return;
+    for(var i=0;i<L.length;i++){
+      var E=L[i];
+      /* ★見張りを先に置く（2026-08-29 検証）。順番が逆だと共有に壊れた1件（null）が
+         混ざったときにここで落ち、以後ずっと上げも下げもできなくなる。 */
+      if(!E||typeof E!=='object'||!E.e)continue;
+      var kk=evk(E);
+      if(!kk||seen[kk])continue;
+      seen[kk]=1;out.push(E);
+    }
+  }
+  put(a);put(b);
+  return out;
+}
+/* 並びを時刻順に並べる。時刻が同じときは鍵で決める＝**どの端末でも同じ順**になる。 */
+function logSort(L){
+  return L.slice().sort(function(x,y){
+    if(x.e==='base')return (y.e==='base')?0:-1;   /* 土台は必ず先頭 */
+    if(y.e==='base')return 1;
+    if(x.t!==y.t)return x.t-y.t;
+    /* ★同じミリ秒のとき。文字列で比べると "10" < "9" になり（桁数が違うため）、
+       端末をまたぐと順序が入れ替わって連続正解の数がずれる（2026-08-29 実測）。
+       端末idで分け、同じ端末の中は**連番の数**で並べる。 */
+    var xd=x.d||'',yd=y.d||'';
+    if(xd!==yd)return xd<yd?-1:1;
+    return (x.n||0)-(y.n||0);
+  });
+}
+
+/* 記録リセットを当てる（live でも数え直しでも同じ）。
+   その時点で「解いていないこと」にする＝並びから消すのではない。 */
+function applyReset(E){
+  var ids={};
+  /* ★範囲（単元名・動画id）で持つ（2026-08-29 検証）。
+     id の一覧を焼き付けると、相手のまだ届いていない解答に効かず、同期のあとに戻る。
+     数え直しは時刻順なので、ここで範囲の中身をその時点の記録から拾えば正しく消える。 */
+  if(E.cat){ Object.keys(ST.items).forEach(function(i){ if(BY[i]&&BY[i].cat===E.cat)ids[i]=1 }) }
+  if(E.vid&&!E.cat&&!(E.ids||[]).length){
+    Object.keys(ST.items).forEach(function(i){
+      var it=BY[i];if(!it)return;
+      (it.videos||[]).forEach(function(v){if(v.vid===E.vid)ids[i]=1});
+    });
+  }
+  (E.ids||[]).forEach(function(i){ids[i]=1});
+  Object.keys(ids).forEach(function(i){delete ST.items[i]});
+  if(E.vid&&ST.vp[E.vid]){ST.vp[E.vid].completedAt=null;ST.vp[E.vid].round=0}
+  Object.keys(ST.vp||{}).forEach(function(v){
+    var vp=ST.vp[v];if(!vp)return;
+    if(vp.done)vp.done=vp.done.filter(function(i){return !ids[i]});
+    if(vp.wrong)vp.wrong=vp.wrong.filter(function(i){return !ids[i]});
+    if(vp.done&&!vp.done.length){vp.completedAt=null;vp.round=0}
+  });
+}
+
+/* 起動したときの同期。
+   ①共有の並びを読む
+   ②共有に土台があり、この端末にも「並びの無い記録」がある＝別々に育った
+     → **必ず本人に確認**してから決める（黙って片方を捨てない）
+   ③そうでなければ、土台を作って（必要なら）混ぜて上げる */
+function bootSync(){
+  var g=GH();
+  if(!g.repo||!g.token)return;                 /* 接続していない端末は何もしない */
+  syncRead().then(function(R){
+    if(!R)return;                              /* 読めなかった＝何もしない（上書きしない・旗は立てたまま） */
+    var theirs=hasBase(R.log), mine=hasBase(ST.log);
+    if(theirs&&!mine&&BASECAND){
+      /* 共有に土台があり、この端末にも並びに載っていない記録がある＝別々に育った。
+         **両方は足せない**（同じ問題を二重に数える）。必ず本人に決めてもらう。 */
+      SYNC.hold=true;                          /* 決まるまで同期を止める */
+      joinAsk(R);
+      return;
+    }
+    if(!theirs&&!mine&&BASECAND)makeBase(BASECAND);   /* 共有にも無い＝この端末のもとを土台にする */
+    BASECAND=null;
+    SYNC.hold=false;                                 /* 点検が済んだ＝同期してよい */
+    syncNow(true);
+  });
+}
+/* 別々に育った記録があるときの確認（黙って捨てない） */
+function joinAsk(R){
+  var m=document.getElementById('modal');if(!m)return;
+  var mine=Object.keys(ST.items||{}).length;
+  var theirN=R.log.length;
+  m.innerHTML='<div class="sheet"><div class="spread" style="margin-bottom:10px">'
+   +'<div class="h" style="margin:0">記録の引き継ぎ</div></div>'
+   +'<div class="mini" style="line-height:1.9">'
+   +'共有の記録（'+n3(theirN)+'件）と、この端末だけの記録（'+n3(mine)+'問）が別々にあります。<br>'
+   +'この2つは<b>足し合わせられません</b>（同じ問題を二重に数えてしまうため）。<br><br>'
+   +'<b>共有の記録を使う</b>＝この端末の記録は使いません（端末の中に控えは残ります）。<br>'
+   +'<b>この端末の記録を使う</b>＝共有の記録を置き換えます。他の端末の分は消えます。'
+   +'</div>'
+   +'<div class="rowx" style="gap:8px;margin-top:12px">'
+   +'<button class="btn pri" style="width:auto" data-act="joinTheirs">共有の記録を使う</button>'
+   +'<button class="btn sm" style="width:auto" data-act="joinMine">この端末の記録を使う</button>'
+   +'</div><div class="mini" style="margin-top:8px">あとで決めたいときは閉じてください。<b>決めるまで同期は止まります</b>（設定＝データで「今すぐ同期」を押すと、この確認がもう一度出ます）。</div>'
+   +'<div class="rowx" style="margin-top:8px"><button class="btn sm" style="width:auto" data-act="closeModal">あとで</button></div>'
+   +'</div>';
+  m6SheetOpen();
+}
+
+/* ---------- 移行（2026-08-29） ----------
+   いままでの記録には出来事の並びが無い。そこで**土台**を1件だけ作る。
+   鍵は 'base' 固定なので、混ぜても2つにならない＝二重に数えない。 */
+var BEFORE_KEY='takken_v1_before_sync';
+function hasBase(L){
+  L=L||ST.log||[];
+  for(var i=0;i<L.length;i++)if(L[i].e==='base')return true;
+  return false;
+}
+/* この端末の記録から土台を作る。記録が空なら作らない（PCなど新しい端末）。 */
+/* 土台の「もと」＝いまの記録から端末ごとのものを抜いた写し。 */
+function baseSt(){
+  var st=JSON.parse(JSON.stringify(ST));
+  delete st.settings;delete st.run;delete st.wpend;delete st.lastChap;
+  delete st.mockRun;                 /* 途中の模試は端末ごと（焼き付くと生き返る） */
+  delete st.log;delete st.logn;
+  return st;
+}
+/* 土台を確定する。cand を渡すと、それを土台にする（起動直後に控えたもと）。 */
+function makeBase(cand){
+  if(hasBase())return false;
+  var st=cand||null;
+  if(!st){
+    /* ★出来事が1件でも入っていたら、いまの記録から作らない（2026-08-29 実測で発見）。
+       作ると、土台にも出来事にも同じ解答が入って**二重に数える**。 */
+    if((ST.log||[]).length)return false;
+    if(!Object.keys(ST.items||{}).length&&!Object.keys(ST.days||{}).length)return false;
+    st=baseSt();
+  }
+  /* ★移行の前に、いまの記録をそのまま端末の中に控える（元に戻せるように） */
+  try{
+    if(!localStorage.getItem(BEFORE_KEY)){
+      localStorage.setItem(BEFORE_KEY,localStorage.getItem(LSK)||JSON.stringify(ST));
+    }
+  }catch(e){}
+  var B={k:'base',e:'base',t:Date.now(),d:DEV,n:0,st:st};   /* 土台だけは鍵を固定で持つ */
+  if(!Array.isArray(ST.log))ST.log=[];
+  ST.log.unshift(B);
+  saveST();
+  return true;
+}
+
+/* 混ぜた並びから、画面に出す記録を作り直す。
+   ★ここが「確実に共有できる」の要。どの端末でも、何回混ぜても、同じ並びからは同じ結果になる。
+   端末ごとのもの（settings・run・wpend・lastChap）は混ぜない＝この端末のものを残す。 */
+function replay(log){
+  var L=logSort(log||[]),base=null,evs=[],dead={};
+  /* 「無かったことにする」で指された出来事を先に集める（順番に関係なく効かせる） */
+  for(var z=0;z<L.length;z++){ if(L[z].e==='undo'&&L[z].ref)dead[L[z].ref]=1 }
+  for(var i=0;i<L.length;i++){
+    if(L[i].e==='base'){base=L[i];continue}
+    if(L[i].e==='undo')continue;
+    if(dead[evk(L[i])])continue;           /* 無かったことにされた分は当てない */
+    evs.push(L[i]);
+  }
+  /* 端末ごとのものを控える */
+  var keep={settings:ST.settings,run:ST.run,wpend:ST.wpend,lastChap:ST.lastChap,
+             mockRun:ST.mockRun,logn:ST.logn};   /* 途中の模試も端末ごと（2026-08-29 批評） */
+  var st=base&&base.st?JSON.parse(JSON.stringify(base.st)):{};
+  if(st.settings)delete st.settings;      /* 土台の設定は使わない（端末ごと） */
+  delete st.run;delete st.wpend;delete st.lastChap;delete st.log;delete st.logn;
+  ST=normST(st);
+  ST.settings=keep.settings||ST.settings;
+  ST.run=keep.run||null;ST.wpend=keep.wpend||null;ST.lastChap=keep.lastChap||null;
+  ST.mockRun=keep.mockRun||null;
+  ST.logn=keep.logn||0;
+  ST.log=L;
+  for(var j=0;j<evs.length;j++){
+    var E=evs[j];
+    try{ applyEvent(E,false) }catch(e){}   /* 1件で全部を止めない */
+  }
+  return ST;
+}
+/* 出来事1件を当てる（種類で振り分け）。live=false＝数え直しのとき。 */
+function applyEvent(E,live){
+  if(!E||!E.e)return;
+  if(E.e==='a')return applyA(E,live);
+  if(E.e==='w')return applyW(E);          /* ★live と同じ関数を通す（別々に書くとずれる） */
+  if(E.e==='memo'){mk(E.id).memo=E.memo||'';return}
+  if(E.e==='pass'){delete ST.items[E.id];return}
+  if(E.e==='watch'){if(E.key&&!ST.watched[E.key])ST.watched[E.key]=E.day;return}
+  if(E.e==='vms'){try{applyVms(E)}catch(e){}return}
+  if(E.e==='mock'){if(E.r)ST.mock.push(E.r);return}
+  if(E.e==='game'){if(!ST.game)ST.game={n:0,ok:0,at:''};ST.game.n++;if(E.ok)ST.game.ok++;ST.game.at=E.day;return}
+  if(E.e==='watchms'){if(E.vid){vpOf(E.vid).watchMs+=(+E.ms||0);tlogDay(E.day).video+=(+E.ms||0)}return}
+  if(E.e==='lesson'){if(!ST.lessonDone)ST.lessonDone={};if(E.id&&!ST.lessonDone[E.id])ST.lessonDone[E.id]=E.day;return}
+  if(E.e==='vdone'){if(E.vid)vpOf(E.vid).completedAt=E.day;return}
+  if(E.e==='vround'){if(E.vid)vpOf(E.vid).round=E.round;return}
+  if(E.e==='grep'){if(!ST.greports)ST.greports={};ST.greports[E.id]=E.r;return}
+  if(E.e==='reset'){applyReset(E);return}
+  if(E.e==='rep'){if(!ST.reports)ST.reports={};ST.reports[E.id]={tags:(E.tags||[]).slice(),memo:E.memo||'',at:E.at};return}
+  if(E.e==='check'){if(E.key)ST.checkDone[E.key]=E.day;return}
+  if(E.e==='closed'){if(E.cat)ST.closedSeen[E.cat]=E.day;return}
+}
+
 /* ---------- 進行状況（localStorage takken_v1） ---------- */
 var LSOK=true;
 var ST=loadST();
+/* ★土台のもとを**起動直後**に控える（2026-08-29）。あとで作ると、その間に解いた分が
+   土台と出来事の両方に入って二重に数える。ここなら並びは必ず空。
+   ただし**すぐには土台にしない**：共有側にも土台があるかもしれないので、共有を読んでから決める。
+   読まずに作ると相手の土台を潰す（2026-08-29 批評で判明）。
+   接続していない端末は共有が無いので、その場で作ってよい。 */
+var BASECAND=null;
+try{
+  if(!hasBase()&&!(ST.log||[]).length
+     &&(Object.keys(ST.items||{}).length||Object.keys(ST.days||{}).length)){
+    BASECAND=baseSt();
+    if(GH().repo&&GH().token){
+      /* ★点検が済むまで**すべての同期を止める**（2026-08-29 検証）。
+         止めないと、起動4秒以内に画面を切り替えただけで同期が先に走り、
+         引き継ぎの確認が出ないままこの端末の記録が消える（控えも残らない）。 */
+      SYNC.hold=true;
+    }else{
+      makeBase();                               /* 共有を使わない端末はその場で確定 */
+    }
+  }
+}catch(e){}
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
 applyText();           /* 本文の見た目（大きさ・行間・字間・余白・書体）も先に当てる */
 applyRdColor();        /* 読み上げの帯の色 */
-setTimeout(function(){try{ghAuto('boot')}catch(e){}},4000);    /* 起動のたび（中身が変わっていれば） */
+setTimeout(function(){try{bootSync()}catch(e){}},4000);   /* 起動のたび（2台で共有する同期） */
 /* 記録が壊れて読めなかったら、**元の文字列を退避してから**空で始める。
    退避しないと直後の saveST() が原本を上書きして、部分的に救えたはずの記録まで消える
    （2026-08-15 批評で判明。本人は一度、記録を全部失っている）。 */
@@ -892,6 +1170,17 @@ var STBROKEN=false;
 function normST(o){
   if(!o||typeof o!=='object')o={};
   if(!o.items||typeof o.items!=='object')o.items={};
+  /* 出来事の並び（2026-08-29）。これが記録の本体。増えるだけで消さない。 */
+  /* データの間違いの報告（2026-08-17）。数え直しで消えないよう、ここで欄を作る。 */
+  if(!o.reports||typeof o.reports!=='object')o.reports={};
+  /* 講義を見た印・ゲームの報告も数え直しで消えないよう欄を作る（2026-08-29 批評） */
+  if(!o.lessonDone||typeof o.lessonDone!=='object')o.lessonDone={};
+  if(!o.greports||typeof o.greports!=='object')o.greports={};
+  if(!Array.isArray(o.log))o.log=[];
+  /* 共有の世代（2026-08-29 検証）。「この端末の記録を使う」で1つ進む。
+     自分より新しい世代を見たら、混ぜずに丸ごと乗り換える。 */
+  if(typeof o.gen!=='number')o.gen=0;
+  if(typeof o.logn!=='number')o.logn=0;
   if(!o.watched||typeof o.watched!=='object')o.watched={};
   if(!o.session||typeof o.session!=='object')o.session={total:0,right:0};
   if(typeof o.session.streak!=='number')o.session.streak=0;  /* 連続正解（誤答で0） */
@@ -950,7 +1239,28 @@ function normST(o){
   }
   return o;
 }
-function saveST(){try{localStorage.setItem(LSK,JSON.stringify(ST));LSOK=true}catch(e){LSOK=false}}
+/* ★他のタブが保存したら、その並びを取り込む（2026-08-29 検証）。
+   取り込まないと、後から保存したタブが前のタブの並びを丸ごと消す。 */
+try{
+  window.addEventListener('storage',function(e){
+    if(e.key!==LSK||!e.newValue)return;
+    try{
+      var o=JSON.parse(e.newValue)||{};
+      if(!Array.isArray(o.log))return;
+      var m=logMerge(ST.log,o.log);
+      if(m.length!==(ST.log||[]).length){replay(m);saveST();try{render()}catch(e2){}}
+    }catch(e3){}
+  });
+}catch(e){}
+function saveST(){
+  try{localStorage.setItem(LSK,JSON.stringify(ST));LSOK=true}
+  catch(e){
+    /* ★2026-08-29：並びが記録の中に入ったので、上限に当たると保存が丸ごと落ちる。
+       そのままだと開き直したときにその分が消える。**すぐ同期を試す**＝共有に上がれば失わない。 */
+    LSOK=false;
+    try{ if(GH().repo&&GH().token&&!SYNC.busy)syncNow(true) }catch(e2){}
+  }
+}
 function R(id){return ST.items[id]||null}
 function mk(id){
   var r=ST.items[id];
@@ -1041,50 +1351,65 @@ function dayCap(){
 }
 
 /* ---------- 解答 ---------- */
+/* ★2026-08-29：ここを「並びに足す」→「当てる」の2段にした。
+   当てる側（applyA）は**いま解いたときも、数え直しのときも同じ**を通る。
+   別々に書くと、混ぜ直したときに数がずれる（docs/SYNC_SPEC.md）。 */
 function answer(id,userOx){
-  var it=BY[id],r=mk(id),t=today(),ok=(userOx===it.ox);
-  var pre=r.box||0,wasGrad=(r.state==='卒業'),gap=0;
-  /* この回答が「その問題を初めて解いた」ものか＝新規を消化した数の分子
-     （復習・抜き打ち・間違い直しは数えない。2026-08-15 本人指定） */
+  var it=BY[id];if(!it)return {ok:false,gap:0};
+  var ok=(userOx===it.ox);
+  var E=logEv('a',{id:id,ok:ok,day:today(),kind:S.kind||null});
+  var res=applyA(E,true);
+  S.lastEvK=evk(E);         /* 取り消しで指すため（2026-08-29） */
+  saveST();
+  try{syncSoon()}catch(e){}
+  return res;
+}
+/* 出来事1件を記録に当てる。live=true のときだけ画面の中の値（S・FXST）も動かす。 */
+function applyA(E,live){
+  var id=E.id,it=BY[id];
+  if(!it)return {ok:false,gap:0};        /* 問題が消えている（データが古い）＝飛ばす */
+  var r=mk(id),t=E.day,ok=!!E.ok,gap=0;
+  var pre=r.box||0,wasGrad=(r.state==='卒業');
   var isFirst=(att(r)===0);
-  r.last=nowStamp();r._pre=pre;r._why=null;r._preStreak=r.streak||0;
+  r.last=stampOf(E);r._pre=pre;r._why=null;r._preStreak=r.streak||0;
   ST.session.total=(ST.session.total||0)+1;if(ok)ST.session.right=(ST.session.right||0)+1;
-  /* この1回（周回なら「その周」）ぶんの成績。完走リザルトはこちらを出す＝通算と混ぜない */
-  S.sT=(S.sT||0)+1;
-  if(ok){S.sR=(S.sR||0)+1;S.sStreak=(S.sStreak||0)+1;if(S.sStreak>(S.sBest||0))S.sBest=S.sStreak}
-  else S.sStreak=0;
-  /* 連続正解（localStorageに保存。誤答で0・bestは最大値を保持） */
+  if(live){
+    /* この1回（周回なら「その周」）ぶんの成績。完走リザルトはこちらを出す＝通算と混ぜない */
+    S.sT=(S.sT||0)+1;
+    if(ok){S.sR=(S.sR||0)+1;S.sStreak=(S.sStreak||0)+1;if(S.sStreak>(S.sBest||0))S.sBest=S.sStreak}
+    else S.sStreak=0;
+  }
+  /* 連続正解（記録に残す。誤答で0・bestは最大値を保持） */
   if(ok){
     ST.session.streak=(ST.session.streak||0)+1;
     if(ST.session.streak>(ST.session.best||0))ST.session.best=ST.session.streak;
-    FXST.lost=0;
+    if(live)FXST.lost=0;
   }else{
-    FXST.lost=ST.session.streak||0;
+    if(live)FXST.lost=ST.session.streak||0;
     ST.session.streak=0;
   }
-  FXST.streak=ST.session.streak||0;
+  if(live)FXST.streak=ST.session.streak||0;
   var d=ST.days[t]||{n:0,ok:0};d.n++;if(ok)d.ok++;
-  if(isFirst)d.newq=(d.newq||0)+1;                 /* 今日はじめて解いた問題の数 */
-  /* 思い出しでやった数（2026-08-22）。ホームの「思い出し ◯/20問」に出す。 */
-  if(S.kind==='recall')d.recall=(d.recall||0)+1;
+  if(isFirst)d.newq=(d.newq||0)+1;                 /* その日はじめて解いた問題の数 */
+  if(E.kind==='recall')d.recall=(d.recall||0)+1;   /* 思い出しでやった数 */
   ST.days[t]=d;
   /* 連続正解が伸びるほど休ませる日数が伸びる（1→3→7→14日）。間違えたら翌日に戻る。 */
   if(ok){
     r.ok=(r.ok||0)+1;r.streak=(r.streak>0?r.streak:0)+1;
     gap=r.lastOk?dgap(r.lastOk,t):0;r.lastOk=t;
-    if((r.streak||0)>=4)r.grad=t;                            /* 休み14日に到達＝卒業扱い */
+    if((r.streak||0)>=4)r.grad=t;                  /* 休み14日に到達＝卒業扱い */
   }else{
-    r.ng=(r.ng||0)+1;r.streak=0;r.lastNg=nowStamp();r.grad=null;
+    r.ng=(r.ng||0)+1;r.streak=0;r.lastNg=stampOf(E);r.grad=null;
   }
   /* 間違えた問題は、その場の周回（間隔なし・当日）と動画の進捗にも積む */
   if(!ok){
-    if(S.wrongs.indexOf(id)<0)S.wrongs.push(id);
+    if(live&&S.wrongs.indexOf(id)<0)S.wrongs.push(id);
     vpMark(id,false);
   }else{
-    var wi=S.wrongs.indexOf(id);if(wi>=0)S.wrongs.splice(wi,1);
+    if(live){var wi=S.wrongs.indexOf(id);if(wi>=0)S.wrongs.splice(wi,1)}
     vpMark(id,true);
   }
-  refreshRec(r);saveST();
+  refreshRec(r);
   return {ok:ok,gap:gap};
 }
 /* 動画ごとの進捗（完了の単位＝動画1本） */
@@ -1115,12 +1440,17 @@ function tlogDay(day){
 /* 解いていた時間を積む。vid が分かるときは「基準の動画1本だけ」に積む＝二重計上しない。 */
 function addStudyMs(kind,vid,ms){
   if(!(ms>0))return;
-  /* sneak（抜き打ち）は 2026-08-22 に廃止。渡ってきたら復習として数える
-     ＝古い版が残した呼び出しでも時間を落とさない。 */
+  applyVms(logEv('vms',{kind:kind,vid:vid||null,ms:ms,day:today()}));
+}
+/* 学習時間を当てる（live でも数え直しでも同じ） */
+function applyVms(E){
+  var kind=E.kind,ms=+E.ms||0;
+  if(!(ms>0))return;
+  /* sneak（抜き打ち）は 2026-08-22 に廃止。渡ってきたら復習として数える。 */
   if(kind==='sneak')kind='review';
   if(['video','new','review'].indexOf(kind)<0)kind='new';
-  tlogDay(today())[kind]+=ms;
-  if(vid&&kind!=='video')vpOf(vid).quizMs+=ms;
+  tlogDay(E.day)[kind]+=ms;
+  if(E.vid&&kind!=='video')vpOf(E.vid).quizMs+=ms;
 }
 /* 日別の合計（n日ぶん・n=null で通算）。返すのはミリ秒 */
 function tlogSum(n){
@@ -1151,9 +1481,8 @@ function watchEnd(){
   var cap=Math.round((VLEN[w.vid]||0)*1500);          /* 尺の1.5倍（ミリ秒）で切り捨てる */
   if(cap>0&&ms>cap)ms=cap;
   if(ms<10000){saveST();return 0}                     /* 10秒未満は積まない */
-  vpOf(w.vid).watchMs+=ms;
-  tlogDay(today()).video+=ms;
-  saveST();
+  applyEvent(logEv('watchms',{vid:w.vid,ms:ms,day:today()}),true);
+  saveST();try{syncSoon()}catch(e){}
   return ms;
 }
 /* 直近7日の動画視聴の実測平均（分）。実測が無ければ null＝設定の固定値を使う */
@@ -1390,14 +1719,19 @@ function nextVid(vid){
 }
 /* 誤答理由による扱い分け（SPEC §3） */
 function applyWhy(id,reason){
-  var r=mk(id);
+  applyW(logEv('w',{id:id,why:reason}));
+  saveST();try{syncSoon()}catch(e){}
+}
+/* なぜ間違えたを当てる（live でも数え直しでも同じ） */
+function applyW(E){
+  var r=mk(E.id),reason=E.why;
+  if(!r.why)r.why=[];
   if(r._why){var i=r.why.lastIndexOf(r._why);if(i>=0)r.why.splice(i,1)}
   r.why.push(reason);r._why=reason;
-  /* ケアレスだけは休みを戻さない（連続正解の回数を維持）。他は翌日に戻す。
-     「読み違い」も同じ扱い（ひっかけ訓練は 2026-08-14 に廃止したので専用の行き先は無い）。 */
+  /* ケアレスだけは休みを戻さない（連続正解の回数を維持）。他は翌日に戻す。 */
   if(reason==='ケアレス')r.streak=r._preStreak||0;
   else r.streak=0;
-  refreshRec(r);saveST();
+  refreshRec(r);
 }
 
 /* ---------- 重症・閉じる ---------- */
@@ -2533,9 +2867,9 @@ function mockAnswer(k){
                 ok:right,sel:m.sel[i],ans:q.ans});
     });
     m.ok=ok;
-    if(!ST.mock)ST.mock=[];
-    /* 記録には「肢のid」も残す。次の回で同じ問を避けるため（2026-08-22）。 */
-    ST.mock.push({at:nowStamp(),set:m.set||0,kind:m.kind,n:qs.length,ok:ok,sec:m.sec,qs:det});
+    /* 記録には「問題のid」も残す。次の回で同じ問を避けるため（2026-08-22）。 */
+    applyEvent(logEv('mock',{r:{at:nowStamp(),set:m.set||0,kind:m.kind,n:qs.length,
+                               ok:ok,sec:m.sec,qs:det}}),true);
     ST.mockRun=null;
   }
   /* 1問ごとに保存する（2時間の途中で閉じても消えない） */
@@ -2559,9 +2893,8 @@ function mockStop(){
               cat:q.cat,big:q.big,type:q.type,ok:right,sel:m.sel[i],ans:q.ans});
   });
   m.ok=ok;
-  if(!ST.mock)ST.mock=[];
-  ST.mock.push({at:nowStamp(),set:m.set||0,kind:m.kind,n:qs.length,ok:ok,sec:m.sec,
-                途中:true,qs:det});
+  applyEvent(logEv('mock',{r:{at:nowStamp(),set:m.set||0,kind:m.kind,n:qs.length,ok:ok,
+                              sec:m.sec,途中:true,qs:det}}),true);
   ST.mockRun=null;saveST();render();
 }
 function vMock(){
@@ -4526,8 +4859,8 @@ function setResultBtns(wn,nx,perfect,nc,nu){
 function vDone(){
   var tot=S.queue.length,nw=S.wrongs.length,sT=S.sT||0,sR=S.sR||0;
   /* 講義の問題をやり切ったら「見た」印を立てる（講義の一覧に✓が付く）。2026-08-25 */
-  if(S.lessonId&&!nw){if(!ST.lessonDone)ST.lessonDone={};
-    if(!ST.lessonDone[S.lessonId]){ST.lessonDone[S.lessonId]=today();saveST()}}
+  if(S.lessonId&&!nw&&!(ST.lessonDone||{})[S.lessonId]){
+    applyEvent(logEv('lesson',{id:S.lessonId,day:today()}),true);saveST();try{syncSoon()}catch(e){}}
   var vs=S.roundVid?videoStat(S.roundVid):null;
   var nc=nextChap(S.roundVid,S.roundSec);
   var vdone=!!(vs&&(vs.done||(S.roundVid&&restCount(videoItemsUp(S.roundVid))===0)));
@@ -4587,8 +4920,8 @@ function vDone(){
    ==================================================================== */
 var GM=null;                     /* いま動いているゲーム（null＝入口の画面） */
 function gmRec(ok){
-  if(!ST.game)ST.game={n:0,ok:0,at:''};
-  ST.game.n++;if(ok)ST.game.ok++;ST.game.at=today();saveST();
+  applyEvent(logEv('game',{ok:!!ok,day:today()}),true);
+  saveST();try{syncSoon()}catch(e){}
 }
 /* 範囲に入っているか＝根拠の肢が全部 filtered() の中にあるか */
 function gmIn(srcs){
@@ -5272,10 +5605,10 @@ function kkRepOpen(){
     var q2=GM.qs[GM.qi];
     if(!ST.greports)ST.greports={};
     var t=(ST.greports[q2.id]||{tags:[]}).tags||[];
-    ST.greports[q2.id]={kind:GM.kind,tags:t,
+    applyEvent(logEv('grep',{id:q2.id,r:{kind:GM.kind,tags:t,
       memo:(document.getElementById('grepmemo')||{}).value||'',
-      at:nowStamp(),voice:(GM.voice||null),ask:q2.ask||q2.id};
-    saveST();
+      at:nowStamp(),voice:(GM.voice||null),ask:q2.ask||q2.id}}),true);
+    saveST();try{syncSoon()}catch(e){}
     document.getElementById('grepmsg').textContent='送りました';
   };
 }
@@ -5520,7 +5853,7 @@ addEventListener('message',function(e){
   var k=LESOV.id;
   if(d.takken==='home'){closeLesson();S.lessonId=null;S.view='home';render();return}
   if(d.takken==='lessonDone'){
-    ST.lessonDone=ST.lessonDone||{};ST.lessonDone[k]=today();saveST();
+    applyEvent(logEv('lesson',{id:k,day:today()}),true);saveST();try{syncSoon()}catch(e){}
     closeLesson();
     /* いきなり問題に入る＝間に何も挟まない（2026-08-25 本人指示） */
     startLesson(d.ids||[]);
@@ -5932,7 +6265,7 @@ function repInline(id){
 function snapAns(id){
   var it=BY[id]||{},vid=(it.vids&&it.vids[0]&&it.vids[0].vid)||null,t=today();
   function cp(o){return o?JSON.parse(JSON.stringify(o)):null}
-  return {id:id,vid:vid,day:t,
+  return {id:id,vid:vid,day:t,evk:S.lastEvK||null,
     rec:cp(ST.items[id]),
     sess:cp(ST.session),
     days:cp(ST.days[t]),
@@ -5943,14 +6276,22 @@ function snapAns(id){
 }
 function undoAns(sp){
   if(!sp)return;
-  if(sp.rec)ST.items[sp.id]=sp.rec;else delete ST.items[sp.id];
-  if(sp.sess)ST.session=sp.sess;
-  if(sp.days)ST.days[sp.day]=sp.days;else delete ST.days[sp.day];
-  if(sp.vid){if(sp.vp)ST.vp[sp.vid]=sp.vp;else delete ST.vp[sp.vid]}
+  /* ★2026-08-29：記録を巻き戻すのではなく「無かったことにする」出来事を足して数え直す。
+     並びから消すと、相手の端末から混ぜ直したときに復活して二重になる。 */
+  if(sp.evk){
+    logEv('undo',{ref:sp.evk});
+    replay(ST.log);
+  }else{
+    /* 鍵が無い＝どの出来事か分からない。巻き戻すだけでは並びに解答が残り、
+       次の数え直しで**復活する**（2026-08-29 批評）。
+       その問題の記録を、この時点で無かったことにする出来事を足す。 */
+    applyEvent(logEv('reset',{ids:[sp.id],day:today()}),true);
+  }
+  /* 画面の中の値は控えから戻す（記録ではないので数え直しの対象外） */
   S.wrongs=sp.wrongs;
   S.sT=sp.sT;S.sR=sp.sR;S.sStreak=sp.sStreak;S.sBest=sp.sBest;
   FXST.lost=sp.lost;FXST.streak=sp.streak;
-  saveST();
+  saveST();try{syncSoon()}catch(e){}
 }
 /* ---------- この動画の記録をリセット（2026-08-18 本人指示） ----------
    対象＝その動画の「ここまでで解ける」肢（画面に出ている数と同じ範囲にする）。
@@ -5978,16 +6319,10 @@ function vResetAsk(vid){
   m6SheetOpen();
 }
 function vResetGo(vid){
-  var its=vResetTargets(vid),k=0;
-  its.forEach(function(it){if(ST.items[it.id]){delete ST.items[it.id];k++}});
-  var vp=ST.vp[vid];
-  if(vp){
-    var ids={};its.forEach(function(it){ids[it.id]=1});
-    if(vp.done)vp.done=vp.done.filter(function(i){return !ids[i]});
-    if(vp.wrong)vp.wrong=vp.wrong.filter(function(i){return !ids[i]});
-    vp.completedAt=null;vp.round=0;
-  }
-  saveST();
+  var its=vResetTargets(vid);
+  var k=its.filter(function(it){return !!ST.items[it.id]}).length;
+  applyEvent(logEv('reset',{vid:vid,day:today()}),true);
+  saveST();try{syncSoon()}catch(e){}
   var mm=document.getElementById('modal');if(mm)mm.hidden=true;
   msg(k+'問を「まだ解いてない」に戻しました');
   render();
@@ -6016,17 +6351,10 @@ function cResetAsk(c){
   m6SheetOpen();
 }
 function cResetGo(c){
-  var its=cResetTargets(c),k=0,ids={};
-  its.forEach(function(it){ids[it.id]=1;if(ST.items[it.id]){delete ST.items[it.id];k++}});
-  /* 動画ごとの進捗にも同じ肢が入っているので、そこからも外す
-     （外さないと動画側の「解いた数」だけが残って食い違う）。 */
-  Object.keys(ST.vp||{}).forEach(function(v){
-    var vp=ST.vp[v];if(!vp)return;
-    if(vp.done)vp.done=vp.done.filter(function(i){return !ids[i]});
-    if(vp.wrong)vp.wrong=vp.wrong.filter(function(i){return !ids[i]});
-    if(vp.done&&!vp.done.length){vp.completedAt=null;vp.round=0}
-  });
-  saveST();
+  var its=cResetTargets(c),k=0;
+  k=its.filter(function(it){return !!ST.items[it.id]}).length;
+  applyEvent(logEv('reset',{cat:c,day:today()}),true);
+  saveST();try{syncSoon()}catch(e){}
   var mm=document.getElementById('modal');if(mm)mm.hidden=true;
   msg(k+'問を「まだ解いてない」に戻しました');
   render();
@@ -6131,8 +6459,19 @@ function dataSheet(){
    +'<input id="ghTok" type="password" placeholder="トークン" value="'+(GH().token?'••••••••':'')+'" style="flex:1;min-width:120px">'
    +'<button class="btn sm" style="width:auto" data-act="ghsave">保存</button></div>'
    +'<div class="rowx" style="gap:8px;margin-top:8px">'
-   +'<button class="btn sm" style="width:auto" data-act="ghpush">今すぐ上げる</button>'
-   +'<button class="btn sm" style="width:auto" data-act="ghpull">記録を取り戻す</button></div>'
+   +'<button class="btn pri" style="width:auto" data-act="syncnow">今すぐ同期</button>'
+   +'<button class="btn sm" style="width:auto" data-act="ghpush">今すぐ上げる（古い形）</button>'
+   +'<button class="btn sm" style="width:auto" data-act="ghpull">古い記録を取り戻す</button></div>'
+   /* 2台で共有する同期の状態（2026-08-29） */
+   +'<div class="mini" style="margin-top:6px">'
+   +'2台で共有：出来事 '+n3((ST.log||[]).length)+'件'
+   +(hasBase()?'':'　<b style="color:var(--ngdeep)">土台なし</b>')
+   +(SYNC.at?('　最後の同期 '+esc(SYNC.at)):'　まだ同期していません')
+   +(SYNC.err?('　<span style="color:var(--ngdeep)">'+esc(SYNC.err)+'</span>'):'')
+   +'　／　大きさ '+(function(){try{return (JSON.stringify(ST).length/1048576).toFixed(2)+'MB'}catch(e){return '—'}})()
+   +(LSOK?'':'　<b style="color:var(--ngdeep)">この端末に保存できていません</b>')
+   +'<br>この端末 '+esc(DEV)+'　／　記録は <b>'+esc(LOGFILE)+'</b> に置きます'
+   +'（古い '+esc(GHFILE)+' は触りません）。</div>'
    /* 問題データは**起動時に勝手に取り込む**。押すボタンは置かない（2026-08-18 本人指示）。
       ここには「いま何で動いているか」だけ出す。 */
    +'<div class="mini" id="dpstat" style="margin-top:8px;min-height:16px">'
@@ -6237,6 +6576,10 @@ function ghSave(){
   var o={repo:repo,err:''};
   if(tok&&tok.indexOf('•')<0)o.token=tok;      /* 伏せ字のままなら変更しない */
   ghSet(o);msg('保存しました');dataSheet();
+  /* ★接続を入れた直後に土台を点検する（2026-08-29 批評）。
+     ここで見ないと、この端末の記録と共有の記録が別々に育っていることに気づけず、
+     最初の同期で相手の土台を潰す。 */
+  try{ if(GH().repo&&GH().token)bootSync() }catch(e){}
 }
 /* 非公開リポジトリから問題データを取り込む（2026-08-18 本人指示）。
    仕組みは殻の側（build_pwa の LOADER）にある＝アプリより先に動く必要があるため。
@@ -6284,6 +6627,145 @@ function ghErr(st){
   return '通信に失敗しました（'+st+'）';
 }
 /* quiet=true なら画面には出さない（自動実行のとき） */
+/* ---------- 2台で共有する同期（2026-08-29） ----------
+   必ず「読む→混ぜる→書く」。衝突したらやり直す。読めなかったら**上げない**。
+   書き先は takken_log.json ＝ いままでの takken_records.json は**触らない**
+   （最悪でも古い記録がそのまま残る）。 */
+var LOGFILE='takken_log.json';
+var SYNC={busy:false,timer:0,at:'',err:'',n:0,hold:false};   /* hold＝引き継ぎが決まるまで止める */
+function ghUrl(f){return 'https://api.github.com/repos/'+GH().repo+'/contents/'+f}
+/* 共有ファイルを読む。戻り＝{log,sha} ／ 無ければ {log:[],sha:null} ／ 読めなければ null */
+function syncRead(){
+  return fetch(ghUrl(LOGFILE),{headers:ghHeaders(),cache:'no-store'})
+    .then(function(res){
+      if(res.status===404)return {log:[],gen:0,sha:null};   /* まだ無い＝これから作る */
+      if(!res.ok)throw res.status;
+      return res.json().then(function(j){
+        /* ★1MBを超えると contents は中身を返さない（2026-08-29 実測で判明）。
+           そのときは blobs の入口から取る。 */
+        if(!j.content&&j.sha){
+          return fetch('https://api.github.com/repos/'+GH().repo+'/git/blobs/'+j.sha,
+                       {headers:ghHeaders(),cache:'no-store'})
+            .then(function(r2){
+              if(!r2.ok)throw r2.status;
+              return r2.json();
+            })
+            .then(function(b){
+              var o={};
+              try{o=JSON.parse(unb64(b.content||''))||{}}catch(e){throw 422}
+              return {log:Array.isArray(o.log)?o.log:[],gen:(+o.gen||0),sha:j.sha};
+            });
+        }
+        var o={};
+        try{o=JSON.parse(unb64(j.content||''))||{}}catch(e){throw 422}
+        return {log:Array.isArray(o.log)?o.log:[],gen:(+o.gen||0),sha:j.sha||null};
+      });
+    })
+    .catch(function(){return null});                     /* 読めなかった＝null（上げない） */
+}
+/* 1回ぶんの同期。成功なら true。 */
+function syncOnce(){
+  var g=GH();
+  if(!g.repo||!g.token)return Promise.resolve(false);
+  return syncRead().then(function(R){
+    if(!R){SYNC.err='読めませんでした（上げていません）';return false}
+    /* ★自分より新しい世代＝相手が「この端末の記録を使う」で置き換えた。
+       混ぜずに丸ごと乗り換える（混ぜると捨てたはずの記録が戻る。2026-08-29 検証）。 */
+    if((R.gen||0)>(ST.gen||0)){
+      ST.gen=(R.gen||0);
+      replay(R.log);
+      saveST();
+      SYNC.err='';SYNC.at=nowStamp();SYNC.n=(ST.log||[]).length;
+      return true;
+    }
+    var merged=logMerge(ST.log,R.log);
+    /* ★混ぜたら**必ず**数え直す（2026-08-29 検証）。
+       「相手から増えたときだけ」にしていたので、時計のずれた出来事が入ったあとに
+       自分で解くと、画面の値と数え直しの値が食い違った。 */
+    replay(merged);
+    saveST();
+    /* ★相手と同じなら書かない。件数ではなく**鍵の集合**で見る（2026-08-29 批評）。
+       件数だけだと、共有側に同じ鍵が重なっていたときに「同じ」と誤って判定し、
+       こちらの新しい分を上げずに「同期しました」と返してしまう。 */
+    var rk={},allIn=true;
+    for(var q=0;q<R.log.length;q++)rk[evk(R.log[q])]=1;
+    for(var q2=0;q2<merged.length;q2++){ if(!rk[evk(merged[q2])]){allIn=false;break} }
+    if(allIn&&R.sha)return (SYNC.err='',SYNC.at=nowStamp(),SYNC.n=merged.length,true);
+    var body={message:'宅建の記録（並び） '+nowStamp(),
+              content:b64(JSON.stringify({v:1,gen:(ST.gen||0),log:merged}))};
+    if(R.sha)body.sha=R.sha;
+    return fetch(ghUrl(LOGFILE),{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)})
+      .then(function(res){
+        if(res.status===409||res.status===422)return 'retry';   /* 相手が先に書いた */
+        if(!res.ok){SYNC.err=ghErr(res.status);return false}
+        SYNC.err='';SYNC.at=nowStamp();SYNC.n=merged.length;
+        return true;
+      });
+  }).catch(function(){SYNC.err='通信できませんでした';return false});
+}
+/* 共有を**この端末の並びで置き換える**（混ぜない）。
+   「この端末の記録を使う」だけで使う。混ぜると二重に数えるため。 */
+function syncReplace(){
+  var g=GH();
+  if(!g.repo||!g.token)return Promise.resolve(false);
+  return syncRead().then(function(R){
+    if(!R){msg('読めませんでした（置き換えていません）');return false}
+    ST.gen=(R.gen||0)+1;                       /* ★世代を進める＝全端末に置き換えが伝わる */
+    saveST();
+    var body={message:'宅建の記録（この端末で置き換え） '+nowStamp(),
+              content:b64(JSON.stringify({v:1,gen:ST.gen,log:ST.log}))};
+    if(R.sha)body.sha=R.sha;
+    return fetch(ghUrl(LOGFILE),{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)})
+      .then(function(res){
+        if(!res.ok){msg(ghErr(res.status));return false}
+        SYNC.err='';SYNC.at=nowStamp();SYNC.n=(ST.log||[]).length;
+        msg('共有をこの端末の記録で置き換えました');return true;
+      });
+  });
+}
+/* やり直しつきの同期（衝突しても壊さない） */
+function syncNow(quiet){
+  /* ★引き継ぎの決断が済むまで同期しない（2026-08-29 批評）。
+     止めないと「あとで」を押しても次の解答で勝手に混ざる。 */
+  if(SYNC.hold){if(!quiet)msg('記録の引き継ぎを決めてから同期します');return Promise.resolve(false)}
+  if(SYNC.busy){
+    /* 走っている間に呼ばれた分を捨てない＝少し後にやり直す */
+    if(SYNC.timer)clearTimeout(SYNC.timer);
+    SYNC.timer=setTimeout(function(){SYNC.timer=0;syncNow(true)},3000);
+    return Promise.resolve(false);
+  }
+  SYNC.busy=true;
+  var tries=0;
+  function step(){
+    tries++;
+    return syncOnce().then(function(r){
+      if(r==='retry'&&tries<5)return step();
+      return r===true;
+    });
+  }
+  return step().then(function(ok){
+    SYNC.busy=false;
+    if(!quiet)msg(ok?('同期しました（'+n3(SYNC.n||(ST.log||[]).length)+'件）'):(SYNC.err||'同期できませんでした'));
+    try{render()}catch(e){}
+    return ok;
+  },function(){SYNC.busy=false;return false});
+}
+/* しばらくためてから同期する（1問ごとに通信しない） */
+function syncSoon(){
+  var g=GH();
+  if(!g.repo||!g.token||SYNC.hold)return;
+  /* ★解き続けている間に一度も同期しないのを防ぐ（2026-08-29 批評）。
+     10秒ためるが、最初にためた時から60秒たったら待たずに上げる。 */
+  var now=Date.now();
+  if(!SYNC.pend)SYNC.pend=now;
+  if(now-SYNC.pend>=60000){
+    if(SYNC.timer){clearTimeout(SYNC.timer);SYNC.timer=0}
+    SYNC.pend=0;syncNow(true);return;
+  }
+  if(SYNC.timer)clearTimeout(SYNC.timer);
+  SYNC.timer=setTimeout(function(){SYNC.timer=0;SYNC.pend=0;syncNow(true)},10000);
+}
+
 function ghPush(quiet){
   var g=GH();
   if(!g.repo||!g.token){if(!quiet)msg('リポジトリとトークンを先に保存してください');return Promise.resolve(false)}
@@ -6307,10 +6789,13 @@ function ghPush(quiet){
     })
     .catch(function(){ghSet({err:'通信できませんでした'});if(!quiet){msg('通信できませんでした');dataSheet()}return false});
 }
+/* ★2026-08-29：「丸ごと置き換え」は廃止した。2台で使うと相手の分を消すため。
+   いまは syncNow() が「読む→混ぜる→書く」を行う。
+   この関数は**古い記録（takken_records.json）を取り戻したいとき**だけの避難口として残す。 */
 function ghPull(){
   var g=GH();
   if(!g.repo||!g.token){msg('リポジトリとトークンを先に保存してください');return}
-  if(!confirm('GitHubの記録で、いまの記録を置き換えます。よろしいですか。'))return;
+  if(!confirm('【注意】GitHubの古い記録（takken_records.json）で、いまの記録を置き換えます。\n2台で使っている場合、片方の記録が消えます。よろしいですか。'))return;
   msg('取ってきています…');
   fetch('https://api.github.com/repos/'+g.repo+'/contents/'+GHFILE,{headers:ghHeaders(),cache:'no-store'})
     .then(function(res){if(!res.ok)throw res.status;return res.json()})
@@ -6319,6 +6804,9 @@ function ghPull(){
       if(!o||!o.items)throw 422;
       var keep=ST.settings.gh;                 /* 接続の設定は残す */
       ST=normST(o);ST.settings.gh=keep;saveST();
+      /* ★並びが空になったので、次の起動で2つ目の土台ができる（2026-08-29 批評）。
+         もとを控え直して、必ず点検を通す。 */
+      try{ BASECAND=baseSt();SYNC.hold=false;bootSync() }catch(e){}
       msg('取り戻しました（'+Object.keys(ST.items).length+'問）');
       render();dataSheet();
     })
@@ -6350,13 +6838,12 @@ function ghFP(){
    ・起動したとき（タスクキル→開き直しでも上がる。2026-08-15 本人指定）
    ・完走したとき
    どちらも「前回から中身が変わっていれば」だけ実行する。 */
+/* ★2026-08-29：起動時・完走時の自動アップを**同期**に置き換えた。
+   前は丸ごと上書きだったので、PCを開いた瞬間にスマホの分が消えた。 */
 function ghAuto(reason){
   var g=GH();
   if(!g.repo||!g.token)return;
-  if(!Object.keys(ST.items||{}).length)return;      /* 記録が無いなら何もしない */
-  var fp=ghFP();
-  if(g.fp===fp)return;                              /* 前回上げた時から変わっていない */
-  ghPush(true).then(function(ok){if(ok)ghSet({fp:fp})});
+  syncNow(true);
 }
 function shareBackup(){
   var json=stOut(),name='takken_'+today()+'.json';
@@ -6511,6 +6998,10 @@ function doAnswer(userOx){
   var doneBefore=sibs.every(function(x){return att(R(x.id))>0});
   S.ansSnap=snapAns(id);          /* 送信＝パスで戻せるように、答える前を控える */
   S.res=answer(id,userOx);S.phase='exp';
+  /* ★答えたあとの鍵を入れ直す（2026-08-29 批評）。
+     控えを取るのが answer より前なので、そのままだと**1つ前の問題**の出来事を指し、
+     送信すると前の問題の解答が消えていた。 */
+  S.ansSnap.evk=S.lastEvK||null;
   /* この回ぶんの答えを控える。前の問題へ戻ったときに解説を出し直すのに使う
      （2026-08-17 本人指示「答えた後に前の問題にも戻れるように」）。 */
   /* 番号だけで持つと、別のセッションの控えが同じ番号で残って解説が先に出る
@@ -6521,7 +7012,7 @@ function doAnswer(userOx){
   var r=R(id),ev={closed:false,topicDone:false,severe:false};
   if(S.res.ok){
     if(closed(it.cat)&&!wasClosed&&!ST.closedSeen[it.cat]){
-      ev.closed=true;ST.closedSeen[it.cat]=today();saveST();
+      ev.closed=true;applyEvent(logEv('closed',{cat:it.cat,day:today()}),true);saveST();
       S.closedCat=it.cat;      /* 確定表示は完走リザルトの後に単独で出す（M5） */
     }
     ev.topicDone=(!doneBefore&&sibs.every(function(x){return att(R(x.id))>0}));
@@ -6576,15 +7067,14 @@ function advance(){
 
     /* 完走。間違いが残っていなくて動画を仕上げていたら「この動画は完了」を記録する */
     if(!S.wrongs.length&&S.roundVid){
-      var vp2=vpOf(S.roundVid);
-      if(videoStat(S.roundVid).done&&!vp2.completedAt)vp2.completedAt=today();
+      if(videoStat(S.roundVid).done&&!vpOf(S.roundVid).completedAt)
+        applyEvent(logEv('vdone',{vid:S.roundVid,day:today()}),true);
     }
     /* チェックの回を最後まで解き切った＝ホームから消す（本人指示 2026-08-18）。
        解き直したいときは、私が次の回を配信すれば別の dataAt で再び出る。 */
     if(S.checkAt){
-      if(!ST.checkDone)ST.checkDone={};
-      ST.checkDone[S.checkAt]=today();
-      S.checkAt='';saveST();
+      applyEvent(logEv('check',{key:S.checkAt,day:today()}),true);
+      S.checkAt='';saveST();try{syncSoon()}catch(e){}
     }
     closeRunClock();     /* dropRun で ST.run が消える前に、かかった時間を確定させる */
     dropRun();S.anim=null;M2.sfx('clear');render();return;
@@ -6752,6 +7242,28 @@ document.addEventListener('click',function(e){
   if(a==='fdif'){var d=t.getAttribute('data-d'),m=F.difs.indexOf(d);if(m<0)F.difs.push(d);else F.difs.splice(m,1);render();return}
   if(a==='ftog'){var kk=t.getAttribute('data-k');F[kk]=!F[kk];render();return}
   if(a==='fset'){var k2=t.getAttribute('data-k'),v2=+t.getAttribute('data-v');F[k2]=(F[k2]===v2)?(k2==='rateMax'?null:0):v2;render();return}
+  /* 記録の引き継ぎ（2026-08-29） */
+  if(a==='joinTheirs'){
+    /* この端末の記録は使わない＝控えを取ってから空にし、共有を取り込む */
+    try{if(!localStorage.getItem(BEFORE_KEY))localStorage.setItem(BEFORE_KEY,localStorage.getItem(LSK)||'')}catch(e){}
+    var kp=ST.settings;
+    ST=normST({});ST.settings=kp;
+    BASECAND=null;SYNC.hold=false;saveST();
+    /* 共有の世代に合わせる（次の同期で丸ごと取り込む） */
+    syncNow(false).then(function(){m6SheetClose(0,function(){render()})});
+    return;
+  }
+  if(a==='joinMine'){
+    if(!confirm('共有の記録を、この端末の記録で置き換えます。他の端末の分は消えます。よろしいですか。'))return;
+    /* ★混ぜてはいけない（2026-08-29 批評）。混ぜると相手の出来事が
+       この端末の土台の上に重なって**二重に数える**。共有を丸ごと置き換える。 */
+    ST.log=[];ST.logn=0;
+    makeBase(BASECAND||null);
+    BASECAND=null;SYNC.hold=false;saveST();
+    syncReplace().then(function(){m6SheetClose(0,function(){render()})});
+    return;
+  }
+  if(a==='syncnow'){syncNow(false);return}
   if(a==='fclear'){F.wrong=false;F.ngMin=0;F.recent=0;F.unseen=false;F.rateMax=null;F.difs=[];F.cats=[];F.topics=[];render();return}
   if(a==='togFilter'){S.openFilter=!S.openFilter;render();return}
   if(a==='togchaps'){S.openChaps=!S.openChaps;render();return}
@@ -6763,11 +7275,14 @@ document.addEventListener('click',function(e){
     var gw=t.getAttribute('data-w'),gq=GM&&GM.qs[GM.qi];
     if(!gq)return;
     if(!ST.greports)ST.greports={};
-    var gr=ST.greports[gq.id]||{tags:[]};
+    var gr=JSON.parse(JSON.stringify(ST.greports[gq.id]||{tags:[]}));
+    if(!gr.tags)gr.tags=[];
     var gi=gr.tags.indexOf(gw);
     if(gi>=0)gr.tags.splice(gi,1);else gr.tags.push(gw);
     gr.kind=GM.kind;gr.at=nowStamp();gr.ask=gq.ask||gq.id;
-    ST.greports[gq.id]=gr;saveST();
+    /* ★押しただけの分も出来事に残す（2026-08-29 検証）。
+       残さないと、送る前に相手の分が届いたときに押したタグが消える。 */
+    applyEvent(logEv('grep',{id:gq.id,r:gr}),true);saveST();try{syncSoon()}catch(e){}
     t.className='tog xs'+(gi>=0?'':' on');
     return;
   }
@@ -6814,7 +7329,7 @@ document.addEventListener('click',function(e){
      リンクの既定動作（新しいタブで開く）を止めないよう、描画は次のタスクに回す。 */
   if(a==='vwatch'){
     var wk=t.getAttribute('data-k');
-    if(wk&&!ST.watched[wk]){ST.watched[wk]=today();saveST()}
+    if(wk&&!ST.watched[wk]){applyEvent(logEv('watch',{key:wk,day:today()}),true);saveST();try{syncSoon()}catch(e){}}
     /* 視聴の実測を開始（アプリに戻ってきた時点との差を watchMs に積む） */
     if(wk)watchStart(String(wk).split('#')[0]);
     /* 一覧から「動画を見る」を押したときも、次の1本と「ここまでで解ける」を数え直す */
@@ -6905,7 +7420,7 @@ document.addEventListener('click',function(e){
     }
     S.repDraft=d2;
     if(!ST.reports)ST.reports={};
-    ST.reports[si]={tags:d2.tags.slice(),memo:d2.memo||'',at:nowStamp()};
+    applyEvent(logEv('rep',{id:si,tags:d2.tags.slice(),memo:d2.memo||'',at:nowStamp()}),true);
     if(S.ansSnap&&S.ansSnap.id===si)undoAns(S.ansSnap);else saveST();
     S.ansSnap=null;S.repDraft=null;
     if(S.ansLog)delete S.ansLog[S.qi];        /* 戻ったときに解説を出さない＝未解答に戻す */
@@ -7103,7 +7618,7 @@ delete ST.settings.txFont;delete ST.settings.txSize;
     if(!S.wrongs.length)return;
     S.kind='review';                                 /* 間違い直しの時間は「復習」に積む */
     S.round=(S.round||0)+1;
-    if(S.roundVid){var vp=vpOf(S.roundVid);vp.round=S.round;saveST()}
+    if(S.roundVid){applyEvent(logEv('vround',{vid:S.roundVid,round:S.round}),true);saveST()}
     /* 第6引数 keepRound=true ＝ startQueue で周回数を0に戻さない（周回を続ける唯一の呼び出し） */
     startQueue(S.wrongs.map(function(i){return BY[i]}).filter(Boolean),'間違い直し '+S.round+'周目',false,S.baseVid,false,true);
     return;
@@ -7174,7 +7689,8 @@ delete ST.settings.txFont;delete ST.settings.txSize;
     if(!confirm('現在の進行状況を上書きします。よろしいですか。'))return;
     var keepgh=ST.settings&&ST.settings.gh;    /* 接続の設定は残す（ghPull と同じ扱い） */
     ST=normST(o);if(keepgh)ST.settings.gh=keepgh;
-    saveST();msg('読み込みました（'+Object.keys(ST.items).length+'問）。');render();return;
+    saveST();
+    try{ BASECAND=baseSt();SYNC.hold=false;bootSync() }catch(e){}   /* 2つ目の土台を防ぐ */msg('読み込みました（'+Object.keys(ST.items).length+'問）。');render();return;
   }
   if(a==='wipe'){
     if(!confirm('進行状況（takken_v1）を全消去します。取り消せません。'))return;
@@ -8023,9 +8539,16 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
    戻ってきた時刻の差を積む。他のアプリを触っていた時間が混ざり得るため、その動画の尺の
    1.5倍で切り捨て、10秒未満は積まない（watchEnd に同じ注記あり）。 */
 document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState!=='visible')return;
+  if(document.visibilityState!=='visible'){
+    /* ★離れる瞬間に同期する（2026-08-29）。iPhone はアプリを切り替えると止まるので、
+       ここで上げておかないと、そのまま終了されたときに未同期の分が残る。 */
+    try{ if(SYNC.timer){clearTimeout(SYNC.timer);SYNC.timer=0} syncNow(true) }catch(e){}
+    return;
+  }
   var ms=watchEnd();
   if(ms&&S.view==='study')render();
+  /* 戻ってきたときも取り込む（別の端末で解いた分が入る） */
+  try{ syncNow(true) }catch(e){}
 });
 
 /* =========================================================================
