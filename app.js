@@ -5519,7 +5519,9 @@ function kkCount(sec){
    ここは**公開しない**素材なので、殻（pwa）には入れず問題データ側で配る。 */
 /* 3秒前の音は「気づくが邪魔しない」程度に（2026-08-23 本人「うるさすぎる」）。 */
 /* 3秒前の音は「チリン」（2026-08-23 本人指摘で2度目の差し替え）。控えめに0.22。 */
-var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55,dec:0.42,cancel:0.22,move:0.34};   /* 押したときの音（2026-08-24 本人が選んだ3つ） */
+var SEV={tick:0.28,tick_hi:0.22,ok:0.55,ng:0.50,clear:0.55,dec:0.42,
+         cancel:0.11,   /* 閉じる・やめる。0.22→0.11 に半分（2026-08-29 本人指示） */
+         move:0.34};   /* 押したときの音（2026-08-24 本人が選んだ3つ） */
 /* 効果音を直接鳴らす（カウントダウンの小さい音だけ。声と同時には鳴らないので行列に入れない）。
    線つなぎの正誤の音もここを使う（あちらは声が無い）。 */
 function se(name){
@@ -7205,17 +7207,7 @@ document.addEventListener('click',function(e){
      鳴っていなければ、走っている自動送りを止める（×と同じ）。 */
   if(!t&&S.view==='quiz'&&e.target&&e.target.closest){
     var inCtl=e.target.closest('button,a,input,select,textarea,label,.sheet,#modal,#tabs');
-    if(!inCtl){
-      if(AQ.paused){aResume();msg('読み上げを再開しました');return}
-      if(AQ.cur||AQ.list.length){aPause();msg('読み上げを止めました（もう一度タップで再開）');return}
-      /* 自動送り＝走っていれば止める／止めていれば再開する（2026-08-24 本人の要望） */
-      var qid=S.queue[S.qi];
-      if(nextFreeze()){msg('自動で次へを止めました（もう一度タップで再開）');return}
-      if(nextResume()){msg('自動で次へを再開しました');return}
-      if(qid&&NXSTOP[qid]&&kvSet().auto&&S.phase==='exp'){
-        delete NXSTOP[qid];NXID=null;nextGauge();msg('自動で次へを再開しました');return;
-      }
-    }
+    if(!inCtl){ if(togglePause())return }
   }
   if(!t)return;
   /* リザルトの上のボタンは、閉じてから既存処理へ流す */
@@ -7811,6 +7803,40 @@ delete ST.settings.txFont;delete ST.settings.txSize;
     ST=normST({});S.queue=[];S.qi=0;try{localStorage.removeItem(LSK)}catch(err){}
     msg('消去しました。');render();return;
   }
+});
+
+/* 読み上げ／自動送りを止める・再開する（2026-08-24 本人の要望）。
+   ★画面のタップと**スペースキー**の両方から、この同じ関数を呼ぶ（2026-08-29 本人指示）。
+     同じ処理を2か所に書くと必ず片方だけ直してずれる。
+   戻り＝何かしたら true。 */
+function togglePause(){
+  if(S.view!=='quiz')return false;
+  if(AQ.paused){aResume();msg('読み上げを再開しました');return true}
+  if(AQ.cur||AQ.list.length){aPause();msg('読み上げを止めました（もう一度で再開）');return true}
+  /* 自動送り＝走っていれば止める／止めていれば再開する */
+  var qid=S.queue[S.qi];
+  if(nextFreeze()){msg('自動で次へを止めました（もう一度で再開）');return true}
+  if(nextResume()){msg('自動で次へを再開しました');return true}
+  if(qid&&NXSTOP[qid]&&kvSet().auto&&S.phase==='exp'){
+    delete NXSTOP[qid];NXID=null;nextGauge();msg('自動で次へを再開しました');return true;
+  }
+  return false;
+}
+/* スペースキー＝画面のタップと同じ（2026-08-29 本人指示。PCで使うため）。
+   文字を打っている所・ボタンの上では邪魔しない（スペースでボタンを押す動きを壊さない）。 */
+document.addEventListener('keydown',function(e){
+  if(e.key!==' '&&e.code!=='Space')return;
+  if(e.repeat)return;
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  var a=document.activeElement;
+  if(a){
+    var tag=(a.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea'||tag==='select'||a.isContentEditable)return;
+    if(tag==='button'||tag==='a')return;      /* ボタンの上＝そのボタンを押す動きを残す */
+  }
+  var m=document.getElementById('modal');
+  if(m&&!m.hidden)return;                     /* シートが開いている間は触らない */
+  if(togglePause())e.preventDefault();        /* 画面が下へ動くのを止める */
 });
 
 /* ---------- 問題カードの傾き（M3。スワイプは廃止） ----------
