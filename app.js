@@ -201,9 +201,26 @@ function svg(p,w){return '<svg class="ico" viewBox="0 0 24 24" fill="none" strok
 /* 塗りのアイコン（プレイヤーの三角など）。線のアイコンは svg()。 */
 function svg2(d){return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+d+'</svg>'}
 /* 配色は9つ。1が既定（桜鼠）。骨格は共通で、CSS変数だけを差し替える。 */
+/* 配色の見本（丸い絵）に出す色＝[地, 印, 帯, 枠線]。
+   ★見本は :root ではないので data-theme が効かない。10個とも同じ色に見えていた
+     （2026-08-29 実測。前からある不具合）。ここから直接当てる。 */
+var THCOL={'1':['#f6f2ec','#c98b9b','#f2e4e7','#e8e0d8'],
+           '2':['#f6fbf8','#5cc5a0','#dff3ea','#dfeae5'],
+           '3':['#f9f7fd','#a58ae0','#eae4fa','#e5e0f0'],
+           '4':['#fdf6f0','#f2a07a','#fbe4d5','#eee0d5'],
+           '5':['#f5fafd','#68b8e8','#dceffa','#dde8ee'],
+           '6':['#fbf9fb','#7bb8ea','#e5f0fb','#e6e2ea'],
+           '7':['#faf6f1','#c9a074','#f2e6d8','#eae0d2'],
+           '8':['#ffffff','#e08fae','#fbe7ef','#eee6ea'],
+           '9':['#f7f2ea','#b8a58c','#efe6d8','#e6ddcd'],
+           'd':['#171a1c','#d6a3b0','#3a2d33','#333a3e']};
 var THEMES=[['1','桜鼠'],['2','ミント'],['3','藤'],['4','桃'],['5','水'],
-            ['6','桃と水'],['7','ミルクティー'],['8','白と桃'],['9','生成り']];
-function themeNow(){var t=ST&&ST.settings&&ST.settings.theme;return (t&&/^[1-9]$/.test(t))?t:'1'}
+            ['6','桃と水'],['7','ミルクティー'],['8','白と桃'],['9','生成り'],
+            /* 暗い配色（2026-08-29 本人指示）。端末ごとの設定なので、
+               スマホは明るいまま／PCだけ暗く、が選べる。 */
+            ['d','夜']];
+function themeNow(){var t=ST&&ST.settings&&ST.settings.theme;return (t&&/^([1-9]|d)$/.test(t))?t:'1'}
+function isDark(){return themeNow()==='d'}
 /* 本文の見た目を当てる（設定の値→CSS変数）。触っていない項目は既定のまま。 */
 var TXD={txFont:'mincho',txSize:15.5,txLh:1.95,txLs:0,txPad:14};
 /* 帯の色と濃さ（2026-08-25 本人指定）。表の値は**濃さ1.0のときの色**。
@@ -222,11 +239,14 @@ function rdAlpha(){
   if(!(v>0))v=RDA;
   return Math.min(1,Math.max(0.15,v));
 }
-/* 白と混ぜる（k=1で表の色そのまま、k=0で白） */
+/* 地と混ぜる（k=1で表の色そのまま、k=0で地の色）。
+   ★暗い配色では**地が暗い**ので、白と混ぜると帯だけ眩しくて文字が読めない
+     （2026-08-29）。混ぜる相手を地の色にする。 */
 function rdMix(hex,k){
   var n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;
-  function m(c){return Math.round(255+(c-255)*k)}
-  return 'rgb('+m(r)+','+m(g)+','+m(b)+')';
+  var base=isDark()?[23,26,28]:[255,255,255];
+  function m(c,i){return Math.round(base[i]+(c-base[i])*k)}
+  return 'rgb('+m(r,0)+','+m(g,1)+','+m(b,2)+')';
 }
 function rdColor(){return rdMix(rdBase(),rdAlpha())}
 function applyRdColor(){
@@ -1253,7 +1273,7 @@ function normST(o){
      ／persist＝navigator.storage.persist() の結果（記録用・null＝未対応か未応答） */
   if(typeof o.settings.lastExport!=='string')o.settings.lastExport=null;
   if(typeof o.settings.a2hs!=='boolean')o.settings.a2hs=false;
-  if(!/^[1-9]$/.test(o.settings.theme||''))o.settings.theme='1';   /* 配色（既定＝1 桜鼠） */
+  if(!/^([1-9]|d)$/.test(o.settings.theme||''))o.settings.theme='1';   /* 配色（既定＝1 桜鼠） */
   if(!o.settings.gh||typeof o.settings.gh!=='object')o.settings.gh={};   /* GitHubバックアップの設定 */
   if(o.settings.persist!==true&&o.settings.persist!==false)o.settings.persist=null;
   /* 動画ごとの進捗（完了の単位＝動画1本）。
@@ -6546,9 +6566,13 @@ function dataSheet(){
    +'<div class="hr"></div>'
    /* 配色は9つ。骨格（配置・余白・丸み・動き）は変わらず、色だけが入れ替わる。 */
    +'<div class="mini" style="margin-bottom:6px">配色</div><div class="throw">'
-   +THEMES.map(function(t,i){var k=String(i+1);
+   +THEMES.map(function(t){
+     var k=t[0];                       /* ★並び順ではなく**配色の印**を使う（2026-08-29）。
+                                          i+1 にしていたので「夜」が '10' になり選べなかった。 */
+     var c=THCOL[k]||THCOL['1'];
      return '<button class="thbtn'+(themeNow()===k?' on':'')+'" data-act="theme" data-v="'+k+'"'
-       +' aria-label="'+t[1]+'"><span class="thsw" data-theme="'+k+'"><i></i><b></b></span>'
+       +' aria-label="'+t[1]+'"><span class="thsw" style="background:'+c[0]+';border-color:'+c[3]+'">'
+       +'<i style="background:'+c[1]+'"></i><b style="background:'+c[2]+'"></b></span>'
        +'<span class="thnm">'+t[1]+'</span></button>';}).join('')
    +'</div>'
    +'<div class="hr"></div>'
@@ -7583,8 +7607,14 @@ delete ST.settings.txFont;delete ST.settings.txSize;
     delete ST.settings.txLh;delete ST.settings.txLs;delete ST.settings.txPad;
     saveST();applyText();
     if(t.getAttribute('data-back')==='tx')txSheet();else dataSheet();return}
-  if(a==='theme'){var tv=t.getAttribute('data-v');if(/^[1-9]$/.test(tv)){ST.settings.theme=tv;saveST();
-    applyTheme();dataSheet();}return}
+  if(a==='theme'){
+    /* ★一覧にある印だけを通す（2026-08-29）。前は /^[1-9]$/ で書いていたので
+       「夜」（印は d）が弾かれ、押しても切り替わらなかった。 */
+    var tv=t.getAttribute('data-v');
+    var okth=false;for(var ti=0;ti<THEMES.length;ti++)if(THEMES[ti][0]===tv)okth=true;
+    if(okth){ST.settings.theme=tv;saveST();applyTheme();applyRdColor();dataSheet()}
+    return;
+  }
   if(a==='srcf'){var sv=t.getAttribute('data-v');S.srcF=sv||null;render();return}
   /* 分析の「動画」ボタン＝その大分類の動画の一覧へ。単元側を開いていると行き先が無いので
      このときだけ動画側に切り替える。記録（settings.fmode）は書き換えない

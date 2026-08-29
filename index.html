@@ -107,6 +107,48 @@
 :root[data-theme="9"]{--bg:#f7f2ea;--panel:#fffaf3;--fg:#4a3b31;--muted:#8e7c6c;--acc:#f5b183;--accd:#b9713f;
   --chipbg:#f7e3d5;--chipfg:#b9713f;--line:#eadfd0;--soft:#f6ece0;--petal:#f8dcc9;--core:#f0a8ab;
   --tint:radial-gradient(320px 200px at 100% -8%,#fbeadb,transparent 62%);--h1:#fbe8d8;--h2:#f3c9a3;--h3:#f5b183}
+
+/* ---- 配色 d（暗い。2026-08-29 本人指示「B」） ----
+   PCで長く読むとき用。**端末ごとの設定**なので、スマホは明るいままにできる。
+   Chromeの自動ダークに任せると、帯・正誤・チップの色の意味が壊れる（実測）ので、
+   こちらで全部決める。文字は #e8e3da（地 #171a1c に対して 12.6:1）。 */
+:root[data-theme="d"]{
+  color-scheme:only dark;
+  --bg:#171a1c; --panel:#212528; --fg:#e8e3da; --muted:#9aa0a4;
+  --acc:#d6a3b0; --accd:#e6bcc7; --ng:#e08b83; --ngdeep:#f0a8a0;
+  --line:#333a3e;
+  --chipbg:#3a2d33; --chipfg:#e6bcc7;
+  --tint:radial-gradient(320px 200px at 100% -8%,#2b2226,transparent 62%);
+  --petal:#7a5a63; --core:#d6a3b0;
+  --soft:#282d31;
+  --gold:#d8bd84;
+  --h1:#2b2226; --h2:#5c464e; --h3:#d6a3b0;
+}
+/* 和紙の地は「掛け算」で重ねているので、暗い地だと真っ黒に潰れる。
+   暗い配色では「覆い焼き」に変えて、うっすら見える程度にする。 */
+:root[data-theme="d"] html,html[data-theme="d"]{
+  background-blend-mode:screen;
+}
+/* 暗い配色のとき、**配色の変数を使わず直接書いてある明るい色**を上書きする。
+   実測で見つけた壊れ（2026-08-29）：
+   ・背景の大きな層（.m3-bg）が明るいままで画面全体が白っぽくなり、答えのボタンが読めない
+   ・白（#fff）で置いている文字・つまみ・枠が、暗い地から浮く */
+:root[data-theme="d"] .m3-bg{
+  background:radial-gradient(120% 70% at 22% 8%,#22262a 0,rgba(0,0,0,0) 58%),
+             linear-gradient(180deg,#1d2124 0,var(--bg) 46%,#1b1f22 100%);
+}
+:root[data-theme="d"] .m3-bg b{opacity:.10}
+/* 答えのボタン＝地が濃い色なので、文字は白のままでよい。枠だけ合わせる。 */
+:root[data-theme="d"] .ans .b{color:#14171a}
+:root[data-theme="d"] .tog.on{border-color:var(--accd)}
+:root[data-theme="d"] .next{border-color:var(--line)}
+:root[data-theme="d"] .cb{border-color:var(--line)}
+:root[data-theme="d"] .warn{background:#2e2220;border-color:#5a3a35;color:#f0a89e}
+:root[data-theme="d"] .vrow .fill{background:#243029}
+:root[data-theme="d"] .rbtns button.pri{border-color:var(--line)}
+:root[data-theme="d"] .cell.s3 .cn{color:#1b1f22}
+/* 起動の骨組み（skeleton）も暗い側に */
+:root[data-theme="d"] #m6boot{background:var(--bg)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 /* 横スクロールを作らないための保険（実際の原因は .qwrap 側で切っている）。
@@ -1381,6 +1423,23 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 .dlv b{font-weight:600}
 .dlv-t{margin-left:auto;color:var(--muted);font-size:11px}
 
+/* ============================================================
+   暗い配色（d）の最終上書き（2026-08-29）
+   ★CSSは後に書いた方が勝つ。前の方に置いた上書きが、後ろの固定色に
+     負けていた（実測：答えのボタンが明るいままだった）。ここが最後尾。
+   ============================================================ */
+:root[data-theme="d"] .qwrap .ans .b{
+  background:#22322a;color:#8fd3ae;border-color:#2f4a3c}
+:root[data-theme="d"] .qwrap .ans .b.x{
+  background:#33231f;color:#e69a90;border-color:#4a302b}
+:root[data-theme="d"] .dlv-b{color:#14171a}
+:root[data-theme="d"] .btn.pri{color:#14171a}
+:root[data-theme="d"] .btn.acc{color:#14171a}
+:root[data-theme="d"] .next .bt .p{color:#14171a}
+:root[data-theme="d"] .cell.s3{color:#14171a}
+:root[data-theme="d"] .sw i{background:#e8e3da}
+:root[data-theme="d"] .ans .b>i{color:inherit}
+
 /* データ読み込み画面（初回だけ） */
 #importer{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;
           align-items:center;justify-content:center;padding:24px}
@@ -1579,7 +1638,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2bff826e';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='1e0700b7';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
