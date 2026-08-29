@@ -1486,6 +1486,9 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     d.innerHTML=h;
     var f=function(){
       var v=document.getElementById('view');
+      /* ★本物がもう描かれていたら控えは要らない（2026-08-29）。
+         ここで差し込むと、外す処理が先に済んでいた回に消し残る。 */
+      if(v&&v.children&&v.children.length)return;
       if(v&&v.parentNode)v.parentNode.insertBefore(d,v);
       else document.body.appendChild(d);
     };
@@ -1638,7 +1641,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='bb1ebeb4';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='7c83d344';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

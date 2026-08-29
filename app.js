@@ -1117,8 +1117,11 @@ function replay(log){
     evs.push(L[i]);
   }
   /* 端末ごとのものを控える */
+  /* ★gen（共有の世代）を持ち越す。落とすと毎回0に戻り、共有の世代が1以上のとき
+     **同期のたびに「相手が新しい」と誤判定して乗り換え、この端末で解いた分を毎回捨てる**
+     （2026-08-29 本人報告「20問やったのに数が減らない」の根本原因）。 */
   var keep={settings:ST.settings,run:ST.run,wpend:ST.wpend,lastChap:ST.lastChap,
-             mockRun:ST.mockRun,logn:ST.logn};   /* 途中の模試も端末ごと（2026-08-29 批評） */
+             mockRun:ST.mockRun,logn:ST.logn,gen:ST.gen};   /* 途中の模試も端末ごと（2026-08-29 批評） */
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
   Object.keys(ST.items||{}).forEach(function(k){
@@ -1134,6 +1137,7 @@ function replay(log){
   ST.run=keep.run||null;ST.wpend=keep.wpend||null;ST.lastChap=keep.lastChap||null;
   ST.mockRun=keep.mockRun||null;
   ST.logn=keep.logn||0;
+  ST.gen=keep.gen||0;
   ST.log=L;
   /* ★土台から作り直した記録は state / box / due を持っていない（軽くしたため）。
      出来事が当たらない問題のぶんもここで作り直す（2026-08-29）。 */
@@ -6756,18 +6760,29 @@ function syncOnce(){
     if(!R){SYNC.err='読めませんでした（上げていません）';return false}
     /* ★自分より新しい世代＝相手が「この端末の記録を使う」で置き換えた。
        混ぜずに丸ごと乗り換える（混ぜると捨てたはずの記録が戻る。2026-08-29 検証）。 */
+    var merged;
     if((R.gen||0)>(ST.gen||0)){
+      /* ★乗り換えるが、相手の土台より**後に**この端末で作った出来事は捨てない。
+         畳み直し・置き換えは、その時点までの分をすべて土台に畳んである。だから
+         その時刻より後の分だけを足せば、二重に数えることも消えることもない。
+         （2026-08-29：ここで捨てていたため、解いた記録が毎回消えていた） */
+      var bt=0,bi,Eb,rk0={};
+      for(bi=0;bi<R.log.length;bi++){Eb=R.log[bi];
+        if(Eb&&Eb.e==='base'&&(+Eb.t||0)>bt)bt=(+Eb.t||0);
+        rk0[evk(R.log[bi])]=1;}
+      var mine=(ST.log||[]).filter(function(e){
+        return e&&typeof e==='object'&&e.e!=='base'&&(+e.t||0)>bt&&!rk0[evk(e)];
+      });
+      merged=mine.length?logMerge(R.log,mine):R.log;
       ST.gen=(R.gen||0);
-      replay(R.log);
-      saveST();
-      SYNC.err='';SYNC.at=nowStamp();SYNC.n=(ST.log||[]).length;
-      return true;
+    }else{
+      merged=logMerge(ST.log,R.log);
     }
-    var merged=logMerge(ST.log,R.log);
     /* ★混ぜたら**必ず**数え直す（2026-08-29 検証）。
        「相手から増えたときだけ」にしていたので、時計のずれた出来事が入ったあとに
        自分で解くと、画面の値と数え直しの値が食い違った。 */
     replay(merged);
+    ST.gen=Math.max(ST.gen||0,R.gen||0);   /* 二重に守る（数え直しでも落とさない） */
     saveST();
     /* ★相手と同じなら書かない。件数ではなく**鍵の集合**で見る（2026-08-29 批評）。
        件数だけだと、共有側に同じ鍵が重なっていたときに「同じ」と誤って判定し、
@@ -9356,11 +9371,14 @@ function bootFx(){
   setTimeout(bye,2300);                        /* どの案も2.2秒以内に終わる */
 }
 function m6BootSwap(){
-  if(!M6BOOT)return; M6BOOT=false;
-  /* 前回のホームの控えを外す（2026-08-25）。本物が描かれたので要らない。
-     見た目が同じなので、そのまま消せば切り替わりは見えない。 */
+  /* ★前回のホームの控えは**描画のたびに**外す（2026-08-29 本人報告の根本）。
+     M6BOOT の中に置いていたため、控えの差し込みが最初の描画より**後**になった回に
+     消し残り、前回の数字が本物のホームの上に貼り付いたままになっていた。
+     触ると下の本物が反応するので、解けるのに数字だけ古い＝
+     「復習を20問やっても20問のまま」「間違えた問題が減らない」に見えていた。 */
   var pv=document.getElementById('m6prev');
   if(pv&&pv.parentNode)pv.parentNode.removeChild(pv);
+  if(!M6BOOT)return; M6BOOT=false;
   var b=document.getElementById('m6boot'),v=document.getElementById('view');
   if(!b){return}
   var sk=b.querySelectorAll('.m6-skel'),i;
