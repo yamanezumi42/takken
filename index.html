@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f6f2ec">
+<meta name="color-scheme" content="only light">
 <link rel="apple-touch-startup-image" href="splash/1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
 <link rel="apple-touch-startup-image" href="splash/1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
 <link rel="apple-touch-startup-image" href="splash/1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
@@ -26,6 +27,10 @@
 <title>宅建 一問一答</title>
 <style>
 :root{
+  /* ★このページは**明るい配色だけ**（2026-08-29 本人報告「PCがわ背景の色変」）。
+     宣言しないと、PCのブラウザが自動で暗く変換してしまう（スマホでは起きない）。
+     9つの配色は手で作った明るいものなので、勝手に反転されては困る。 */
+  color-scheme: only light;
   /* ============ 配色（2026-08-14 確定：既定は 1 桜鼠＝G1／設定で 1〜9 を切替） ============
      骨格（配置・余白・丸み・動き）と配色を分けてある。切り替えるのはこの9個だけ。
      文字色は9案すべて濃色のまま＝宅建の長文を読むため（実測 contrast は 8.6:1 以上）。 */
@@ -1574,7 +1579,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='166d464f';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2bff826e';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
