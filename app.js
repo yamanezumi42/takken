@@ -2550,6 +2550,32 @@ var PLAN2={newEnd:'2026-09-18',oneEnd:'2026-09-18',allStart:'2026-10-05',allEnd:
    ・日が経った順にするのは、直近に解いた問ばかり出ると測っている意味が無いから
      （実測＝最終解答日が中央値1日前の範囲で95%、文が変わると60%）
    ・新規の期間（〜9/18）だけ出す。総復習の期間は総復習そのものが思い出しになる */
+/* ---------- 担保物権だけを解く（2026-08-29 本人指示） ----------
+   > 「権利関係の担保物権に関する問題だけチョイスして特別にやりたい。ホーム画面において欲しい」
+   小分類「担保物権（抵当権など）」132問を土台に、**本文を全数読んで**足し引きした145問。
+   ・足す14問＝分類が付け違っているだけで、問うているのは担保物権そのもの
+     （物上代位7問／物上代位と敷金／396条の消滅時効／質権の設定／先取特権2問／留置権／抵当権の目的）
+   ・外す1問＝b1_6-001-4 は相殺の問題で担保物権ではない（分類の付け違い）
+   ・入れなかった境目（本人に示して確認済み）＝抵当権が出てくる売買の契約不適合・解除、
+     弁済による代位・共同保証、後順位抵当権者の時効援用、859条の3、94条2項、177条、登記手続。
+   ★data/items.js の分類は書き換えない（正本を触らずに、この一覧だけで括る）。 */
+var TANPO_CAT='担保物権（抵当権など）';
+var TANPO_ADD=['b1_4-015-2','b1_7-012-4','b1_7-018-1','b1_7-018-2','b1_7-018-3','b1_7-018-4',
+               'b1_7-021-2','b1_7-021-3','b1_7-023-4','b1_9-001-3','b1_9-004-3','b1_9-006-1',
+               'b1_9-016-2','b1_9-017-4'];
+var TANPO_DROP={'b1_6-001-4':1};
+var TANPOL=null;
+function tanpoItems(){
+  if(TANPOL)return TANPOL;
+  var pick={},i;
+  for(i=0;i<TANPO_ADD.length;i++)if(BY[TANPO_ADD[i]])pick[TANPO_ADD[i]]=1;
+  /* 並びは ITEMS の順のまま＝出題の順が他の画面と食い違わない */
+  TANPOL=ITEMS.filter(function(it){
+    if(TANPO_DROP[it.id])return false;
+    return it.cat===TANPO_CAT||pick[it.id];
+  });
+  return TANPOL;
+}
 var RECALL_N=20;
 function recallPool(){
   var w={},out=[];
@@ -3200,6 +3226,12 @@ function flowHtml(){
                        st:(od?'今日は済':(oN+'問')),done:!!od});
     }
   }
+  /* ⑤担保物権だけ（特別枠・2026-08-29 本人指示）。今日の流れの最後に置く。 */
+  var tp=tanpoItems(),tpr=tp.filter(function(it){return att(R(it.id))===0}).length;
+  rows.push({act:'startTanpo',lab:'担保物権だけ（特別）',
+             st:(tpr?(n3(tpr)+'問 / '+n3(tp.length)+'問'):('解き直す　'+n3(tp.length)+'問')),
+             done:!tpr});
+
   /* 濃くするのは「済んでいない最初の1行」だけ。 */
   var nowAt=-1,k;
   for(k=0;k<rows.length;k++)if(!rows[k].done&&!rows[k].yet){nowAt=k;break}
@@ -7522,6 +7554,16 @@ document.addEventListener('click',function(e){
     if(!recallQueue().length){msg('復習に出せる問がありません');return}
     S.round=0;S.kind='recall';
     startQueue(recallQueue(),'復習',false,null);
+    return;
+  }
+  /* 担保物権だけ（2026-08-29 本人指示）。未着手が残っていればそこだけ、
+     全部解き終えていたら145問を最初から解き直す（restOnly の決まりと同じ）。 */
+  if(a==='startTanpo'){
+    var tall=tanpoItems(),tl=restOnly(tall);
+    if(!tl.length){msg('出せる問題がありません');return}
+    S.round=0;S.pickExplicit=true;S.keepOrder=true;
+    S.kind=(tl.length<tall.length||tl[0]&&att(R(tl[0].id))===0)?'new':'review';
+    startQueue(restOnly(tanpoItems()),'担保物権',false,null);
     return;
   }
   if(a==='mkrev'){S.mockRev=+(t.getAttribute('data-i')||0);render();return}
