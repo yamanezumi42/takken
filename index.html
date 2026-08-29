@@ -1382,11 +1382,17 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 #importer .impbox{max-width:340px;width:100%}
 #importer .imptitle{font-size:17px;font-weight:600;margin-bottom:10px}
 #importer .impnote{font-size:13px;line-height:1.9;color:var(--muted);margin:0 0 18px}
+/* ★[hidden] を必ず隠す（2026-08-29 実機で判明）。
+   .impbtn{display:block} が hidden を打ち消し、押しても何も起きないボタンが見えていた。 */
+#importer [hidden]{display:none !important}
 #importer .impbtn{display:block;text-align:center;background:var(--fg);color:#fff;
                   border-radius:var(--btnradius);padding:14px 0;font-size:14px;font-weight:500}
 #importer .impbtn+.impbtn,#importer .impbtn+.impsub{margin-top:8px}
 #importer .impsub{background:transparent;color:var(--fg);border:1px solid var(--line)}
 #importer button.impbtn{width:100%;border:0;font-family:inherit}
+#importer input[type=text],#importer input[type=password],#importer #impRepo{
+  width:100%;box-sizing:border-box;margin-top:8px;min-height:40px;border-radius:10px;
+  border:1px solid var(--line,#ddd);padding:0 10px;font-family:inherit;font-size:14px}
 #importer button.impbtn:disabled{opacity:.45}
 #importer .impstat{font-size:12px;color:var(--muted);margin-top:12px;min-height:18px;text-align:center}
 
@@ -1547,6 +1553,16 @@ body{overflow-x:clip;overscroll-behavior-x:none}
       一度読み込めば、次からは自動で開きます。
     </p>
     <button class="impbtn" id="impgh" hidden>GitHubから取り込む</button>
+    <div id="impgh2" hidden>
+      <div class="impnote" style="margin-top:10px">
+        スマホと同じ非公開リポジトリから取り込めます。<br>
+        <b>owner/repo</b> と <b>アクセストークン</b>を入れてください。
+      </div>
+      <input id="impRepo" placeholder="owner/repo（例 yamanezumi42/takken-records）"
+             autocomplete="off" spellcheck="false">
+      <input id="impTok" type="password" placeholder="アクセストークン" autocomplete="off">
+      <button class="impbtn" id="impSave">保存して取り込む</button>
+    </div>
     <label class="impbtn impsub" for="impfile">ファイルを選ぶ</label>
     <input id="impfile" type="file" accept="application/json,.json" hidden>
     <div class="impstat" id="impstat"></div>
@@ -1558,7 +1574,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b94fe3c1';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='166d464f';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -2017,18 +2033,50 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     var b=$('m6boot'); if(b)b.style.display='none';
     if(msg)$('impstat').textContent=msg;
     /* トークンがあるときだけ「GitHubから取り込む」を出す */
-    var gb=$('impgh'),c=ghConf();
+    var gb=$('impgh'),c={};
+    try{c=ghConf()||{}}catch(e){errSave('ghConf:'+e)}
+    try{
+    function ghGo(btn){
+      btn.disabled=true;
+      ghSync(function(t){$('impstat').textContent=t})
+        .then(function(){$('impstat').textContent='取り込みました。開き直します。';
+                         setTimeout(function(){location.reload()},400)})
+        .catch(function(err){btn.disabled=false;
+               var t=errText(err,'取り込み');errSave(t);
+               $('impstat').textContent=t});
+    }
     if(gb&&c.token&&c.repo){
       gb.hidden=false;
-      gb.onclick=function(){
-        gb.disabled=true;
-        ghSync(function(t){$('impstat').textContent=t})
-          .then(function(){$('impstat').textContent='取り込みました。開き直します。';
-                           setTimeout(function(){location.reload()},400)})
-          .catch(function(err){gb.disabled=false;
-                 var t=errText(err,'取り込み');errSave(t);
-                 $('impstat').textContent=t});
-      };
+      gb.onclick=function(){ghGo(gb)};
+    }else{
+      /* ★トークンがまだ無い端末（PCなど）。以前はボタンが押せるのに何も起きなかった
+         （2026-08-29 実機で判明）。ここで入れられるようにする。 */
+      var box=$('impgh2');
+      if(box){
+        box.hidden=false;
+        var sv=$('impSave'),rp=$('impRepo'),tk=$('impTok');
+        if(c.repo&&rp)rp.value=c.repo;
+        sv.onclick=function(){
+          var repo=(rp.value||'').trim(),tok=(tk.value||'').trim();
+          if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){
+            $('impstat').textContent='リポジトリは owner/repo の形で入れてください';return;
+          }
+          if(!tok){$('impstat').textContent='アクセストークンを入れてください';return}
+          try{
+            var o=JSON.parse(localStorage.getItem('takken_v1')||'{}');
+            if(!o.settings||typeof o.settings!=='object')o.settings={};
+            o.settings.gh=o.settings.gh||{};
+            o.settings.gh.repo=repo;o.settings.gh.token=tok;
+            localStorage.setItem('takken_v1',JSON.stringify(o));
+          }catch(e){$('impstat').textContent='この端末に保存できません';return}
+          $('impstat').textContent='取り込んでいます…';
+          ghGo(sv);
+        };
+      }
+    }
+    }catch(eImp){
+      /* 組み立てで転んでも黙らない（2026-08-29）。理由を画面と記録に出す。 */
+      try{errSave('取り込み画面:'+eImp);$('impstat').textContent='取り込みの用意でつまずきました：'+eImp}catch(e2){}
     }
     $('impfile').onchange=function(e){
       var f=e.target.files&&e.target.files[0]; if(!f)return;
