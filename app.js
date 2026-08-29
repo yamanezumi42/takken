@@ -4125,16 +4125,7 @@ function vQuiz(){
      見出しの章名は単元名に隠していたが、その下のリンクのラベルが章名のままで、
      そこに答えが書いてあった（例「公告せずに取戻し（例外）」）。
      答えた後（S.phase!==q）に出す＝学習の導線は失わない。 */
-  var showLinks=(S.view==='quiz'&&S.phase==='q')?[]:chs.slice(0,1);
-  showLinks.forEach(function(ch){
-    h+='<a class="link'+ac()+'" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
-      +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'"'+ad(4)+'>'+IC.yt
-      +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+'</span>'
-      +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
-  });
-  if(chs.length>1&&!(S.view==='quiz'&&S.phase==='q'))
-    h+='<button class="btn sm" style="min-height:26px;padding:0 8px;align-self:flex-start" data-act="togsrc">＋'
-      +(chs.length-1)+'</button>';
+  h+=vidLinksHtml(chs,ac(),ad(4));
   /* 何問目はヘッダー（A2の行）へ移した。ここには置かない＝引き算の原則 */
   /* 未習で出さなかった件数は黙って消さずに小さく出す（設定「未習の範囲も出す」で外せる） */
   if(S.lockedOut)h+='<div class="mini'+ac()+'"'+ad(4)+' id="qlock">未習 '+n3(S.lockedOut)+'問は出していません</div>';
@@ -4281,6 +4272,24 @@ function dotsHtml(it){
   for(var i=0;i<3;i++)s+='<i'+(i<n?' class="on"':'')+'></i>';
   return '<span class="dots" title="難易度 '+esc(g)+'" aria-label="難易度 '+esc(g)+'">'+s+'</span>';
 }
+/* 動画リンクの行（答えた後だけ出す）。
+   ★1か所にまとめる（2026-08-29）。作り直しの経路にしか無かったので、
+     あとから作り直された瞬間に上へ足され、読んでいた解説が下へ飛んだ（実測624px）。 */
+function vidLinksHtml(chs,cl,a4){
+  if(S.view==='quiz'&&S.phase==='q')return '';
+  var h='';cl=cl||'';a4=a4||'';
+  (chs||[]).slice(0,1).forEach(function(ch){
+    h+='<a class="link'+cl+'" href="'+vurl(ch.vid,ch.sec)+'" target="_blank" rel="noreferrer"'
+      +' data-act="vwatch" data-k="'+esc(ch.vid+'#'+ch.sec)+'"'+a4+'>'+IC.yt
+      +'<span class="lbl'+(ch.jt?' w':'')+'">'+esc(ch.label)+'</span>'
+      +'<span class="tm num">'+mmss(ch.sec)+'</span>'+IC.chev+'</a>';
+  });
+  if((chs||[]).length>1)
+    h+='<button class="btn sm" style="min-height:26px;padding:0 8px;align-self:flex-start" data-act="togsrc">＋'
+      +(chs.length-1)+'</button>';
+  return h;
+}
+
 /* 回答時：問題カードのDOMを作り直さずに、解説だけを差し込む。
    （作り直すと入場アニメーションの途中で座標が飛ぶため。指摘「問題文を動かさない」の構造的な対策） */
 function applyExpDom(it,id){
@@ -4305,6 +4314,15 @@ function applyExpDom(it,id){
   if(bd&&bd.getAttribute('title')!==ns){
     bd.className='sdot s'+STG[ns]+' m4-badge';
     bd.setAttribute('title',ns);bd.setAttribute('aria-label',ns);bd.setAttribute('data-stage',STG[ns]);
+  }
+  /* ★動画リンクを、作り直しのときと同じ位置（答えボタンがあった所）に入れる。
+     入れておかないと、あとから作り直された瞬間に足されて解説が下へ飛ぶ。 */
+  var vlk=vidLinksHtml(chapsFor(it),'','');   /* 差し込みでは入場の動きを付けない */
+  if(vlk){
+    var vd=document.createElement('div');
+    vd.style.display='contents';
+    vd.innerHTML=vlk;
+    while(vd.firstChild)ctl.parentNode.insertBefore(vd.firstChild,ctl);
   }
   ctl.parentNode.removeChild(ctl);
   var ew=document.createElement('div');
@@ -6855,7 +6873,13 @@ function syncNow(quiet){
   return step().then(function(ok){
     SYNC.busy=false;
     if(!quiet)msg(ok?('同期しました（'+n3(SYNC.n||(ST.log||[]).length)+'件）'):(SYNC.err||'同期できませんでした'));
-    try{render()}catch(e){}
+    /* ★問題を解いている最中は画面を作り直さない（2026-08-29 本人報告）。
+       答えた直後は「解説だけを差し込む」作りで動画リンクが無いのに、
+       render() で作り直すと動画リンクが**上に足され**、読んでいた解説が
+       下へ飛ぶ（実測で624px）。自動の同期では触らない。
+       手で押した同期（quiet でない）は、本人が結果を見たい場面なので作り直す。 */
+    var mid=(S.view==='quiz'&&S.phase==='exp');
+    if(!quiet||!mid){try{render()}catch(e){}}
     return ok;
   },function(){SYNC.busy=false;return false});
 }
