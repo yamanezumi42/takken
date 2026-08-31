@@ -92,7 +92,12 @@ var CHECKS=[
   {label:"用語となぜ（3問目）",unit:"用語となぜ（3問目）",dataAt:"2026-08-25 17:03",ids:["b5_7-001-4"]},
   {label:"用語となぜ（4〜5問目）",unit:"用語となぜ（4〜5問目）",dataAt:"2026-08-25 17:03",ids:["b5_7-002-ア", "b5_7-002-ウ"]},
   {label:"用語となぜ（6〜10問目）",unit:"用語となぜ（6〜10問目）",dataAt:"2026-08-25 17:03",ids:["b5_7-002-エ", "b5_7-003-1", "b5_7-003-2", "b5_7-003-3", "b5_7-003-4"]},
-  {label:"用語となぜ（11〜14問目）",unit:"用語となぜ（11〜14問目）",dataAt:"2026-08-25 17:03",ids:["b5_7-004-ア", "b5_7-004-イ", "b5_7-004-ウ", "b5_7-004-エ"]}
+  {label:"用語となぜ（11〜14問目）",unit:"用語となぜ（11〜14問目）",dataAt:"2026-08-25 17:03",ids:["b5_7-004-ア", "b5_7-004-イ", "b5_7-004-ウ", "b5_7-004-エ"]},
+  /* 解説の改行（2026-08-31 本人指示「解説文が見づらい」「解説文の改行とかは直してほしいな」）。
+     画面の <br> だけで直しているので、問題データを入れ直す必要はない（dataAt は前回のデータ配信）。 */
+  {label:"解説の改行（1問）",unit:"解説の改行（1問）",
+   note:"平成27年 問31（ア）です。解説の枠を見てください。矢印の項目ごとに改行しました（文字は1字も足していません）。ほかにも改行が消えている解説があれば「おかしいところ」から送ってください。",
+   dataAt:"2026-08-30 01:47",ids:["b5_7-036-ア"]}
 ];
 var CHECK={label:"読み上げ（媒介契約・35条書面）",unit:"媒介契約・35条書面の読み上げ",
   note:"読み上げのボタンから聞けます（声は2つ・速さと読む範囲は設定で変えられます）。",
@@ -4367,13 +4372,21 @@ function applyExpDom(it,id){
   var sp=w.querySelector('.qsp');
   if(sp){w.insertBefore(ew,sp);sp.style.height='76px';}   /* 固定した「次の問題」のぶん末尾を空ける */
   else w.appendChild(ew);
-  /* 答えたので、問題文とリードにも点線を付ける（2026-08-25 本人指示）。
+  /* 答えたので、問題文にも用語の点線を付け直す（2026-08-25 本人指示）。
      読み上げの帯は問題文を読み終わってから解説に移るので、ここで中身を差し替えても
-     帯には影響しない（帯は rdStart で解説側に張り替わる）。 */
+     帯には影響しない（帯は rdStart で解説側に張り替わる）。
+     ★2026-08-31 本人報告「回答した後の問題文が旧仕様になっている。リード文と問題文で
+     別れてしまっているし、問題番号とかも出ていない」の根本：
+     ここが**旧の作り（リードと問題文が別枠）のまま**残っていた。いまは
+       ・.stem の中身＝**合体文**（qsayHtml）なので it.stem で上書きすると旧の問題文に戻る
+       ・.lead は**出典の枠**（class="lead srcbox"）なので it.lead で上書きすると
+         出典（動画 #18／令和7年 問27（4））が消えてリード文が出る
+     作り直し（render）と同じものを入れ、出典の枠には触らない。 */
   var stx=w.querySelector('.stem .stemtx');
-  if(stx&&it.stem)stx.innerHTML=termMark(esc(it.stem));
-  var ld=w.querySelector('.lead');
-  if(ld&&it.lead)ld.innerHTML=termMark(esc(it.lead));
+  if(stx){
+    var _qs2=(window.TAKKEN_QSAY||{})[id];
+    stx.innerHTML=_qs2?qsayHtml(_qs2):termMark(esc(it.stem));
+  }
   m4BoxPlay(id);
   return true;
 }
@@ -4849,6 +4862,46 @@ function qsayHtml(t){
   }
   return out+termMark(esc(t.slice(i)));
 }
+/* 解説の潰れた箇条書きを、画面だけで縦に並べ直す（2026-08-31 本人指示
+   「解説文が見づらい」「解説文の改行とかは直してほしいな」）。
+   規則の正本＝tools/exp_br_rule.py（検算＝tools/check_exp_br.py）。本人が示した形を
+   1字違わず再現する規則だけを入れてある。**文字は1字も足さない**＝改行は <br> の markup
+   だけで出す。データに「\n」を入れると読み上げの帯（timing.json の ne＝画面の字数）が
+   ずれるので、データは触らない。 */
+var EXPARROW=' → ';
+var EXPEND=/(必要|不要|できない|できる|要らない|要る|不可|可)/g;
+function expBreaks(t){
+  if(!t||t.indexOf(EXPARROW)<0)return [];
+  var pos=[],i=0;
+  while((i=t.indexOf(EXPARROW,i))>=0){pos.push(i);i+=EXPARROW.length}
+  var out=[];
+  for(var k=0;k<pos.length;k++){
+    var st;
+    if(k===0){
+      var q=t.lastIndexOf('。',pos[k]);   /* 矢印の前の最後の「。」の直後から項目が始まる */
+      st=(q<0)?0:q+1;
+    }else{
+      /* 前の項目の述語の終わり（必要・不要 など）の直後から次の項目が始まる。
+         見つからなければ切らない（勝手に文を割らない）。 */
+      var a=pos[k-1]+EXPARROW.length,seg=t.slice(a,pos[k]),last=-1,m;
+      EXPEND.lastIndex=0;
+      while((m=EXPEND.exec(seg)))last=m.index+m[0].length;
+      if(last<0)continue;
+      st=a+last;
+    }
+    if(st>0&&out.indexOf(st)<0)out.push(st);
+  }
+  return out.sort(function(x,y){return x-y});
+}
+function expHtml(t){
+  var br=expBreaks(t);
+  if(!br.length)return termMark(esc(t));
+  /* 見張り印（\u0001）を先に入れてから termMark を1回だけ通す＝点線の付き方を今までと変えない */
+  var s='',p=0;
+  for(var i=0;i<br.length;i++){s+=t.slice(p,br[i])+'\u0001';p=br[i]}
+  s+=t.slice(p);
+  return termMark(esc(s)).split('\u0001').join('<br>');
+}
 function expBlock(it,id){
   var res=S.res||{},r=mk(id);
   /* 出すのは正解の1行だけ。当たり外れは演出で伝える。 */
@@ -4856,7 +4909,7 @@ function expBlock(it,id){
   /* 文字は .exptx で包む＝枠（.exp の背景・罫線）は元の幅のまま、中の文字だけを
      全角の整数倍の幅にして左右の余白を揃えるため（CSSの「本文の左右の余白」の節を参照）。 */
   h+='<div class="exp"><div class="exptx">'
-    +(it.exp?termMark(esc(it.exp)):'<span class="mini">解説データがありません。</span>')
+    +(it.exp?expHtml(it.exp):'<span class="mini">解説データがありません。</span>')
     +'</div></div>';
   /* 制度カード（なぜ・例）。**押す前に何の話か分かるように**、カードの問いを行にして並べる
      （2026-08-25 本人「動画のリンクの論点みたいな感じで出してほしい。
