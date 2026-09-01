@@ -5494,9 +5494,17 @@ function aRun(){
     try{ if(it.hp!==undefined&&it.hp!==null)hosBandStart(it.hp); }catch(e){}
     a.src=url;
     a.playbackRate=it.rate||1;
-    /* 止めた位置から戻す（補足を開いて閉じたとき。2026-08-27） */
+    /* 止めた位置から戻す（補足を開いて閉じたとき。2026-08-27）。
+       ★2026-09-01 本人報告「問題文と解説が最初から読まなくなって途中から音が始まる」の根本：
+       この仕掛けを**消していなかった**。音の部品（audio）は使い回すので、一度でも
+       用語や補足を開いて閉じると、その位置に戻す処理が残り続け、**以後すべての問題が
+       その位置から鳴り始める**。1回使ったら必ず外す。次の音に seek が無いときも外す。 */
+    a.onloadedmetadata=null;
     if(it.seek){var sk=it.seek;it.seek=0;
-      a.onloadedmetadata=function(){try{if(a.currentTime<sk-0.2)a.currentTime=sk}catch(e){}};}
+      a.onloadedmetadata=function(){
+        a.onloadedmetadata=null;                 /* 1回だけ効かせる */
+        try{if(a.currentTime<sk-0.2)a.currentTime=sk}catch(e){}
+      };}
     if(AQ.paused){try{a.pause()}catch(e){}return}
     var pr=a.play();
     if(pr&&pr.catch)pr.catch(function(){AQ.cur=null;aRun()});
