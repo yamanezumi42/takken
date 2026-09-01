@@ -4157,7 +4157,7 @@ function vQuiz(){
      文字は span に入れて光より前に出す（.m3-hero>*:not(.m3-glow) が z-index:1） */
   h+='<div class="stem m3-hero m5-qr'+ac()+'" id="qstem"'+ad(2)+'>'
     +'<span class="m3-glow" aria-hidden="true"></span>'
-    +'<span class="stemtx">'+(_qs?qsayHtml(_qs):termMark(esc(it.stem)))+'</span></div>';
+    +'<span class="stemtx">'+(_qs?qsayHtml(_qs,id):termMark(esc(it.stem)))+'</span></div>';
   /* 条文問題（「〜旨」で終わる肢）は文が切れて見える（2026-08-23 本人報告）。
      過去問の文は変えず、読み取りの助けを薄く1行だけ添える。 */
   if(/旨$/.test(String(it.stem||''))&&/条文に規定/.test(String(it.lead||'')))
@@ -4392,7 +4392,7 @@ function applyExpDom(it,id){
   var stx=w.querySelector('.stem .stemtx');
   if(stx){
     var _qs2=(window.TAKKEN_QSAY||{})[id];
-    stx.innerHTML=_qs2?qsayHtml(_qs2):termMark(esc(it.stem));
+    stx.innerHTML=_qs2?qsayHtml(_qs2,id):termMark(esc(it.stem));
   }
   m4BoxPlay(id);
   return true;
@@ -4858,13 +4858,35 @@ function seidoSheet(key,sec){
 }
 /* 合体文をHTMLにする。(※ … ) の中だけ薄い字にして、他は今までと同じ扱い。
    文字は一字も変えない（絶対ルール③）。 */
-function qsayHtml(t){
-  var out='',i=0,re=/\(※([^()]*)\)/g,m;
+/* 読み上げるかどうかの規則（2026-09-01 本人指示「読み上げないとしたところは色を薄くしてほしい」）。
+   **音側（tools/make_voice_kako.py の paren_keep）と同じ規則**をここに置く。
+   食い違うと「薄いのに読む／濃いのに読まない」になるので、
+   tools/check_paren_same.py が全5,241問で画面と音の判定を突き合わせる（配信の関門）。 */
+var PK_LIC=/知事|大臣|免許/,PK_TAX=/消費税/,PK_NUM=/[0-9]/,
+    PK_UNIT=/万円|億円|円|平方メートル|坪|パーセント|割|か月|ヶ月|箇月|年|月|日|人|件|倍|ドル|分の|戸|棟|区画/,
+    PK_LAW=/条|項|号/,PK_SENT=/。$/,PK_KARI=/^以下.*という。?$/,PK_LAWNAME=/第[0-9]+条(の[0-9]+)?$/;
+function sayKeepParen(inner,id,before){
+  if(before&&PK_LAWNAME.test(before))return true;      /* 第◯条の直後＝罪名 */
+  if(PK_LIC.test(inner)||PK_TAX.test(inner))return true;
+  if(PK_NUM.test(inner)&&PK_UNIT.test(inner)&&!PK_LAW.test(inner))return true;
+  if(PK_SENT.test(inner)&&!PK_KARI.test(inner))return true;
+  var w=(window.TAKKEN_PKEEP||{})[id]||[];
+  for(var k=0;k<w.length;k++)if(w[k]&&inner.indexOf(w[k])>=0)return true;
+  return false;
+}
+/* 合体文を描く。**字は1字も足さない・減らさない**（帯が画面の文字位置で動くため）。
+   側注 (※ ) と、読み上げない括弧は薄く出す。 */
+function qsayHtml(t,id){
+  var out='',i=0,re=/[（(]([^（()）]*)[)）]/g,m,inner,op,cl,body,faint;
   while((m=re.exec(t))){
     out+=termMark(esc(t.slice(i,m.index)));
+    inner=m[1];op=m[0].charAt(0);cl=m[0].charAt(m[0].length-1);
+    body=termMark(esc(inner));
     /* ★「※」も出す（2026-08-28）。落とすと画面の文が合体文より短くなり、
        側注より後ろの帯が1文字ずれる。 */
-    out+='<span class="soku">(※'+termMark(esc(m[1]))+')</span>';
+    faint=(inner.charAt(0)==='※')||!sayKeepParen(inner.replace(/^\s+|\s+$/g,''),id,t.slice(0,m.index));
+    out+=faint?('<span class="soku">'+esc(op)+body+esc(cl)+'</span>')
+              :(esc(op)+body+esc(cl));
     i=m.index+m[0].length;
   }
   return out+termMark(esc(t.slice(i)));

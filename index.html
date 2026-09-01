@@ -1641,7 +1641,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='7ba7ef3e';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b538d655';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1869,6 +1869,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             kako:rec.parts['kako_voice.json']||null,
             timing:rec.parts['timing.json']||null,
             qsay:rec.parts['qsay.json']||null,   /* 合体文（2026-08-28） */
+            pkeep:rec.parts['paren_keep.json']||null,  /* 読む括弧の指定（2026-09-01） */
             terms:rec.parts['terms.json']||null,
             seido:rec.parts['seido.json']||null,
             hosokuTiming:rec.parts['hosoku_timing.json']||null};
@@ -2027,6 +2028,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_KAKO=d.kako||{};             /* 過去問の読み上げを持つ肢 */
     window.TAKKEN_TIMING=d.timing||{};         /* 読み上げの時間表（帯） */
     window.TAKKEN_QSAY=d.qsay||{};             /* 合体文（画面に出す1文。2026-08-28） */
+    window.TAKKEN_PKEEP=d.pkeep||{};           /* 本人の「ここは読んで」（2026-09-01） */
     window.TERMS=d.terms||{};                  /* 用語辞典（そもそも何。2026-08-25） */
     window.SEIDO=d.seido||{};                  /* 制度カード（なぜ・例。2026-08-25） */
     /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
