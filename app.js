@@ -2500,7 +2500,11 @@ function render(){
   bootFx();                 /* 起動の演出＝1回だけ（BOOTFXDONE で守る） */                        /* 初回だけ：骨組み→実データのクロスフェード */
   S.enter=false;S.dir=null;S.anim=null;ANIMON=false;
   LASTVIEW=S.view;
-  if(S.view==='quiz')bindTilt();
+  /* ★問題文の枠を傾ける演出はやめた（2026-09-01 本人指示
+     「問題をタップしたりすると白い枠がななめになったりするんだけどやめてほしい。
+     かいせつはそんなことないのにね」）。解説の枠と同じ挙動にそろえる。
+     bindTilt() は残してあるので、戻すときはこの行を元に戻すだけでよい。 */
+  /* if(S.view==='quiz')bindTilt(); */
   syncNextBar();                       /* 解説中だけ下に「次の問題」を出す（描画のたびに合わせる） */
   /* 入場アニメーションが終わったらクラスを外す。終わった時点の見た目は最終状態と同じなので
      見た目は変わらず、あとで再描画されても座標が飛ばない。 */
@@ -7360,7 +7364,11 @@ document.addEventListener('click',function(e){
      鳴っていなければ、走っている自動送りを止める（×と同じ）。 */
   if(!t&&S.view==='quiz'&&e.target&&e.target.closest){
     var inCtl=e.target.closest('button,a,input,select,textarea,label,.sheet,#modal,#tabs');
-    if(!inCtl){ if(togglePause())return }
+    if(!inCtl){
+      /* 文字の上なら、その帯の先頭から読み直す（2026-09-01 本人指示） */
+      if(rdSeekAt(e.target))return;
+      if(togglePause())return
+    }
   }
   if(!t)return;
   /* リザルトの上のボタンは、閉じてから既存処理へ流す */
@@ -9289,6 +9297,34 @@ function rdPaint(hit){
   if(RD.shown===key)return;
   RD.shown=key;
   RD.box.innerHTML=hit?rdRects(RD.rects,hit.a,hit.b):'';
+}
+/* 文字をタップしたら、その文字が入っている帯の**先頭から**読み直す
+   （2026-09-01 本人指示「問題文をタップしたらその帯の先頭から読み始めたりできないの？
+   解説もそうだけどね」）。
+   帯は1文字ずつの span（.rdch）で作ってあるので、触られた文字の番号がそのまま位置になる。
+   触った所が文字でなければ false を返し、これまでどおり止める／再開する。 */
+function rdSeekAt(el){
+  if(!RD.spans||!RD.box||!el||!el.closest)return false;
+  var ch=el.closest('.rdch');
+  if(!ch)return false;
+  var wrap=RD.box.parentNode;
+  var tx=wrap&&wrap.querySelector('.stemtx,.exptx');
+  if(!tx||!tx.contains(ch))return false;
+  var all=tx.querySelectorAll('.rdch'),idx=-1,i;
+  for(i=0;i<all.length;i++){if(all[i]===ch){idx=i;break}}
+  if(idx<0)return false;
+  var a=AQ&&AQ.cur;
+  if(!a)return false;                 /* 鳴っていない＝これまでどおり */
+  for(i=0;i<RD.spans.length;i++){
+    if(idx>=RD.spans[i].a&&idx<=RD.spans[i].b){
+      try{a.currentTime=RD.spans[i].s}catch(e){}
+      if(a.paused){try{a.play()}catch(e){}}
+      AQ.paused=false;
+      RD.shown='';rdTick();
+      return true;
+    }
+  }
+  return false;
 }
 /* 設定のシート（出典と同じ形で下から出す） */
 /* 本文の見た目のシート（2026-08-24 本人指示）。出題画面から開く。
