@@ -2436,6 +2436,8 @@ function render(){
   else if(S.view==='game'){S.view='home';h=vHome();}   /* 外したタブ */
   else if(S.view==='lesson')h=vLesson();
   else if(S.view==='note'){h=vNote();setTimeout(nbAfterRender,0)}
+  else if(S.view==='nsearch'){h=vNSearch();setTimeout(nbSearchBind,0)}
+  else if(S.view==='nprog')h=vNProg();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* ★ホームの見た目を控える（2026-08-25 本人「一瞬でも表示されるのが嫌」）。
@@ -3657,6 +3659,9 @@ function vFields(){
       +' data-act="ufilt" data-v="">すべて</button>'
       +'<button class="tog'+(S.urest?' on':'')+'" style="margin:0 6px 6px 0"'
       +' data-act="ufilt" data-v="rest">残り</button>'):'')
+    /* ノートの検索（2026-09-14）。論点1,982件から語で節に着く */
+    +(NB.ok()?('<button class="tog" style="margin:0 0 6px auto;float:right"'
+      +' data-act="nsearch">ノートを検索</button>'):'')
     +'</div>';
   h+=(cm?vFieldsCat():vFieldsVideo());
   h+='</div>';
@@ -3868,13 +3873,186 @@ var NB={
 function vNote(){
   var c=S.noteCat,u=NB.unit(c);
   var back='<button class="btn sm" data-act="noteback" style="margin-bottom:10px">'
-    +esc(S.noteFrom==='quiz'?'問題へ戻る':(c+'へ戻る'))+'</button>';
+    +esc(S.noteFrom==='quiz'?'問題へ戻る'
+        :(S.noteFrom==='search'?'検索へ戻る'
+        :(S.noteFrom==='prog'?'到達度へ戻る':(c+'へ戻る'))))+'</button>';
   if(!u||typeof NOTEHTML==='undefined'||!NOTEHTML[u.dir])
     return '<div class="pad'+stag()+'">'+back
       +'<div class="warn">'+IC.warn+' ノートのデータが読み込めていません。data/notes.js を確認してください。</div></div>';
   NB.mount();
   return '<div class="pad'+stag()+'">'+back
     +'<div class="nb">'+NOTEHTML[u.dir]+'</div></div>';
+}
+/* ---------- 論点ごとの到達度（2026-09-14。SPEC §4-7-2「第3版」の論点の軸） ----------
+   数え方は単元の達成度（catStat の prog）と同じ＝**一度でも正解した問題の割合**。
+   単元と論点で定義が違うと数字が食い違うので、そろえる。 */
+function nbStat(ids){
+  var n=(ids||[]).length,okn=0,att0=0;
+  (ids||[]).forEach(function(id){
+    var r=R(id);if(!r)return;
+    if(att(r)>0)att0++;
+    if((r.ok||0)>0)okn++;
+  });
+  return {n:n,okn:okn,att:att0,rest:n-att0,
+          lv:(!n?0:(okn===n?3:(okn>0?2:(att0>0?1:0))))};
+}
+/* ●＝全部正解済み ◐＝一部 ○＝解いたがまだ ・＝未着手（絵文字は使わない） */
+var NBMARK=['・','○','◐','●'];
+function nbBadge(st){
+  if(!st.n)return '';
+  var cl=st.lv===3?'y':(st.lv>=1?'m':'');
+  return '<span class="nbb'+(cl?' '+cl:'')+'">'+NBMARK[st.lv]+' '+st.okn+'/'+st.n+'</span>';
+}
+/* ノートを描いた後、節の見出しに到達度を差し込む（ノートのHTMLは書き換えない） */
+function nbMarkSections(){
+  var box=document.querySelector('.nb'),u=NB.unit(S.noteCat);
+  if(!box||!u)return;
+  var secs=box.querySelectorAll('section');
+  for(var i=0;i<secs.length&&i<u.sections.length;i++){
+    var sec=u.sections[i],h2=secs[i].querySelector('h2');
+    if(!h2||!sec.ronten.length||h2.querySelector('.nbb'))continue;
+    var ids=[];sec.ronten.forEach(function(r){ids=ids.concat(r.ids)});
+    var q=h2.querySelector('.q'),d=document.createElement('span');
+    d.innerHTML=nbBadge(nbStat(ids));
+    if(q)h2.insertBefore(d.firstChild,q);else h2.appendChild(d.firstChild);
+    /* 読んだその場で解けるようにする（2026-09-14） */
+    var b=nbSolveBtn(S.noteCat,sec,'nbsolve');
+    if(b&&!secs[i].querySelector('.nbsolve')){
+      var w=document.createElement('div');w.className='nbsolvew';w.innerHTML=b;
+      h2.parentNode.insertBefore(w,h2.nextSibling);
+    }
+  }
+}
+/* 節（段）そのものを引く／その節の問題を集める（2026-09-14） */
+function nbSec(c,no){
+  var u=NB.unit(c);
+  if(!u)return null;
+  for(var i=0;i<u.sections.length;i++)if(u.sections[i].no===no)return u.sections[i];
+  return null;
+}
+function nbSecIds(sec){
+  var ids=[];(sec?sec.ronten:[]).forEach(function(r){ids=ids.concat(r.ids)});
+  return ids;
+}
+/* 「この節を解く」のボタン。残りがあれば残り、無ければもう一度（単元の解くボタンと同じ考え方） */
+function nbSolveBtn(c,sec,cls){
+  var list=nbSecIds(sec).map(function(i){return BY[i]}).filter(function(x){return x});
+  if(!list.length)return '';
+  var rest=restCount(list);
+  return '<button class="btn sm'+(cls?' '+cls:'')+'" data-act="nsolve" data-c="'+esc(c)+'"'
+    +' data-s="'+sec.no+'"'+(rest>0?'':' data-all="1"')+'>'
+    +(rest>0?('この節の残り '+n3(rest)+'問を解く'):('この節の '+n3(list.length)+'問をもう一度解く'))
+    +'</button>';
+}
+function vNProg(){
+  var c=S.noteCat,u=NB.unit(c);
+  var back='<button class="btn sm" data-act="nprogback" style="margin-bottom:10px">'
+    +esc(c)+'へ戻る</button>';
+  if(!u)return '<div class="pad'+stag()+'">'+back+'</div>';
+  var all=[];u.sections.forEach(function(s){s.ronten.forEach(function(r){all=all.concat(r.ids)})});
+  var t=nbStat(all);
+  var h='<div class="pad'+stag()+'">'+back
+    +'<div class="panel"><div class="h" style="margin:0">論点ごとの到達度</div>'
+    +'<div class="sub" style="margin:6px 0 0">'+esc(c)+'　／　'+u.n_ronten+'論点　／　'
+    +'一度でも正解 '+t.okn+'/'+t.n+'問　／　未着手 '+t.rest+'問</div>'
+    +'<div class="bar3" style="margin-top:10px"><i style="width:'
+    +(t.n?(t.okn/t.n*100).toFixed(1):'0')+'%"></i></div>'
+    +'<div class="mini" style="margin-top:8px">'
+    +'●＝その論点の問題を全部正解した　◐＝一部　○＝解いたがまだ　・＝未着手</div></div>';
+  u.sections.forEach(function(sec){
+    if(!sec.ronten.length)return;
+    var ids=[];sec.ronten.forEach(function(r){ids=ids.concat(r.ids)});
+    var ss=nbStat(ids);
+    h+='<a data-act="nopen" data-c="'+esc(c)+'" data-s="'+sec.no+'" data-from="prog"'
+      +' style="display:flex;gap:8px;align-items:baseline;margin-top:14px;color:var(--fg)">'
+      +'<b style="flex:1">'+sec.no+'　'+esc(sec.title||sec.key)+'</b>'
+      +'<span class="mini">'+NBMARK[ss.lv]+' '+ss.okn+'/'+ss.n+'問</span></a>'
+      +'<div style="margin:4px 0 2px">'+nbSolveBtn(c,sec)+'</div>';
+    sec.ronten.forEach(function(r){
+      var s2=nbStat(r.ids);
+      h+='<a data-act="nopen" data-c="'+esc(c)+'" data-s="'+sec.no+'" data-from="prog"'
+        +' style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);color:var(--fg)">'
+        +'<span class="num" style="flex:none;width:2.2em;text-align:center;color:'
+        +(s2.lv===3?'#3f9a62':(s2.lv===0?'var(--muted)':'#c08410'))
+        +'">'+NBMARK[s2.lv]+'</span>'
+        +'<span style="flex:1;line-height:1.6">'+esc(r.text.replace(/<[^>]+>/g,''))+'</span>'
+        +'<span class="mini num" style="flex:none">'+s2.okn+'/'+s2.n+'</span></a>';
+    });
+  });
+  return h+'</div>';
+}
+/* ---------- ノートの検索（2026-09-14） ----------
+   論点1,982件を索引にして、語から節に着く。アプリには今まで検索が無かった。 */
+function nbFlat(){
+  if(NB._flat)return NB._flat;
+  var out=[];
+  if(NB.ok())NOTES.units.forEach(function(u){
+    u.sections.forEach(function(sec){
+      sec.ronten.forEach(function(r){
+        out.push({cat:u.cat,no:sec.no,sec:sec.title||sec.key,id:r.id,
+                  text:r.text,plain:r.text.replace(/<[^>]+>/g,''),n:r.ids.length});
+      });
+    });
+  });
+  NB._flat=out;return out;
+}
+function nbFind(q){
+  var ws=(q||'').trim().split(/[\s　]+/).filter(function(x){return x});
+  if(!ws.length)return [];
+  var out=[];
+  nbFlat().forEach(function(r){
+    var hay=r.plain+' '+r.sec+' '+r.cat;
+    for(var i=0;i<ws.length;i++)if(hay.indexOf(ws[i])<0)return;
+    out.push(r);
+  });
+  return out;
+}
+function nbMark(s,q){
+  var ws=(q||'').trim().split(/[\s　]+/).filter(function(x){return x});
+  var h=esc(s);
+  ws.forEach(function(w){
+    var e=esc(w).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    h=h.replace(new RegExp(e,'g'),'<mark>$&</mark>');
+  });
+  return h;
+}
+function vNSearch(){
+  var q=S.nq||'';
+  return '<div class="pad'+stag()+'">'
+    +'<div class="h">ノートを検索</div>'
+    +'<div class="sub" style="margin:2px 0 10px">'+n3(nbFlat().length)+'論点から探します。'
+    +'語を空けて並べると、両方を含むものだけになります（例＝<b>擁壁 水抜き</b>）</div>'
+    +'<input id="nbq" type="search" inputmode="search" placeholder="臥梁／かぶり厚さ／クーリング・オフ…"'
+    +' value="'+esc(q)+'" style="width:100%;box-sizing:border-box;min-height:42px;'
+    +'border:1px solid var(--line);border-radius:10px;padding:0 12px;font-family:inherit;font-size:15px">'
+    +'<div id="nbres" style="margin-top:10px">'+nbResHtml(q)+'</div></div>';
+}
+function nbResHtml(q){
+  if(!(q||'').trim())return '<div class="mini">語を入れてください。</div>';
+  var r=nbFind(q),h='';
+  if(!r.length)return '<div class="mini">見つかりませんでした。</div>';
+  h+='<div class="mini" style="margin-bottom:6px">'+n3(r.length)+'件'
+    +(r.length>80?'（先頭80件）':'')+'</div>';
+  r.slice(0,80).forEach(function(x){
+    h+='<a data-act="nopen" data-c="'+esc(x.cat)+'" data-s="'+x.no+'"'
+      +' style="display:block;padding:9px 2px;border-bottom:1px solid var(--line);color:var(--fg)">'
+      +'<div class="mini">'+nbMark(x.cat,q)+' ／ '+x.no+' '+nbMark(x.sec,q)
+      +' ／ '+x.n+'問</div>'
+      +'<div style="margin-top:2px;line-height:1.6">'+nbMark(x.plain,q)+'</div></a>';
+  });
+  return h;
+}
+/* 入力のたびに全体を描き直すと入力欄から手が離れるので、結果の箱だけ差し替える */
+function nbSearchBind(){
+  var i=document.getElementById('nbq');
+  if(!i||i._b)return;
+  i._b=1;
+  i.addEventListener('input',function(){
+    S.nq=i.value;
+    var r=document.getElementById('nbres');
+    if(r)r.innerHTML=nbResHtml(S.nq);
+  });
+  if(S.nqFocus){S.nqFocus=false;try{i.focus()}catch(e){}}
 }
 /* ノートを描いた後に1回だけ走る。節に通し番号のidを振り、指定の節へ飛ぶ。
    節の並びは NOTES の sections と本体HTMLで同じ（同じファイルから作っている）。 */
@@ -3883,6 +4061,7 @@ function nbAfterRender(){
   if(!box)return;
   var secs=box.querySelectorAll('section');
   for(var i=0;i<secs.length;i++)secs[i].id='nbs'+(i+1);
+  nbMarkSections();                      /* 節の見出しに到達度を差し込む（2026-09-14） */
   var n=S.noteSec;S.noteSec=null;
   if(!n)return;
   var el=document.getElementById('nbs'+n);
@@ -3908,7 +4087,9 @@ function vUnit(c,s){
       「残り／全」のすぐ下に置く。ノートが無い単元では出さない。 */
    +(NB.unit(c)?('<div style="display:flex;gap:8px;margin-top:8px">'
      +'<button class="btn sm" style="flex:1;width:auto;margin:0" data-act="note" data-c="'+esc(c)+'">'
-     +'ノートを読む（'+NB.unit(c).sections.length+'節・'+NB.unit(c).n_ronten+'論点）</button></div>'):'')
+     +'ノートを読む（'+NB.unit(c).sections.length+'節・'+NB.unit(c).n_ronten+'論点）</button>'
+     +'<button class="btn sm" style="flex:1;width:auto;margin:0" data-act="nprog" data-c="'+esc(c)+'">'
+     +'論点ごとの到達度</button></div>'):'')
    /* この単元の記録をリセット（2026-08-24 本人指示「単元学習で中途半端に解いた問題を
       リセットしたい。家族法のやつ消したい」）。解いた記録が無いときは出さない。
       押し間違いで消えないように、押すと件数を出して確認を取る（動画側と同じ2段）。
@@ -7504,6 +7685,26 @@ document.addEventListener('click',function(e){
   /* ノートを開く／単元ページへ戻る（2026-09-14） */
   if(a==='note'){
     S.noteCat=t.getAttribute('data-c');S.noteSec=null;S.noteFrom='unit';S.dir=null;go('note');return}
+  /* ノートの検索（2026-09-14）。結果を押すとその節へ飛ぶ。戻り先は検索の画面 */
+  if(a==='nsearch'){S.nqFocus=true;S.dir=null;go('nsearch');return}
+  if(a==='nopen'){
+    S.noteCat=t.getAttribute('data-c');S.noteSec=+t.getAttribute('data-s');
+    S.noteFrom=(t.getAttribute('data-from')==='prog')?'prog':'search';
+    S.dir=null;go('note');return}
+  if(a==='nprog'){S.noteCat=t.getAttribute('data-c');S.dir=null;go('nprog');return}
+  /* 節から解く（2026-09-14）。単元から解くときと同じ道を通す＝解禁は科目で判定し、
+     並びはあこ課長の習う順（基準の動画は渡さない）。 */
+  if(a==='nsolve'){
+    var nc=t.getAttribute('data-c'),nsec=nbSec(nc,+t.getAttribute('data-s'));
+    if(!nsec)return;
+    var nall=nbSecIds(nsec).map(function(i){return BY[i]}).filter(function(x){return x});
+    if(!pickRest(nall,t).length){msg('この節は残っていません');return}
+    var nbig=CINFO[nc]?CINFO[nc].big:null;
+    S.kind='new';
+    m1ToQuiz(t,function(){S.pendBig=nbig;
+      startQueue(pickRest(nall,t),nc+'　'+(nsec.title||nsec.key),false,null)});
+    return;}
+  if(a==='nprogback'){S.dir=null;S.cat=S.noteCat;S.ucat=true;go('study');return}
   /* 解いた問題から、その問題の論点が載っている節へ飛ぶ */
   if(a==='noteq'){
     S.noteCat=t.getAttribute('data-c');S.noteSec=+t.getAttribute('data-s');
@@ -7513,6 +7714,8 @@ document.addEventListener('click',function(e){
     go('note');return}
   if(a==='noteback'){
     S.dir=null;
+    if(S.noteFrom==='search'){go('nsearch');return}
+    if(S.noteFrom==='prog'){go('nprog');return}
     if(S.noteFrom==='quiz'){go(S.noteBack||'quiz');try{nextResume()}catch(e){}return}
     S.cat=S.noteCat;S.ucat=true;go('study');return}
   /* ホームの「次の動画を見る」→ 学習タブのその動画の画面（章の一覧と解くボタンがある）。

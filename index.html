@@ -1443,6 +1443,15 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 /* ============ 宅建ノート（2026-09-14） ============
    ノート本体の見た目は data/notes.js の NOTECSS（.nb の中だけに効く）。
    ここに置くのは、アプリ側から足す分だけ＝飛んだ先の目印と、上下の余白。 */
+/* 節の見出しに出す到達度の印（2026-09-14）。色の意味は紙のノートと同じ
+   （緑＝できている／オレンジ＝途中）。 */
+.nb h2 .nbb{margin-left:auto;font-size:.62em;font-weight:400;color:var(--sub);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.nb h2 .nbb+.q{margin-left:10px}
+.nb h2 .nbb.y{color:var(--yes)} .nb h2 .nbb.m{color:var(--num)}
+/* ノートの中の「この節を解く」（2026-09-14）。読む邪魔をしないよう控えめに置く */
+.nb .nbsolvew{margin:0 0 2.4mm}
+.nb .nbsolvew .btn{width:auto;min-height:30px;padding:0 12px;font-size:11.6pt}
 .nb{padding:2mm 0 6mm}
 .nb section{scroll-margin-top:64px}
 .nb section.hit{animation:nbhit 1.6s ease-out 1}
@@ -1655,7 +1664,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='efc73101';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='ff774498';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
