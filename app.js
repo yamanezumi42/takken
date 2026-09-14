@@ -2414,6 +2414,34 @@ function qtTick(){
 }
 function qtStart(){qtStop();qtTick();QTID=setInterval(qtTick,1000)}
 function qtStop(){if(QTID){clearInterval(QTID);QTID=null}}
+/* ---------- 問題の画面にいる間だけ時計を動かす（2026-09-14 本人指示） ----------
+   > 「経過時間をアプリを閉じた時は止めてほしいとかホームに戻ったら止めてほしい。
+   >   どちらにせよ問題の画面でないときは止めることって出来ないの？」
+   止める＝いまの区間（tick からの経過）を spent に畳んで、tick を捨てる。
+   戻ったら tick を入れ直すだけなので、積み上げはずれない。
+   畳むときに実測の学習時間（addStudyMs）へも積む＝saveRun と同じ扱いにして二重計上を避ける
+   （tick が無い間は saveRun も closeRunClock も 0 を足すので、どこから呼ばれても崩れない）。 */
+function runPause(){
+  var r=ST.run;if(!r||!r.tick)return;
+  var d=Math.min(180000,Math.max(0,Date.now()-r.tick));
+  if(d>0)addStudyMs(r.kind||S.kind||'new',r.baseVid||null,d);
+  r.spent=(r.spent||0)+d;r.tick=null;saveST();
+}
+function runResume(){var r=ST.run;if(!r||r.tick)return;r.tick=Date.now();saveST()}
+/* 通し演習（模試）も同じ。acc＝積み上げ、t0＝いまの区間の開始。 */
+function mockPause(){
+  var m=S.mock;if(!m||m.done||!m.t0)return;
+  m.acc=(m.acc||0)+Math.round((Date.now()-m.t0)/1000);m.t0=0;
+  if(ST.mockRun&&!ST.mockRun.done){ST.mockRun.acc=m.acc;saveST()}
+}
+function mockResume(){var m=S.mock;if(!m||m.done||m.t0)return;m.t0=Date.now()}
+/* 画面が変わったとき・アプリを離れたとき・戻ったときに、必ずこれを通す。 */
+function clockSync(){
+  var vis=(typeof document.visibilityState==='undefined'||document.visibilityState!=='hidden');
+  if(S.view==='quiz'&&vis)runResume();else runPause();
+  if(S.view==='mock'&&vis)mockResume();else mockPause();
+  if((S.view==='quiz'||S.view==='mock')&&vis)qtStart();else qtStop();
+}
 function render(){
   var v=document.getElementById('view'),h='';
   /* この描画で「入場アニメーション（画面遷移＋段差）」を付けるか。
@@ -2446,8 +2474,9 @@ function render(){
   if(S.view==='home'&&h&&h.length<80000){
     try{localStorage.setItem('takken_home',h)}catch(e){}
   }
-  /* 出題中と通し演習のときだけ時計を回す（他の画面では止める＝無駄に動かさない）。 */
-  if(S.view==='quiz'||S.view==='mock')qtStart();else qtStop();
+  /* 出題中と通し演習のときだけ時計を回す。他の画面では**表示だけでなく時計そのものを止める**
+     （2026-09-14 本人指示。ホームに戻った時間・ノートを読んでいた時間は解いた時間ではない）。 */
+  clockSync();
   /* ゲームは描いたあとに当たり判定を付ける（SVGの座標を実測するので描画後でないと測れない）。 */
   if(S.view==='game'&&GM&&GM.qi<GM.qs.length){
     if(GM.kind==='link')lkBind();else kkBind();
@@ -2960,7 +2989,8 @@ function resumeMock(){
   S.mock={set:r.set,kind:r.kind,qs:r.qs||[],i:r.i||0,sel:r.sel||[],t0:Date.now(),acc:r.acc||0,done:false};
   S.view='mock';S.mockRev=null;render();
 }
-function mockSec(m){return (m.acc||0)+Math.round((Date.now()-m.t0)/1000)}
+/* t0＝0 は「いま止まっている」印。止まっている間は積み上げ（acc）だけを返す。 */
+function mockSec(m){return (m.acc||0)+(m.t0?Math.round((Date.now()-m.t0)/1000):0)}
 function mockAnswer(k){
   var m=S.mock;if(!m||m.done)return;
   var qs=m.qs||[];        /* 習った範囲で組んだ問（2026-08-22） */
@@ -3881,7 +3911,7 @@ function vNote(){
       +'<div class="warn">'+IC.warn+' ノートのデータが読み込めていません。data/notes.js を確認してください。</div></div>';
   NB.mount();
   return '<div class="pad'+stag()+'">'+back
-    +'<div class="nb">'+NOTEHTML[u.dir]+'</div></div>';
+    +'<div class="nbwrap"><div class="nb">'+NOTEHTML[u.dir]+'</div></div></div>';
 }
 /* ---------- 論点ごとの到達度（2026-09-14。SPEC §4-7-2「第3版」の論点の軸） ----------
    数え方は単元の達成度（catStat の prog）と同じ＝**一度でも正解した問題の割合**。
@@ -9161,13 +9191,20 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
    YouTubeアプリへ飛ばすのでアプリ内では再生時間を測れない。「動画を見る」を押した時刻と
    戻ってきた時刻の差を積む。他のアプリを触っていた時間が混ざり得るため、その動画の尺の
    1.5倍で切り捨て、10秒未満は積まない（watchEnd に同じ注記あり）。 */
+/* 閉じる・再読み込みでも畳む（visibilitychange が来ない経路の保険） */
+window.addEventListener('pagehide',function(){try{runPause();mockPause()}catch(e){}});
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState!=='visible'){
     /* ★離れる瞬間に同期する（2026-08-29）。iPhone はアプリを切り替えると止まるので、
        ここで上げておかないと、そのまま終了されたときに未同期の分が残る。 */
     try{ if(SYNC.timer){clearTimeout(SYNC.timer);SYNC.timer=0} syncNow(true) }catch(e){}
+    /* 離れたら経過時間を止める（2026-09-14 本人指示）。畳んでから同期しても、
+       同期に乗るのは次の書き込みなので、ここで畳んでおけば閉じられても残る。 */
+    try{ clockSync() }catch(e){}
     return;
   }
+  /* 戻ってきたら、問題の画面にいるときだけ時計を動かし直す。 */
+  try{ clockSync() }catch(e){}
   var ms=watchEnd();
   if(ms&&S.view==='study')render();
   /* 戻ってきたときも取り込む（別の端末で解いた分が入る） */
