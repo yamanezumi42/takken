@@ -2435,6 +2435,7 @@ function render(){
   else if(S.view==='review')h=vReview();
   else if(S.view==='game'){S.view='home';h=vHome();}   /* 外したタブ */
   else if(S.view==='lesson')h=vLesson();
+  else if(S.view==='note'){h=vNote();setTimeout(nbAfterRender,0)}
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* ★ホームの見た目を控える（2026-08-25 本人「一瞬でも表示されるのが嫌」）。
@@ -3829,6 +3830,67 @@ function selItems(){
    ・見出し＝単元名／大分類・毎年N問・正解/全
    ・「残り」「全」の2ボタン（一覧の行から外したもの）
    ・小見出しの一覧（名前が長いので折り返す。数字は出さない＝押した先のボタンと重なるため） */
+/* ============ 宅建ノート（2026-09-14） ============
+   紙のノート48冊と同じものをアプリの中で読む。呼び名は紙に合わせて「節」「論点」
+   （動画のほうは「動画の章」と呼び分ける。2026-09-14 本人裁定）。
+   データ＝data/notes.js（NOTES：対応表／NOTEHTML：本体／NOTESVG：アイコン／NOTECSS：見た目）。 */
+var NB={
+  ok:function(){return typeof NOTES!=='undefined'&&NOTES&&NOTES.units},
+  unit:function(c){
+    if(!this.ok())return null;
+    if(!this._byCat){this._byCat={};NOTES.units.forEach(function(u){NB._byCat[u.cat]=u})}
+    return this._byCat[c]||null;
+  },
+  /* 問題id → [{cat,節,論点}]。1問が2つの論点にまたがることがある（実データで4件） */
+  of:function(id){
+    if(!this.ok()||!NOTES.index[id])return [];
+    var e=NOTES.index[id],u=this.unit(e[0]),out=[];
+    if(!u)return out;
+    e.slice(1).forEach(function(gid){
+      u.sections.forEach(function(sec){
+        sec.ronten.forEach(function(r){
+          if(r.id===gid)out.push({cat:e[0],sec:sec,ronten:r});
+        });
+      });
+    });
+    return out;
+  },
+  /* ノートの見た目とアイコンは、初めて開いたときに1回だけ入れる */
+  mount:function(){
+    if(this._mounted||!this.ok())return;
+    this._mounted=true;
+    var st=document.createElement('style');st.id='notecss';st.textContent=NOTECSS;
+    document.head.appendChild(st);
+    var d=document.createElement('div');d.style.cssText='position:absolute;width:0;height:0;overflow:hidden';
+    d.innerHTML=NOTESVG;document.body.appendChild(d);
+  }
+};
+function vNote(){
+  var c=S.noteCat,u=NB.unit(c);
+  var back='<button class="btn sm" data-act="noteback" style="margin-bottom:10px">'
+    +esc(S.noteFrom==='quiz'?'問題へ戻る':(c+'へ戻る'))+'</button>';
+  if(!u||typeof NOTEHTML==='undefined'||!NOTEHTML[u.dir])
+    return '<div class="pad'+stag()+'">'+back
+      +'<div class="warn">'+IC.warn+' ノートのデータが読み込めていません。data/notes.js を確認してください。</div></div>';
+  NB.mount();
+  return '<div class="pad'+stag()+'">'+back
+    +'<div class="nb">'+NOTEHTML[u.dir]+'</div></div>';
+}
+/* ノートを描いた後に1回だけ走る。節に通し番号のidを振り、指定の節へ飛ぶ。
+   節の並びは NOTES の sections と本体HTMLで同じ（同じファイルから作っている）。 */
+function nbAfterRender(){
+  var box=document.querySelector('.nb');
+  if(!box)return;
+  var secs=box.querySelectorAll('section');
+  for(var i=0;i<secs.length;i++)secs[i].id='nbs'+(i+1);
+  var n=S.noteSec;S.noteSec=null;
+  if(!n)return;
+  var el=document.getElementById('nbs'+n);
+  if(!el)return;
+  el.classList.add('hit');
+  setTimeout(function(){el.scrollIntoView({block:'start'})},0);
+  setTimeout(function(){el.classList.remove('hit')},1700);
+}
 function vUnit(c,s){
   var q=CATQ[c]||0,off=CATQ_OFF[c];
   var rest=restCount(itemsOfCat(c));
@@ -3842,6 +3904,11 @@ function vUnit(c,s){
    +'<div style="display:flex;gap:8px;margin-top:12px">'
    +twoBtns('startCat',' data-c="'+esc(c)+'"',rest,s.n,'','flex:1;width:auto;margin:0')
    +'</div>'
+   /* ノート（2026-09-14）。解く前に読む・解いた後に戻る、どちらにも使うので
+      「残り／全」のすぐ下に置く。ノートが無い単元では出さない。 */
+   +(NB.unit(c)?('<div style="display:flex;gap:8px;margin-top:8px">'
+     +'<button class="btn sm" style="flex:1;width:auto;margin:0" data-act="note" data-c="'+esc(c)+'">'
+     +'ノートを読む（'+NB.unit(c).sections.length+'節・'+NB.unit(c).n_ronten+'論点）</button></div>'):'')
    /* この単元の記録をリセット（2026-08-24 本人指示「単元学習で中途半端に解いた問題を
       リセットしたい。家族法のやつ消したい」）。解いた記録が無いときは出さない。
       押し間違いで消えないように、押すと件数を出して確認を取る（動画側と同じ2段）。
@@ -4177,7 +4244,7 @@ function vQuiz(){
      見出しの章名は単元名に隠していたが、その下のリンクのラベルが章名のままで、
      そこに答えが書いてあった（例「公告せずに取戻し（例外）」）。
      答えた後（S.phase!==q）に出す＝学習の導線は失わない。 */
-  h+=vidLinksHtml(chs,ac(),ad(4));
+  h+=vidLinksHtml(chs,ac(),ad(4),it);
   /* 何問目はヘッダー（A2の行）へ移した。ここには置かない＝引き算の原則 */
   /* 未習で出さなかった件数は黙って消さずに小さく出す（設定「未習の範囲も出す」で外せる） */
   if(S.lockedOut)h+='<div class="mini'+ac()+'"'+ad(4)+' id="qlock">未習 '+n3(S.lockedOut)+'問は出していません</div>';
@@ -4256,13 +4323,15 @@ function nextGauge(){
        「解説を読み上げてる時にゲージが動く」＝止めている間も走っていた）。 */
     /* 合図（読み上げの終わり）が来ていなければ数えない。
        鳴っている間・止めている間も待つ。 */
-    if(NXARM[id]===false||AQ.cur||AQ.list.length||AQ.paused){NXT=setTimeout(start,300);return}
+    /* ノートなど別の画面を見ている間は数えない（2026-09-14）。
+       止めないと、読んでいる間に次の問題へ進んでしまう（実機で確認）。 */
+    if(S.view!=='quiz'||NXARM[id]===false||AQ.cur||AQ.list.length||AQ.paused){NXT=setTimeout(start,300);return}
     /* 止めた分を差し引いた**残り時間**で走らせる（3秒で止めたら残り2秒） */
     var total=st.wait*1000, remain=Math.max(150,total-(NXEL[id]||0));
     gzPaint(btn,remain/total,remain);
     NXT0=Date.now();
     NXT=setTimeout(function(){
-      if(S.phase==='exp'&&S.queue[S.qi]===id&&!NXSTOP[id]){aSe('move');next()}
+      if(S.view==='quiz'&&S.phase==='exp'&&S.queue[S.qi]===id&&!NXSTOP[id]){aSe('move');next()}
     },remain);
   }
   if(NXPAUSED)return;                 /* 止めている間は数え始めない */
@@ -4327,7 +4396,7 @@ function dotsHtml(it){
 /* 動画リンクの行（答えた後だけ出す）。
    ★1か所にまとめる（2026-08-29）。作り直しの経路にしか無かったので、
      あとから作り直された瞬間に上へ足され、読んでいた解説が下へ飛んだ（実測624px）。 */
-function vidLinksHtml(chs,cl,a4){
+function vidLinksHtml(chs,cl,a4,it){
   if(S.view==='quiz'&&S.phase==='q')return '';
   var h='';cl=cl||'';a4=a4||'';
   (chs||[]).slice(0,1).forEach(function(ch){
@@ -4339,6 +4408,24 @@ function vidLinksHtml(chs,cl,a4){
   if((chs||[]).length>1)
     h+='<button class="btn sm" style="min-height:26px;padding:0 8px;align-self:flex-start" data-act="togsrc">＋'
       +(chs.length-1)+'</button>';
+  /* ノートのその節へ（2026-09-14）。動画は20分、ノートは3秒で同じ論点に着く。
+     出題中に出さないのは動画リンクと同じ理由＝節の名前に答えが書いてある。
+     1問が2つの論点にまたがることがあるので、節が違えば2行出す（実データで4問）。 */
+  h+=noteLinksHtml(it,cl,a4);
+  return h;
+}
+function noteLinksHtml(it,cl,a4){
+  if(!it||!NB.ok())return '';
+  var hits=NB.of(it.id),seen={},h='';
+  hits.forEach(function(x){
+    var k=x.sec.no;
+    if(seen[k])return;
+    seen[k]=1;
+    h+='<a class="link'+(cl||'')+'" data-act="noteq" data-c="'+esc(x.cat)+'"'
+      +' data-s="'+k+'"'+(a4||'')+'>'+IC.book
+      +'<span class="lbl">'+esc(x.sec.title||x.sec.key)+'</span>'
+      +'<span class="tm num">ノート</span>'+IC.chev+'</a>';
+  });
   return h;
 }
 
@@ -4369,7 +4456,7 @@ function applyExpDom(it,id){
   }
   /* ★動画リンクを、作り直しのときと同じ位置（答えボタンがあった所）に入れる。
      入れておかないと、あとから作り直された瞬間に足されて解説が下へ飛ぶ。 */
-  var vlk=vidLinksHtml(chapsFor(it),'','');   /* 差し込みでは入場の動きを付けない */
+  var vlk=vidLinksHtml(chapsFor(it),'','',it);   /* 差し込みでは入場の動きを付けない */
   if(vlk){
     var vd=document.createElement('div');
     vd.style.display='contents';
@@ -7414,6 +7501,20 @@ document.addEventListener('click',function(e){
     S.dir=null;go('fields');return;
   }
   if(a==='cat'){S.studyVid=null;m1ToStudy(t,t.getAttribute('data-c'));return}
+  /* ノートを開く／単元ページへ戻る（2026-09-14） */
+  if(a==='note'){
+    S.noteCat=t.getAttribute('data-c');S.noteSec=null;S.noteFrom='unit';S.dir=null;go('note');return}
+  /* 解いた問題から、その問題の論点が載っている節へ飛ぶ */
+  if(a==='noteq'){
+    S.noteCat=t.getAttribute('data-c');S.noteSec=+t.getAttribute('data-s');
+    S.noteFrom=(S.view==='quiz'||S.view==='mock')?'quiz':'unit';
+    S.noteBack=S.view;S.dir=null;
+    try{nextFreeze()}catch(e){}      /* 読んでいる間に次へ進まないように止める */
+    go('note');return}
+  if(a==='noteback'){
+    S.dir=null;
+    if(S.noteFrom==='quiz'){go(S.noteBack||'quiz');try{nextResume()}catch(e){}return}
+    S.cat=S.noteCat;S.ucat=true;go('study');return}
   /* ホームの「次の動画を見る」→ 学習タブのその動画の画面（章の一覧と解くボタンがある）。
      一覧の行（data-act="vid"）と同じ道を通すので、動画側の作りを二重に持たない。 */
   if(a==='gonextvid'){

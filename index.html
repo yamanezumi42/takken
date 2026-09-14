@@ -1440,6 +1440,18 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 :root[data-theme="d"] .sw i{background:#e8e3da}
 :root[data-theme="d"] .ans .b>i{color:inherit}
 
+/* ============ 宅建ノート（2026-09-14） ============
+   ノート本体の見た目は data/notes.js の NOTECSS（.nb の中だけに効く）。
+   ここに置くのは、アプリ側から足す分だけ＝飛んだ先の目印と、上下の余白。 */
+.nb{padding:2mm 0 6mm}
+.nb section{scroll-margin-top:64px}
+.nb section.hit{animation:nbhit 1.6s ease-out 1}
+@keyframes nbhit{
+  0%{background:#fdf3d8}
+  70%{background:#fdf3d8}
+  100%{background:transparent}
+}
+
 /* データ読み込み画面（初回だけ） */
 #importer{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;
           align-items:center;justify-content:center;padding:24px}
@@ -1608,6 +1620,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 使える声の一覧（VOICEVOX。make_voice.py が書く） -->
 <!-- 過去問の読み上げを持っている肢の一覧 -->
 <!-- 補足：用語辞典（そもそも何）と制度カード（なぜ・例）。2026-08-25 -->
+<!-- 宅建ノート48冊（節・論点・問題idの対応表＋本体HTML＋アイコン＋CSS）。
+     tools/build_notes_data.py → tools/build_notes_js.py が作る。2026-09-14 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1641,7 +1655,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b653a044';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='efc73101';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1872,6 +1886,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             pkeep:rec.parts['paren_keep.json']||null,  /* 読む括弧の指定（2026-09-01） */
             terms:rec.parts['terms.json']||null,
             seido:rec.parts['seido.json']||null,
+            notes:rec.parts['notes.json']||null,          /* 宅建ノート（対応表。2026-09-14） */
+            notebody:rec.parts['notes_body.json']||null,  /* 同（本体HTML・アイコン・見た目） */
             hosokuTiming:rec.parts['hosoku_timing.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
@@ -2031,6 +2047,10 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.TAKKEN_PKEEP=d.pkeep||{};           /* 本人の「ここは読んで」（2026-09-01） */
     window.TERMS=d.terms||{};                  /* 用語辞典（そもそも何。2026-08-25） */
     window.SEIDO=d.seido||{};                  /* 制度カード（なぜ・例。2026-08-25） */
+    /* 宅建ノート48冊（2026-09-14）。app.html は NOTES／NOTEHTML／NOTESVG／NOTECSS を見る。 */
+    window.NOTES=d.notes||null;
+    var nb=d.notebody||{};
+    window.NOTEHTML=nb.html||{};window.NOTESVG=nb.svg||'';window.NOTECSS=nb.css||'';
     /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
     window.TAKKEN_HOSOKU_TIMING=d.hosokuTiming||{};
   }
