@@ -1674,7 +1674,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='475d880a';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='e1ca5a77';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1907,6 +1907,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             seido:rec.parts['seido.json']||null,
             notes:rec.parts['notes.json']||null,          /* 宅建ノート（対応表。2026-09-14） */
             notebody:rec.parts['notes_body.json']||null,  /* 同（本体HTML・アイコン・見た目） */
+            ox:rec.parts['ox.json']||null,                /* 試験前の○×（2026-09-20） */
             hosokuTiming:rec.parts['hosoku_timing.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
@@ -2070,6 +2071,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.NOTES=d.notes||null;
     var nb=d.notebody||{};
     window.NOTEHTML=nb.html||{};window.NOTESVG=nb.svg||'';window.NOTECSS=nb.css||'';
+    /* 試験前の○×（2026-09-20）。app.html は OXQ を見る。 */
+    window.OXQ=d.ox||null;
     /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
     window.TAKKEN_HOSOKU_TIMING=d.hosokuTiming||{};
   }
