@@ -324,6 +324,12 @@ a{color:var(--chipfg)}
    2026-08-14 本人の選択。49マスのヒートマップと小分類を軸にした一覧は廃止した。
    行＝「#4｜見出し｜実測時間｜12/41｜›」。バーは置かず、行の左から進捗ぶんを薄緑で塗る。
    「いま」のタグは置かない（本人「いまっていう文字はいらない、見ればわかるからね」）。 */
+/* ○×で確認（2026-09-20）。○と×は指で押す大きさにして、判定は色の帯で出す。 */
+.btn.ox2{flex:1;font-size:26px;line-height:1;padding:18px 0;font-weight:600}
+.oxjudge{margin-top:12px;padding:10px 12px;border-radius:var(--radius);font-size:15px;font-weight:600}
+.oxjudge span{font-size:13px;font-weight:400}
+.oxjudge.ok{background:var(--chipbg);color:var(--chipfg)}
+.oxjudge.ng{background:#fdecec;color:#a4262c}
 .bigrow{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:8px 11px;margin-bottom:6px}
 .bigrow .t{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
@@ -1634,6 +1640,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 補足：用語辞典（そもそも何）と制度カード（なぜ・例）。2026-08-25 -->
 <!-- 宅建ノート48冊（節・論点・問題idの対応表＋本体HTML＋アイコン＋CSS）。
      tools/build_notes_data.py → tools/build_notes_js.py が作る。2026-09-14 -->
+<!-- 試験前の○×（解説付き。ノートの論点ごと）。tools/build_ox_js.py が作る。2026-09-20 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1667,7 +1674,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='19694e6f';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='475d880a';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

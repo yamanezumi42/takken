@@ -1281,7 +1281,10 @@ function normST(o){
      次に開いたときも同じ側を出す（2026-08-15 本人の注文「動画学習か単元学習で分けて」）。
      2026-08-15 本人指示「単元学習をメインにしたい」＝**未設定のときの既定を単元側にする**。
      すでに保存されている選択（cat/video）はここでは触らない＝本人の選択を尊重する。 */
-  if(o.settings.fmode!=='cat'&&o.settings.fmode!=='video')o.settings.fmode='cat';
+  if(o.settings.fmode!=='cat'&&o.settings.fmode!=='video'&&o.settings.fmode!=='ox')o.settings.fmode='cat';
+  /* ○×の記録（2026-09-20）。過去問の成績とは別に持つ＝到達度・正答率に混ぜない。
+     形＝{単元dir:{問の番号:[答えた回数,正解した回数]}} */
+  if(!o.ox||typeof o.ox!=='object')o.ox={};
   /* 「単元で進む」の大分類パネルの開閉（{大分類:true/false}）。null＝まだ一度も触っていない
      ＝そのときは既定（残りがある最初の大分類だけ開く）を使う＝ubOpenMap() 参照。 */
   if(!o.settings.ubOpen||typeof o.settings.ubOpen!=='object')o.settings.ubOpen=null;
@@ -2222,7 +2225,8 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         pendBig:null,         /* 次の1回だけ効く科目基準（startQueue の冒頭で baseBig に移す） */
         /* 学習タブの入口（video＝動画で進む／cat＝単元で進む）。記録から復元する。
            既定は単元側（2026-08-15 本人指示「単元学習をメインにしたい」＝loadST の正規化で決まる） */
-        fmode:((ST.settings&&ST.settings.fmode==='video')?'video':'cat'),
+        fmode:((ST.settings&&(ST.settings.fmode==='video'||ST.settings.fmode==='ox'))?ST.settings.fmode:'cat'),
+        oxDir:null,oxI:0,oxPick:null,   /* ○×で確認（2026-09-20） */
         ubOpen:null,          /* 単元一覧で開いている大分類（ubOpenMap() が作る／記録にも残す） */
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
         enter:true,dir:null,tier:null,ev:null,broke:false};
@@ -2466,6 +2470,7 @@ function render(){
   else if(S.view==='note'){h=vNote();setTimeout(nbAfterRender,0)}
   else if(S.view==='nsearch'){h=vNSearch();setTimeout(nbSearchBind,0)}
   else if(S.view==='nprog')h=vNProg();
+  else if(S.view==='ox')h=vOx();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* ★ホームの見た目を控える（2026-08-25 本人「一瞬でも表示されるのが嫌」）。
@@ -2566,7 +2571,7 @@ function stag(){return ANIMON?' stag':''}
 var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
-function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':'動画学習'):x[1]}
+function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':(S.fmode==='ox'?'○×で確認':'動画学習')):x[1]}
 function renderTabs(){
   var cur=(S.view==='study'||S.view==='fields')?'fields':(S.view==='quiz'?'':S.view);
   /* アイコンのみ（文字ラベルなし）。読み上げ用に aria-label と title を残す */
@@ -3677,13 +3682,15 @@ function vFieldsCat(){
 function vFields(){
   /* 学習の入口は2つ。「動画で進む」＝今までの画面（動画→章→問題）、
      「単元で進む」＝小分類の一覧。選んだ側は記録（settings.fmode）に残し、次に開いたときも同じ側を出す。 */
-  var cm=(S.fmode==='cat');
-  var h='<div class="pad'+stag()+'"><div class="h">'+(cm?'単元学習':'動画学習')+'</div>'
+  var cm=(S.fmode==='cat'),om=(S.fmode==='ox');
+  var h='<div class="pad'+stag()+'"><div class="h">'+(om?'○×で確認':(cm?'単元学習':'動画学習'))+'</div>'
     +'<div style="margin:0 0 12px">'
     /* 2026-08-17 本人指示：入口の切替と絞り込みを**1行**にまとめる
-       （「動画学習　単元学習 / すべて　残り」）。呼び名も画面の見出しと同じ言葉にそろえる。 */
-    +'<button class="tog'+(cm?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画学習</button>'
+       （「動画学習　単元学習 / すべて　残り」）。呼び名も画面の見出しと同じ言葉にそろえる。
+       2026-09-20：3つ目の入口「○×で確認」を足した（ノートの試験前の○×を解説付きにしたもの）。 */
+    +'<button class="tog'+((cm||om)?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画学習</button>'
     +'<button class="tog'+(cm?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="cat">単元学習</button>'
+    +'<button class="tog'+(om?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="ox">○×で確認</button>'
     +(cm?('<span class="togsep">/</span>'
       +'<button class="tog'+(S.urest?'':' on')+'" style="margin:0 6px 6px 0"'
       +' data-act="ufilt" data-v="">すべて</button>'
@@ -3693,7 +3700,7 @@ function vFields(){
     +(NB.ok()?('<button class="tog" style="margin:0 0 6px auto;float:right"'
       +' data-act="nsearch">ノートを検索</button>'):'')
     +'</div>';
-  h+=(cm?vFieldsCat():vFieldsVideo());
+  h+=(om?vFieldsOx():(cm?vFieldsCat():vFieldsVideo()));
   h+='</div>';
   return h;
 }
@@ -3903,7 +3910,8 @@ var NB={
 function vNote(){
   var c=S.noteCat,u=NB.unit(c);
   var back='<button class="btn sm" data-act="noteback" style="margin-bottom:10px">'
-    +esc(S.noteFrom==='quiz'?'問題へ戻る'
+    +esc(S.noteFrom==='ox'?'○×へ戻る'
+        :S.noteFrom==='quiz'?'問題へ戻る'
         :(S.noteFrom==='search'?'検索へ戻る'
         :(S.noteFrom==='prog'?'到達度へ戻る':(c+'へ戻る'))))+'</button>';
   if(!u||typeof NOTEHTML==='undefined'||!NOTEHTML[u.dir])
@@ -4011,6 +4019,139 @@ function vNProg(){
   });
   return h+'</div>';
 }
+/* ---------- ○×で確認（2026-09-20 本人指示） ----------
+   「君がノートで使った試験前の○×の問題を解説付で問題にして欲しいな。
+     動画学習と単元学習の並びに入れてほしい」「論点が多いなら問題増やしてくれたら もっと嬉しいな」
+   元＝work_figs/ox/<単元>.json（論点1,982件を覆う2,173問）→ tools/build_ox_js.py → data/ox.js。
+   **記録は ST.ox に別で持つ**＝過去問5,241問の正答率・到達度には混ぜない（本人の成績を汚さない）。 */
+var OXB={
+  ok:function(){return typeof OXQ!=='undefined'&&!!OXQ},
+  list:function(d){return (this.ok()&&OXQ[d])?OXQ[d]:[]},
+  /* ノートの単元フォルダ（dir）→ 単元名（cat） */
+  cat:function(d){
+    if(!NB.ok())return d;
+    if(!this._c){this._c={};NOTES.units.forEach(function(u){OXB._c[u.dir]=u.cat})}
+    return this._c[d]||d;
+  },
+  /* 出す順＝ノート48冊の並び（習う順）。ox のデータがある単元だけ */
+  dirs:function(){
+    if(this._d)return this._d;
+    var out=[];
+    if(NB.ok()&&this.ok())NOTES.units.forEach(function(u){if(OXQ[u.dir])out.push(u.dir)});
+    this._d=out;return out;
+  },
+  /* 論点id → その論点が載っている節の番号（ノートのその節へ飛ぶため） */
+  sec:function(d,rid){
+    var u=NB.unit(this.cat(d)),no=null;
+    if(!u)return null;
+    u.sections.forEach(function(s){
+      s.ronten.forEach(function(r){if(r.id===rid&&no===null)no=s.no});
+    });
+    return no;
+  },
+  rec:function(d){
+    if(!ST.ox)ST.ox={};
+    if(!ST.ox[d]||typeof ST.ox[d]!=='object')ST.ox[d]={};
+    return ST.ox[d];
+  },
+  /* 答えを1つ記録する。[答えた回数,正解した回数] */
+  put:function(d,i,good){
+    var r=this.rec(d),k=String(i),v=r[k]||[0,0];
+    v[0]++;if(good)v[1]++;r[k]=v;saveST();
+  },
+  stat:function(d){
+    var n=this.list(d).length,r=(ST.ox&&ST.ox[d])?ST.ox[d]:null,a=0,o=0;
+    if(r)for(var k in r){if(!r.hasOwnProperty(k))continue;
+      if(r[k]&&r[k][0]>0)a++;if(r[k]&&r[k][1]>0)o++;}
+    return {n:n,a:a,o:o,rest:n-a,pct:(n?Math.round(o*100/n):0)};
+  },
+  /* 次に出す番号＝まだ正解していない最初の問（全部正解していれば先頭から） */
+  firstRest:function(d){
+    var n=this.list(d).length,r=(ST.ox&&ST.ox[d])?ST.ox[d]:{};
+    for(var i=0;i<n;i++){var v=r[String(i)];if(!v||!v[1])return i}
+    return 0;
+  }
+};
+/* 単元の一覧（動画学習・単元学習と同じ並びの3つ目の入口） */
+function vFieldsOx(){
+  if(!OXB.ok()||!NB.ok())
+    return '<div class="warn">'+IC.warn+' ○×のデータが読み込めていません。data/ox.js を確認してください。</div>';
+  var dirs=OXB.dirs(),byBig={},tot={n:0,a:0,o:0};
+  dirs.forEach(function(d){
+    var c=OXB.cat(d),b=(CINFO[c]&&CINFO[c].big)?CINFO[c].big:'その他';
+    (byBig[b]=byBig[b]||[]).push(d);
+    var st=OXB.stat(d);tot.n+=st.n;tot.a+=st.a;tot.o+=st.o;
+  });
+  var h='<div class="sub" style="margin:0 0 10px">ノートの「試験の直前に」の○×を、解説を付けて問題にしたもの。'
+    +'　全'+n3(tot.n)+'問（論点ごと）／一度でも正解 '+n3(tot.o)+'問。'
+    +'<br>ここの記録は<b>過去問の成績・到達度には入れない</b>（正答率を混ぜないため）。</div>';
+  h+='<div class="m3-heat">';
+  bigsOrdered().forEach(function(b){
+    if(!byBig[b])return;
+    h+='<div class="bigrow"><button class="t" disabled style="cursor:default">'
+      +'<span>'+esc(b)+'</span><span class="cnt">'+n3(byBig[b].length)+'単元</span></button></div>';
+    byBig[b].forEach(function(d){h+=oxRowHtml(d)});
+    delete byBig[b];
+  });
+  Object.keys(byBig).forEach(function(b){
+    h+='<div class="bigrow"><button class="t"><span>'+esc(b)+'</span></button></div>';
+    byBig[b].forEach(function(d){h+=oxRowHtml(d)});
+  });
+  return h+'</div>';
+}
+function oxRowHtml(d){
+  var st=OXB.stat(d),pc=st.pct;
+  return '<button class="vrow'+(st.o===st.n&&st.n?' done':'')+'" data-act="oxopen" data-d="'+esc(d)+'">'
+    +(pc>0&&pc<100?'<span class="fill"></span>':'')
+    +'<span class="rc">'
+    +'<span class="nm">'+esc(OXB.cat(d))+'</span>'
+    +'<span class="n2">'+st.o+'/'+st.n+'</span>'
+    +(st.n&&st.o===st.n?'<span class="ck">'+IC.check+'</span>':'<span class="ar">'+IC.chev+'</span>')
+    +'</span></button>';
+}
+/* 1問ずつ答える画面 */
+function vOx(){
+  var d=S.oxDir,rows=OXB.list(d),i=S.oxI|0;
+  var back='<button class="btn sm" data-act="oxback" style="margin-bottom:10px">一覧へ戻る</button>';
+  if(!rows.length)return '<div class="pad'+stag()+'">'+back+'</div>';
+  var st=OXB.stat(d);
+  if(i>=rows.length){
+    /* 最後まで行ったとき */
+    return '<div class="pad'+stag()+'">'+back
+      +'<div class="panel"><div class="h" style="margin:0">'+esc(OXB.cat(d))+'　おしまい</div>'
+      +'<div class="sub" style="margin:8px 0 0">全'+st.n+'問中、一度でも正解したのは '+st.o+'問。</div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button class="btn" data-act="oxstart" data-d="'+esc(d)+'" data-i="0">はじめから解く</button>'
+      +(st.n-st.o>0?('<button class="btn" data-act="oxstart" data-d="'+esc(d)+'" data-i="rest">'
+        +'まだ正解していない '+(st.n-st.o)+'問へ</button>'):'')
+      +'</div></div></div>';
+  }
+  var row=rows[i],ans=row[1],pick=S.oxPick,done=!!pick;
+  var good=done&&(pick===ans);
+  var sec=done?OXB.sec(d,row[0]):null;
+  var h='<div class="pad'+stag()+'">'+back
+    +'<div class="sub" style="margin:0 0 8px">'+esc(OXB.cat(d))+'　'+(i+1)+' / '+rows.length
+    +'　／　一度でも正解 '+st.o+'問</div>'
+    +'<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(row[2])+'</div></div>';
+  if(!done){
+    h+='<div style="display:flex;gap:10px;margin-top:12px">'
+      +'<button class="btn ox2" data-act="oxans" data-v="○">○</button>'
+      +'<button class="btn ox2" data-act="oxans" data-v="×">×</button>'
+      +'</div>';
+  }else{
+    h+='<div class="oxjudge'+(good?' ok':' ng')+'">'+(good?'正解':'まちがい')
+      +'　<span>答えは '+esc(ans)+'</span></div>'
+      +'<div class="panel" style="margin-top:10px"><div class="sub" style="margin:0 0 6px">解説</div>'
+      +'<div style="font-size:14px;line-height:1.75">'+esc(row[3])+'</div></div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button class="btn" data-act="oxnext">次へ</button>'
+      +(sec?('<button class="btn sm" data-act="oxnote" data-d="'+esc(d)+'" data-s="'+sec+'">'
+        +'ノートのこの節を読む</button>'):'')
+      +'</div>';
+  }
+  return h+'</div>';
+}
+
 /* ---------- ノートの検索（2026-09-14） ----------
    論点1,982件を索引にして、語から節に着く。アプリには今まで検索が無かった。 */
 function nbFlat(){
@@ -7705,8 +7846,26 @@ document.addEventListener('click',function(e){
     dropRun();S.queue=[];S.qi=0;go('home');return;
   }
   /* 学習タブの入口の切り替え（動画で進む／単元で進む）。次に開いたときも同じ側を出す */
+  /* ---- ○×で確認（2026-09-20）。過去問の出題（startQueue）とは別の道を通す＝成績に混ぜない ---- */
+  if(a==='oxopen'||a==='oxstart'){
+    var od=t.getAttribute('data-d'),oi=t.getAttribute('data-i');
+    S.oxDir=od;S.oxPick=null;
+    S.oxI=(oi==='0')?0:OXB.firstRest(od);
+    S.dir=null;go('ox');return}
+  if(a==='oxans'){
+    if(S.oxPick)return;                       /* 二度押しで記録を増やさない */
+    var ov=t.getAttribute('data-v'),orow=OXB.list(S.oxDir)[S.oxI|0];
+    if(!orow)return;
+    S.oxPick=ov;OXB.put(S.oxDir,S.oxI|0,ov===orow[1]);
+    render();return}
+  if(a==='oxnext'){S.oxPick=null;S.oxI=(S.oxI|0)+1;render();return}
+  if(a==='oxnote'){
+    S.noteCat=OXB.cat(t.getAttribute('data-d'));S.noteSec=+t.getAttribute('data-s');
+    S.noteFrom='ox';S.dir=null;go('note');return}
+  if(a==='oxback'){S.dir=null;S.fmode='ox';go('fields');return}
   if(a==='fmode'){
-    var fm=(t.getAttribute('data-v')==='cat')?'cat':'video';
+    var fm=t.getAttribute('data-v');
+    if(fm!=='cat'&&fm!=='video'&&fm!=='ox')return;
     if(S.fmode===fm)return;
     S.fmode=fm;ST.settings.fmode=fm;saveST();
     S.dir=null;go('fields');return;
@@ -7744,6 +7903,7 @@ document.addEventListener('click',function(e){
     go('note');return}
   if(a==='noteback'){
     S.dir=null;
+    if(S.noteFrom==='ox'){go('ox');return}
     if(S.noteFrom==='search'){go('nsearch');return}
     if(S.noteFrom==='prog'){go('nprog');return}
     if(S.noteFrom==='quiz'){go(S.noteBack||'quiz');try{nextResume()}catch(e){}return}
