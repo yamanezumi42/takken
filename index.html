@@ -324,8 +324,24 @@ a{color:var(--chipfg)}
    2026-08-14 本人の選択。49マスのヒートマップと小分類を軸にした一覧は廃止した。
    行＝「#4｜見出し｜実測時間｜12/41｜›」。バーは置かず、行の左から進捗ぶんを薄緑で塗る。
    「いま」のタグは置かない（本人「いまっていう文字はいらない、見ればわかるからね」）。 */
-/* ○×で確認（2026-09-20）。○と×は指で押す大きさにして、判定は色の帯で出す。 */
-.btn.ox2{flex:1;font-size:26px;line-height:1;padding:18px 0;font-weight:600}
+/* ○×で確認（2026-09-20）。○と×のボタンは過去問と同じ .ans .b を使う（別に作らない）。
+   判定は色の帯で出す。 */
+/* 前へ／次へ（2026-09-20 本人「前の問題に戻れないの悲しいね」）。左右に離して置く。 */
+.oxnav{display:flex;gap:10px;margin-top:14px}
+.oxnav .btn{flex:1}
+.oxnav>span{flex:1}
+/* 「12 / 35」を押すと番号の一覧が開く（途中から始める） */
+.oxjump{background:none;border:0;padding:0 2px;font:inherit;color:var(--fg);white-space:nowrap;
+  text-decoration:underline dotted;cursor:pointer;display:inline-flex;align-items:center;gap:3px}
+.oxjump .ico{width:14px;height:14px;flex:0 0 14px}
+.oxgrid{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.oxg{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);font-family:var(--num);font-size:12px;color:var(--muted);
+  cursor:pointer;display:flex;align-items:center;justify-content:center}
+/* 色は「正解＝緑・まちがい＝赤」で分ける。accent（桃色）だと、まちがいの赤と見分けにくい。 */
+.oxg.l1{border-color:#e0a8a4;color:#9c3b34;background:#fbe9e7;font-weight:600}  /* 答えたがまだ正解していない */
+.oxg.l2{border-color:#8fc9ae;color:#1d6b4b;background:#dff0e6;font-weight:600}  /* 一度でも正解した */
+.oxg.cur{outline:2px solid var(--fg);outline-offset:1px}
 .oxjudge{margin-top:12px;padding:10px 12px;border-radius:var(--radius);font-size:15px;font-weight:600}
 .oxjudge span{font-size:13px;font-weight:400}
 .oxjudge.ok{background:var(--chipbg);color:var(--chipfg)}
@@ -1674,7 +1690,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='e1ca5a77';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='edd41e24';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
