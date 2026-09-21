@@ -1293,6 +1293,8 @@ function normST(o){
      形＝{単元:{問id:[答えた回数,正解した回数,最後に選んだ番号]}} と {単元:番号} */
   if(!o.yon||typeof o.yon!=='object')o.yon={};
   if(!o.yonPos||typeof o.yonPos!=='object')o.yonPos={};
+  /* 最後に開いていた4択の一覧（ホームの「続き」に使う） */
+  if(!o.yonLast||typeof o.yonLast!=='object'||!o.yonLast.key)delete o.yonLast;
   /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
   if(!(typeof o.settings.nbZ==='number'&&o.settings.nbZ>=.25&&o.settings.nbZ<=3))
     delete o.settings.nbZ;
@@ -3248,6 +3250,11 @@ function flowHtml(){
     rows.push({act:'resumeMock',lab:'通し演習を続ける',
                st:(mr.i||0)+' / '+tot+'問　いま '+ok2+'問正解',done:false});
   }
+  /* 過去問4択の続き（2026-09-22 本人指示「4択問題も途中から出来るようにホーム画面に出してほしい」）。
+     途中でやめたときだけ1行出す。終わっていれば出さない＝行を無駄に増やさない。 */
+  var yc=YB.ok()?YB.cont():null;
+  if(yc)rows.push({act:'yonhome',lab:'過去問4択の続き（'+yc.title+'）',
+                   st:(yc.i+1)+' / '+n3(yc.n)+'問',done:false});
   /* ①今日の新規（1周が終わるまで）。数字は「今日やる分の残り」＝押せば終わる数。 */
   var restAll=unseenItems(true).length,restNow=unseenItems().length;
   var newLeft=Math.max(0,g.n-g.done);
@@ -4439,7 +4446,31 @@ var YB={
   },
   setPos:function(key,i){
     if(!ST.yonPos||typeof ST.yonPos!=='object')ST.yonPos={};
-    ST.yonPos[key]=i;saveST();
+    ST.yonPos[key]=i;
+    /* ホームの「続き」に出すため、最後に開いていた一覧を覚える（2026-09-22 本人指示） */
+    ST.yonLast={key:key,i:i};
+    saveST();
+  },
+  /* 鍵（cat:単元名／rev:ng／rev:new）から一覧と名前を戻す */
+  fromKey:function(key){
+    if(!key)return null;
+    if(key.indexOf('cat:')===0){
+      var c=key.slice(4);
+      return {ids:this.ofCat(c),title:c,cat:c,from:'unit'};
+    }
+    if(key==='rev:ng')return {ids:this.revList('ng'),title:'まちがえた4択',cat:null,from:'review'};
+    if(key==='rev:new')return {ids:this.revList('new'),title:'まだ解いていない4択',cat:null,from:'review'};
+    return null;
+  },
+  /* ホームに出す「続き」。途中（2問目以降）で、まだ終わっていないものだけ */
+  cont:function(){
+    var l=ST.yonLast;
+    if(!l||!l.key)return null;
+    var f=this.fromKey(l.key);
+    if(!f||!f.ids.length)return null;
+    var i=l.i|0;
+    if(i<1||i>=f.ids.length)return null;
+    return {key:l.key,i:i,n:f.ids.length,title:f.title};
   },
   firstRest:function(ids){
     for(var i=0;i<ids.length;i++)if(this.lv(ids[i])!==2)return i;
@@ -4542,9 +4573,20 @@ function vYon(){
     +((S.yonGrid&&ids.length<=200)?yonGridHtml(i):'');
   return h+'</div>';
 }
-/* リードの ア〜オ の前で行を折る（文字は一切いじらない） */
+/* リードの ア〜オ を**選択肢と同じ組み方**（札＋本文）で出す
+   （2026-09-22 本人が案1を選択。「これ見にくいよね？選択問題と同じようにできないの？」）。
+   文字は足さない・消さない＝組み方だけ変える。 */
 function yonLead(t){
-  return esc(t).replace(/。\s*([アイウエオ])\s/g,'。<br>$1 ');
+  var s=esc(t),re=/。\s*([アイウエオ])\s+/g,m,ix=[];
+  while((m=re.exec(s)))ix.push([m.index+1,m.index+m[0].length,m[1]]);
+  if(!ix.length)return '<p class="ylead">'+s+'</p>';
+  var h='<p class="ylead">'+s.slice(0,ix[0][0])+'</p><div class="aewrap">';
+  for(var i=0;i<ix.length;i++){
+    var en=(i+1<ix.length)?ix[i+1][0]:s.length;
+    h+='<div class="ae"><span class="m">'+ix[i][2]+'</span>'
+      +'<span class="tx">'+s.slice(ix[i][1],en)+'</span></div>';
+  }
+  return h+'</div>';
 }
 /* 解説。ふつうの4択＝選択肢ごと／個数・組合せ＝ア〜エごと（選択肢は「一つ」「ア、ウ」なので） */
 function yonExpHtml(qid,q){
@@ -8390,6 +8432,14 @@ document.addEventListener('click',function(e){
     else if(a==='yonrev')S.yonI=0;   /* 復習は毎回その時の一覧の頭から */
     else{var yp=YB.pos(S.yonKey,yids.length);S.yonI=(yp===null)?YB.firstRest(yids):yp}
     YB.setPos(S.yonKey,S.yonI);
+    S.dir=null;go('yon');return}
+  /* ホームの「4択の続き」＝覚えている一覧を組み直して、やめた所から開く */
+  if(a==='yonhome'){
+    var yl=ST.yonLast,yf=yl?YB.fromKey(yl.key):null;
+    if(!yf||!yf.ids.length){msg('続きがありません');return}
+    S.yonList=yf.ids;S.yonTitle=yf.title;S.yonCat=yf.cat;S.yonKey=yl.key;S.yonFrom=yf.from;
+    S.yonI=Math.min(yl.i|0,yf.ids.length-1);
+    S.yonPick=null;S.yonAgain=false;S.yonGrid=false;S.yonSeen={};S.yonSeq=null;
     S.dir=null;go('yon');return}
   if(a==='yonans'){
     if(S.yonPick)return;

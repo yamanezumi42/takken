@@ -342,9 +342,12 @@ a{color:var(--chipfg)}
    本人「ものすごく見にくいね」＝囲みの線と丸い番号が文章の邪魔をしていた。
    **囲みを外して、本文と選択肢を広く、番号は小さい四角**にする。 */
 .yq{font-size:15.5px;line-height:2.15}
-.yq .lead{margin:0}
-.yq .pt{margin:16px 0 0;padding-left:2.2em;text-indent:-2.2em}   /* ア〜エは1つずつ離す（2026-09-22 本人「個数問題はアイウエで分けてほしい」） */
-.yq .pt .m{display:inline-block;width:1.7em;font-weight:600}
+.yq .ylead{margin:0}   /* アプリには別の .lead（12px・薄い色）があるので名前を分ける */
+/* 個数・組合せの ア〜エ＝選択肢と同じ組み方（2026-09-22 本人が案1を選択） */
+.ae{display:flex;gap:11px;align-items:flex-start;margin:14px 0 0;font-size:15px;line-height:1.95}
+.ae .m{flex:0 0 22px;height:22px;border-radius:5px;background:#5c564e;color:#fff;
+  font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:5px}
+.ae .tx{flex:1;min-width:0}
 .ymeta{text-align:right;font-size:12px;color:var(--muted);line-height:1.9;margin:22px 0 10px}
 .yqno{font-size:16px;font-weight:600;margin:0 0 10px}
 .yono{margin-top:6px}
@@ -1740,7 +1743,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='ec5bd08a';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b7dee024';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
