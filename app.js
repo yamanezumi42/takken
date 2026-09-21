@@ -2234,6 +2234,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         fmode:((ST.settings&&(ST.settings.fmode==='video'||ST.settings.fmode==='ox'))?ST.settings.fmode:'cat'),
         oxDir:null,oxI:0,oxPick:null,   /* ○×で確認（2026-09-20） */
         oxAgain:false,oxGrid:false,     /* もう一度答える／番号で飛ぶの開閉 */
+        oxSeen:{},oxSeq:null,           /* この回に押した答え（記録には残さない）／解いて回る並び */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -4247,6 +4248,17 @@ function oxRowHtml(d){
     +'</span></button>';
 }
 /* 1問ずつ答える画面 */
+/* いま解いて回る並び。null＝全部。'ng'＝まちがえた問題だけ（2026-09-21 本人の注文）。
+   並びはモードに入った時点で固定する＝正解したそばから消えて番号が飛ぶのを防ぐ。 */
+function oxSeq(){return (S.oxSeq&&S.oxSeq.length)?S.oxSeq:null}
+function oxPos(i){var q=oxSeq();return q?q.indexOf(i):i}
+function oxTotal(d){var q=oxSeq();return q?q.length:OXB.list(d).length}
+/* まちがえた問題（答えたが一度も正解していない）の番号 */
+function oxNgList(d){
+  var n=OXB.list(d).length,out=[];
+  for(var i=0;i<n;i++)if(OXB.lv(d,i)===1)out.push(i);
+  return out;
+}
 function vOx(){
   var d=S.oxDir,rows=OXB.list(d),i=S.oxI|0;
   var back='<button class="btn sm" data-act="oxback" style="margin-bottom:10px">一覧へ戻る</button>';
@@ -4261,23 +4273,35 @@ function vOx(){
       +'<button class="btn" data-act="oxstart" data-d="'+esc(d)+'" data-i="0">はじめから解く</button>'
       +(st.n-st.o>0?('<button class="btn" data-act="oxstart" data-d="'+esc(d)+'" data-i="rest">'
         +'まだ正解していない '+(st.n-st.o)+'問へ</button>'):'')
+      +(oxNgList(d).length?('<button class="btn" data-act="oxonly" data-v="ng">'
+        +'まちがえた問題だけ '+oxNgList(d).length+'問</button>'):'')
       +'<button class="btn sm" data-act="oxstart" data-d="'+esc(d)+'" data-i="last">'
         +'最後の問題へ戻る</button>'
       +'</div></div></div>';
   }
   var row=rows[i],ans=row[1];
-  /* いま押した答え。無ければ**前に押した答え**を出す（2026-09-20 本人「前の問題に戻れないの悲しいね」）。
-     「もう一度答える」を押したときだけ、記録があっても白紙にする（S.oxAgain）。 */
-  var pick=S.oxPick||(S.oxAgain?null:OXB.picked(d,i)),done=!!pick;
-  var was=(!S.oxPick&&done);                  /* 前に答えたものを見直している */
+  /* いま押した答え。無ければ**この回に押した答え**（S.oxSeen）を出す。
+     2026-09-21 本人「間違えた問題だけやろうと思ったら、答え出ちゃってて萎えた」＝
+     前の回に答えた記録まで出していたので、解き直しに来たのに答えが先に見えていた。
+     **前の回の答えは出さない**。同じ回の中で前へ戻ったときだけ、そのとき押した答えを出す。 */
+  var pick=S.oxPick||(S.oxAgain?null:(S.oxSeen?S.oxSeen[i]:null))||null,done=!!pick;
+  var was=(!S.oxPick&&done);                  /* この回に答えたものを見直している */
   var good=done&&(pick===ans);
   var sec=done?OXB.sec(d,row[0]):null;
+  var ng=oxNgList(d).length,sq=oxSeq();
   var h='<div class="pad'+stag()+'">'+back
     +'<div class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
     +'<span>'+esc(OXB.cat(d))+'</span>'
-    +'<button class="oxjump" data-act="oxgrid">'+(i+1)+' / '+rows.length
+    +'<button class="oxjump" data-act="oxgrid">'+(oxPos(i)+1)+' / '+oxTotal(d)
     +(S.oxGrid?IC.up:IC.down)+'</button>'
     +'<span>一度でも正解 '+st.o+'問</span></div>'
+    /* すべて／まちがえた問題だけ（2026-09-21）。単元学習の「すべて／残り」と同じ言い方にそろえる。 */
+    +'<div style="margin:0 0 10px">'
+    +'<button class="tog'+(sq?'':' on')+'" style="margin:0 6px 6px 0" data-act="oxonly" data-v="">'
+      +'すべて '+rows.length+'</button>'
+    +'<button class="tog'+(sq?' on':'')+'" style="margin:0 6px 6px 0" data-act="oxonly" data-v="ng"'
+      +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
+    +'</div>'
     +(S.oxGrid?oxGridHtml(d,i):'')
     +'<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(row[2])+'</div></div>';
   if(!done){
@@ -4289,7 +4313,7 @@ function vOx(){
       +'</div>';
   }else{
     h+='<div class="oxjudge'+(good?' ok':' ng')+'">'+(good?'正解':'まちがい')
-      +'　<span>答えは '+esc(ans)+(was?'（前に '+esc(pick)+' と答えました）':'')+'</span></div>'
+      +'　<span>答えは '+esc(ans)+(was?'（'+esc(pick)+' と答えました）':'')+'</span></div>'
       +'<div class="panel" style="margin-top:10px"><div class="sub" style="margin:0 0 6px">解説</div>'
       +'<div style="font-size:14px;line-height:1.75">'+esc(row[3])+'</div></div>'
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
@@ -4299,9 +4323,10 @@ function vOx(){
       +'</div>';
   }
   /* 前へ／次へは**答える前でも後でも**出す（2026-09-20）。前へは先頭では出さない。 */
+  var pos=oxPos(i),tot=oxTotal(d);
   h+='<div class="oxnav">'
-    +(i>0?'<button class="btn" data-act="oxprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
-    +'<button class="btn" data-act="oxnext">'+(i+1>=rows.length?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
+    +(pos>0?'<button class="btn" data-act="oxprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
+    +'<button class="btn" data-act="oxnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
     +'</div>';
   return h+'</div>';
 }
@@ -8023,6 +8048,10 @@ document.addEventListener('click',function(e){
   if(a==='oxopen'||a==='oxstart'){
     var od=t.getAttribute('data-d'),oi=t.getAttribute('data-i');
     S.oxDir=od;S.oxPick=null;S.oxAgain=false;S.oxGrid=false;
+    /* 一覧や終わりの画面から入り直したら、この回に押した答えは**捨てる**
+       ＝解き直しに来たのに答えが先に見える、を起こさない（2026-09-21 本人の指摘）。
+       前へ／次へ／番号で飛ぶ、の移動では捨てない（さっき押した答えは見直せる）。 */
+    S.oxSeen={};S.oxSeq=null;
     /* 何も指定が無ければ**やめた場所から**（2026-09-20 本人「途中から出来ないんだ」）。
        まだ一度も開いていない単元は、まだ正解していない最初の問から。 */
     if(oi==='0')S.oxI=0;
@@ -8036,17 +8065,37 @@ document.addEventListener('click',function(e){
     var ov=t.getAttribute('data-v'),orow=OXB.list(S.oxDir)[S.oxI|0];
     if(!orow)return;
     S.oxPick=ov;S.oxAgain=false;
+    S.oxSeen=S.oxSeen||{};S.oxSeen[S.oxI|0]=ov;   /* この回だけ覚える（前へ戻ったとき用） */
     OXB.put(S.oxDir,S.oxI|0,ov===orow[1],ov);
     render();return}
+  /* すべて／まちがえた問題だけ（2026-09-21 本人「間違えた問題だけやろうと思ったら…」） */
+  if(a==='oxonly'){
+    var ov2=t.getAttribute('data-v');
+    if(ov2==='ng'){
+      var lst=oxNgList(S.oxDir);
+      if(!lst.length){msg('まちがえたままの問題はありません');return}
+      S.oxSeq=lst;S.oxI=lst[0];
+    }else{S.oxSeq=null}
+    S.oxPick=null;S.oxAgain=false;S.oxGrid=false;
+    OXB.setPos(S.oxDir,S.oxI);render();return}
   /* 前へ／次へ／番号で飛ぶ。どれも**やめた場所を更新する**＝閉じても同じ所に戻る。 */
   if(a==='oxnext'||a==='oxprev'||a==='oxgo'){
-    var omax=OXB.list(S.oxDir).length;
-    var oni=(a==='oxgo')?(+t.getAttribute('data-i'))
-           :((S.oxI|0)+(a==='oxnext'?1:-1));
+    var omax=OXB.list(S.oxDir).length,oq=oxSeq(),oni;
+    if(a==='oxgo'){
+      oni=+t.getAttribute('data-i');
+      /* 番号で飛んだ先が「まちがえた問題だけ」の並びに無ければ、すべてに戻す */
+      if(oq&&oq.indexOf(oni)<0)S.oxSeq=null;
+      S.oxGrid=false;                         /* 飛んだら番号の一覧は畳む（問題を隠さない） */
+    }else if(oq){
+      var op=oq.indexOf(S.oxI|0)+(a==='oxnext'?1:-1);
+      if(op<0)op=0;
+      oni=(op>=oq.length)?omax:oq[op];        /* 並びの終わり＝おしまいの画面 */
+    }else{
+      oni=(S.oxI|0)+(a==='oxnext'?1:-1);
+    }
     if(oni<0)oni=0;
     if(oni>omax)oni=omax;                     /* omax＝おしまいの画面 */
     S.oxI=oni;S.oxPick=null;S.oxAgain=false;
-    if(a==='oxgo')S.oxGrid=false;             /* 飛んだら番号の一覧は畳む（問題を隠さない） */
     if(oni<omax)OXB.setPos(S.oxDir,oni);
     render();return}
   if(a==='oxgrid'){S.oxGrid=!S.oxGrid;render();return}
