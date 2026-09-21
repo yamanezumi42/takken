@@ -2243,6 +2243,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         oxSeen:{},oxSeq:null,           /* この回に押した答え（記録には残さない）／解いて回る並び */
         /* 4択（2026-09-21）。○×と同じ決まりで持つ */
         yonCat:null,yonI:0,yonPick:null,yonAgain:false,yonGrid:false,yonSeen:{},yonSeq:null,
+        yonList:null,yonTitle:'',yonKey:'',yonFrom:'unit',  /* いま解いて回っている一覧 */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -4390,82 +4391,119 @@ var YB={
     }
     return this._c[c]||[];
   },
-  rec:function(c){
+  /* その問がどの単元のものか（記録の置き場を決めるのに使う） */
+  catOf:function(qid){
+    var r=RAWBY[qid+'-1']||RAWBY[qid+'-ア'];
+    return r?r.cat:'その他';
+  },
+  /* 全単元の問（復習タブで単元をまたいで拾うため。並びは単元の並び順） */
+  all:function(){
+    if(this._all)return this._all;
+    var out=[];
+    if(this.ok())for(var i=0;i<RAW.length;i++){
+      var it=RAW[i];
+      if(!YONQ[it.qid])continue;
+      if(out[out.length-1]!==it.qid)out.push(it.qid);
+    }
+    this._all=out;return out;
+  },
+  /* 記録は単元ごとの箱に置く（2026-09-21 の形のまま＝すでにある記録を壊さない） */
+  rec:function(qid){
+    var c=this.catOf(qid);
     if(!ST.yon)ST.yon={};
     if(!ST.yon[c]||typeof ST.yon[c]!=='object')ST.yon[c]={};
     return ST.yon[c];
   },
-  put:function(c,qid,good,pick){
-    var r=this.rec(c),v=r[qid]||[0,0,null];
+  /* 読むだけのとき＝箱を作らない（作ると空の箱が49個も記録に溜まる） */
+  box:function(qid){return (ST.yon&&ST.yon[this.catOf(qid)])||null},
+  put:function(qid,good,pick){
+    var r=this.rec(qid),v=r[qid]||[0,0,null];
     v[0]++;if(good)v[1]++;v[2]=pick;r[qid]=v;saveST();
   },
-  lv:function(c,qid){
-    var v=this.rec(c)[qid];
+  lv:function(qid){
+    var b=this.box(qid),v=b?b[qid]:null;
     return (!v||!v[0])?0:(v[1]?2:1);
   },
-  stat:function(c){
-    var ids=this.ofCat(c),r=(ST.yon&&ST.yon[c])?ST.yon[c]:{},a=0,o=0;
-    ids.forEach(function(q){var v=r[q];if(v&&v[0])a++;if(v&&v[1])o++});
-    return {n:ids.length,a:a,o:o,rest:ids.length-a};
+  /* 問の一覧を渡して数える（単元でも復習の一覧でも同じ数え方） */
+  stat:function(ids){
+    var a=0,o=0,me=this;
+    (ids||[]).forEach(function(q){var b=me.box(q),v=b?b[q]:null;
+      if(v&&v[0])a++;if(v&&v[1])o++});
+    return {n:(ids||[]).length,a:a,o:o,rest:(ids||[]).length-a};
   },
-  pos:function(c){
+  /* やめた場所は「どの一覧か」ごとに覚える（単元＝cat:単元名／復習＝rev:…） */
+  pos:function(key,n){
     if(!ST.yonPos||typeof ST.yonPos!=='object')ST.yonPos={};
-    var v=ST.yonPos[c];
-    return (typeof v==='number'&&v>=0&&v<this.ofCat(c).length)?v:null;
+    var v=ST.yonPos[key];
+    return (typeof v==='number'&&v>=0&&v<n)?v:null;
   },
-  setPos:function(c,i){
+  setPos:function(key,i){
     if(!ST.yonPos||typeof ST.yonPos!=='object')ST.yonPos={};
-    ST.yonPos[c]=i;saveST();
+    ST.yonPos[key]=i;saveST();
   },
-  firstRest:function(c){
-    var ids=this.ofCat(c);
-    for(var i=0;i<ids.length;i++)if(this.lv(c,ids[i])!==2)return i;
+  firstRest:function(ids){
+    for(var i=0;i<ids.length;i++)if(this.lv(ids[i])!==2)return i;
     return 0;
   },
-  ngList:function(c){
-    var ids=this.ofCat(c),out=[];
-    for(var i=0;i<ids.length;i++)if(this.lv(c,ids[i])===1)out.push(i);
+  /* まちがえたまま（答えたが一度も正解していない）の番号 */
+  ngList:function(ids){
+    var out=[];
+    for(var i=0;i<ids.length;i++)if(this.lv(ids[i])===1)out.push(i);
+    return out;
+  },
+  /* 復習タブ用＝全単元から拾う。kind='ng'（まちがえたまま）／'new'（まだ解いていない） */
+  revList:function(kind){
+    var all=this.all(),out=[],me=this;
+    all.forEach(function(q){
+      var lv=me.lv(q);
+      if(kind==='ng'?(lv===1):(lv===0))out.push(q);
+    });
     return out;
   }
 };
 function yonSeq(){return (S.yonSeq&&S.yonSeq.length)?S.yonSeq:null}
 function yonPos(i){var q=yonSeq();return q?q.indexOf(i):i}
-function yonTotal(c){var q=yonSeq();return q?q.length:YB.ofCat(c).length}
+/* いま解いて回っている一覧（単元の全問／復習で選んだ問）。S.yonList に入っている */
+function yonIds(){return S.yonList||[]}
+function yonTotal(){var q=yonSeq();return q?q.length:yonIds().length}
 /* 4択の画面。○×の画面と同じ決まりでそろえる
    ＝続きから／前へ・次へ／番号で飛ぶ／まちがえた問題だけ／**答えを先に見せない**。 */
 function vYon(){
-  var c=S.yonCat,ids=YB.ofCat(c),i=S.yonI|0;
+  var ids=yonIds(),i=S.yonI|0,ttl=S.yonTitle||'過去問4択';
   var back='<button class="btn sm" data-act="yonback" style="margin-bottom:10px">'
-    +esc(c)+'へ戻る</button>';
+    +esc(S.yonFrom==='review'?'復習へ戻る':((S.yonCat||'')+'へ戻る'))+'</button>';
   if(!ids.length)return '<div class="pad'+stag()+'">'+back
-    +'<div class="warn">'+IC.warn+' この単元には4択の過去問がありません。</div></div>';
-  var st=YB.stat(c);
+    +'<div class="warn">'+IC.warn+' 出せる4択の過去問がありません。</div></div>';
+  var st=YB.stat(ids);
   if(i>=ids.length){
     return '<div class="pad'+stag()+'">'+back
-      +'<div class="panel"><div class="h" style="margin:0">'+esc(c)+'　おしまい</div>'
+      +'<div class="panel"><div class="h" style="margin:0">'+esc(ttl)+'　おしまい</div>'
       +'<div class="sub" style="margin:8px 0 0">全'+st.n+'問中、一度でも正解したのは '+st.o+'問。</div>'
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
-      +'<button class="btn" data-act="yonstart" data-c="'+esc(c)+'" data-i="0">はじめから解く</button>'
-      +(st.n-st.o>0?('<button class="btn" data-act="yonstart" data-c="'+esc(c)+'" data-i="rest">'
+      +'<button class="btn" data-act="yonstart" data-i="0">はじめから解く</button>'
+      +(st.n-st.o>0?('<button class="btn" data-act="yonstart" data-i="rest">'
         +'まだ正解していない '+(st.n-st.o)+'問へ</button>'):'')
-      +(YB.ngList(c).length?('<button class="btn" data-act="yononly" data-v="ng">'
-        +'まちがえた問題だけ '+YB.ngList(c).length+'問</button>'):'')
+      +(YB.ngList(ids).length?('<button class="btn" data-act="yononly" data-v="ng">'
+        +'まちがえた問題だけ '+YB.ngList(ids).length+'問</button>'):'')
       +'</div></div></div>';
   }
   var qid=ids[i],q=YB.q(qid),opts=YB.opts(qid),head=RAWBY[qid+'-1']||RAWBY[qid+'-ア']||{};
   if(!q)return '<div class="pad'+stag()+'">'+back+'</div>';
   var pick=S.yonPick||(S.yonAgain?null:(S.yonSeen?S.yonSeen[qid]:null))||null;
   var done=!!pick,was=(!S.yonPick&&done),good=done&&(pick===q.a);
-  var ng=YB.ngList(c).length,sq=yonSeq(),pos=yonPos(i),tot=yonTotal(c);
+  var ng=YB.ngList(ids).length,sq=yonSeq(),pos=yonPos(i),tot=yonTotal();
   var src=(head.src&&head.src.raw)?head.src.raw:'';
   var h='<div class="pad'+stag()+'">'+back
-    +'<div class="yqno">第'+(pos+1)+'問</div>'
+    +'<div class="yqno">第'+(pos+1)+'問'
+      /* 復習から入ったときは、どの単元の問題かを出す（単元をまたぐので） */
+      +(S.yonFrom==='review'?'<span class="sub" style="font-weight:400;margin-left:8px">'
+        +esc(YB.catOf(qid))+'</span>':'')+'</div>'
     /* リード（過去問そのまま。一字も変えない）。個数・組合せはア〜エが続いて読みにくいので、
        **行を折って1つずつ離すだけ**（文字は足さない・消さない。2026-09-22 本人指示）。 */
     +'<div class="yq">'+yonLead(q.lead)+'</div>'
     /* 出典と進み具合は右寄せの小さい字（本人が送ってくれた画面と同じ置き方） */
     +'<div class="ymeta">'+(src?esc(src)+'<br>':'')
-      +(pos+1)+'問目／'+(sq?'まちがえた問題':'選択中の問題')+' '+tot+'問</div>';
+      +(pos+1)+'問目／'+(sq?'まちがえた問題':esc(ttl))+' '+tot+'問</div>';
   /* 選択肢4つ */
   h+='<div class="yono">';
   for(var n=1;n<=4;n++){
@@ -4497,10 +4535,11 @@ function vYon(){
       +'すべて '+ids.length+'</button>'
     +'<button class="tog'+(sq?' on':'')+'" style="margin:0 6px 6px 0" data-act="yononly" data-v="ng"'
       +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
-    +'<button class="tog'+(S.yonGrid?' on':'')+'" style="margin:0 6px 6px 0" data-act="yongrid">'
-      +'番号で飛ぶ</button>'
+    /* 番号で飛ぶ＝一覧が大きいと番号が何百個も並んで重くなるので、200問までのときだけ出す */
+    +((ids.length<=200)?('<button class="tog'+(S.yonGrid?' on':'')+'" style="margin:0 6px 6px 0"'
+      +' data-act="yongrid">番号で飛ぶ</button>'):'')
     +'</div>'
-    +(S.yonGrid?yonGridHtml(c,i):'');
+    +((S.yonGrid&&ids.length<=200)?yonGridHtml(i):'');
   return h+'</div>';
 }
 /* リードの ア〜オ の前で行を折る（文字は一切いじらない） */
@@ -4537,10 +4576,10 @@ function yonExpHtml(qid,q){
   if(q&&q.concl)h+='<div class="yoconcl">'+esc(q.concl)+'</div>';
   return h+'</div>';
 }
-function yonGridHtml(c,cur){
-  var ids=YB.ofCat(c),h='<div class="oxgrid">';
+function yonGridHtml(cur){
+  var ids=yonIds(),h='<div class="oxgrid">';
   for(var i=0;i<ids.length;i++){
-    var lv=YB.lv(c,ids[i]);
+    var lv=YB.lv(ids[i]);
     h+='<button class="oxg l'+lv+(i===cur?' cur':'')+'" data-act="yongo" data-i="'+i+'">'+(i+1)+'</button>';
   }
   return h+'</div>';
@@ -4668,7 +4707,7 @@ function vUnit(c,s){
    +(YB.ofCat(c).length?('<div style="display:flex;gap:8px;margin-top:8px">'
      +'<button class="btn sm" style="flex:1;width:auto;margin:0" data-act="yonopen" data-c="'+esc(c)+'">'
      +'過去問を4択で解く（'+n3(YB.ofCat(c).length)+'問'
-     +(YB.stat(c).o?'・正解 '+YB.stat(c).o:'')+'）</button></div>'):'')
+     +(YB.stat(YB.ofCat(c)).o?'・正解 '+YB.stat(YB.ofCat(c)).o:'')+'）</button></div>'):'')
    /* この単元の記録をリセット（2026-08-24 本人指示「単元学習で中途半端に解いた問題を
       リセットしたい。家族法のやつ消したい」）。解いた記録が無いときは出さない。
       押し間違いで消えないように、押すと件数を出して確認を取る（動画側と同じ2段）。
@@ -6965,6 +7004,17 @@ function vReview(){
     +rline('今日の間違い',wt.length,'startWrong',false)
     +rline('間違い',pl.wrong,'startWrongAll',false)
     +'</div>';
+  /* 過去問4択（2026-09-22 本人指示「復習タブにも4択問題を選べるようにして欲しいな」）。
+     1問1答とは数え方が違うので**別の面**に置き、記録も別（ST.yon）。 */
+  if(YB.ok()){
+    var yng=YB.revList('ng').length,ynew=YB.revList('new').length;
+    h+='<div class="panel"><div class="h">過去問4択</div>'
+      +'<div class="mini" style="margin:-4px 0 8px">本試験と同じ4択。単元をまたいで出します。'
+      +'ここの記録は1問1答の成績には入れません。</div>'
+      +ryline('まちがえた4択',yng,'ng',true)
+      +ryline('まだ解いていない4択',ynew,'new',false)
+      +'</div>';
+  }
   h+=filterHtml();
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
   if(!sev.length)h+='<div class="mini">5問以上解いて誤答が35%以上の章、または誤答3回の問題が2つ以上ある章が出ます。今はありません。</div>';
@@ -6989,6 +7039,13 @@ function rline(label,n,act,strong){
   return '<div class="li"><div class="nm">'+esc(label)+'</div>'
     +'<b class="num" style="font-size:20px">'+rn+'</b>'
     +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="'+act+'">解く</button>'
+       :'<span class="mini">—</span>')+'</div>';
+}
+/* 復習タブの4択の行（件数＋解く）。rline と同じ形で、押す先だけ4択にする */
+function ryline(label,n,kind,strong){
+  return '<div class="li"><div class="nm">'+esc(label)+'</div>'
+    +'<b class="num" style="font-size:20px">'+n3(n)+'</b>'
+    +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="yonrev" data-r="'+kind+'">解く</button>'
        :'<span class="mini">—</span>')+'</div>';
 }
 /* xs=1 で1段小さいチップ（並びは .frow2 が持つので余白の指定を外す）。2026-08-23 */
@@ -8311,37 +8368,51 @@ document.addEventListener('click',function(e){
     render();return}
   if(a==='oxgrid'){S.oxGrid=!S.oxGrid;render();return}
   /* ---- 4択（2026-09-21）。○×と同じ決まりで動かす ---- */
-  if(a==='yonopen'||a==='yonstart'){
-    var yc=t.getAttribute('data-c'),yi=t.getAttribute('data-i');
-    S.yonCat=yc;S.yonPick=null;S.yonAgain=false;S.yonGrid=false;
+  /* 単元から（data-c＝単元名）と、復習から（data-r＝ng／new）。どちらも同じ画面で解く */
+  if(a==='yonopen'||a==='yonstart'||a==='yonrev'){
+    var yi=t.getAttribute('data-i');
+    if(a==='yonrev'){
+      var yk=t.getAttribute('data-r');
+      S.yonList=YB.revList(yk);
+      S.yonTitle=(yk==='ng')?'まちがえた4択':'まだ解いていない4択';
+      S.yonKey='rev:'+yk;S.yonFrom='review';S.yonCat=null;
+      if(!S.yonList.length){msg('いまは0問です');return}
+    }else if(a==='yonopen'){
+      var yc=t.getAttribute('data-c');
+      S.yonCat=yc;S.yonList=YB.ofCat(yc);S.yonTitle=yc;
+      S.yonKey='cat:'+yc;S.yonFrom='unit';
+    }
+    var yids=S.yonList||[];
+    S.yonPick=null;S.yonAgain=false;S.yonGrid=false;
     S.yonSeen={};S.yonSeq=null;      /* 入り直したら白紙から（答えを先に見せない） */
     if(yi==='0')S.yonI=0;
-    else if(yi==='rest')S.yonI=YB.firstRest(yc);
-    else{var yp=YB.pos(yc);S.yonI=(yp===null)?YB.firstRest(yc):yp}
-    YB.setPos(yc,S.yonI);
+    else if(yi==='rest')S.yonI=YB.firstRest(yids);
+    else if(a==='yonrev')S.yonI=0;   /* 復習は毎回その時の一覧の頭から */
+    else{var yp=YB.pos(S.yonKey,yids.length);S.yonI=(yp===null)?YB.firstRest(yids):yp}
+    YB.setPos(S.yonKey,S.yonI);
     S.dir=null;go('yon');return}
   if(a==='yonans'){
     if(S.yonPick)return;
-    var yv=+t.getAttribute('data-v'),yid=YB.ofCat(S.yonCat)[S.yonI|0],yq=YB.q(yid);
+    var yv=+t.getAttribute('data-v'),yid=yonIds()[S.yonI|0],yq=YB.q(yid);
     if(!yq)return;
     S.yonPick=yv;S.yonAgain=false;
     S.yonSeen=S.yonSeen||{};S.yonSeen[yid]=yv;
-    YB.put(S.yonCat,yid,yv===yq.a,yv);
+    YB.put(yid,yv===yq.a,yv);
     render();return}
   if(a==='yonagain'){S.yonPick=null;S.yonAgain=true;render();return}
   if(a==='yongrid'){S.yonGrid=!S.yonGrid;render();return}
   if(a==='yononly'){
     var yv2=t.getAttribute('data-v');
     if(yv2==='ng'){
-      var yl=YB.ngList(S.yonCat);
+      var yl=YB.ngList(yonIds());
       if(!yl.length){msg('まちがえたままの問題はありません');return}
       S.yonSeq=yl;S.yonI=yl[0];
     }else{S.yonSeq=null}
     /* 切り替えは「解き直しに来た」合図＝この回に押した答えも捨てて白紙から出す */
     S.yonSeen={};S.yonPick=null;S.yonAgain=false;S.yonGrid=false;
-    YB.setPos(S.yonCat,S.yonI);render();return}
+    YB.setPos(S.yonKey,S.yonI);render();return}
   if(a==='yonnext'||a==='yonprev'||a==='yongo'){
-    var ymax=YB.ofCat(S.yonCat).length,yq2=yonSeq(),yni;
+    var ymax=yonIds().length,yq2=yonSeq(),yni;
     if(a==='yongo'){
       yni=+t.getAttribute('data-i');
       if(yq2&&yq2.indexOf(yni)<0)S.yonSeq=null;
@@ -8356,9 +8427,12 @@ document.addEventListener('click',function(e){
     if(yni<0)yni=0;
     if(yni>ymax)yni=ymax;
     S.yonI=yni;S.yonPick=null;S.yonAgain=false;
-    if(yni<ymax)YB.setPos(S.yonCat,yni);
+    if(yni<ymax)YB.setPos(S.yonKey,yni);
     render();return}
-  if(a==='yonback'){S.dir=null;S.cat=S.yonCat;S.ucat=true;go('study');return}
+  if(a==='yonback'){
+    S.dir=null;
+    if(S.yonFrom==='review'){go('review');return}
+    S.cat=S.yonCat;S.ucat=true;go('study');return}
   if(a==='oxagain'){S.oxPick=null;S.oxAgain=true;render();return}
   if(a==='oxnote'){
     S.noteCat=OXB.cat(t.getAttribute('data-d'));S.noteSec=+t.getAttribute('data-s');
