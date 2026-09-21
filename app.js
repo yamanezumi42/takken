@@ -2248,7 +2248,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         /* 4択（2026-09-21）。○×と同じ決まりで持つ */
         yonCat:null,yonI:0,yonPick:null,yonAgain:false,yonGrid:false,yonSeen:{},yonSeq:null,
         yonList:null,yonTitle:'',yonKey:'',yonFrom:'unit',  /* いま解いて回っている一覧 */
-        yonFOpen:false,                 /* 4択の範囲を開いているか */
+        yonFOpen:false,yonFBig:{},      /* 4択の範囲を開いているか／どの大分類を開いているか */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -4516,21 +4516,20 @@ var YB={
   },
   inRange:function(qid){
     var f=this.f();
-    /* 単元を選んでいればそれが優先。選んでいなければ大分類で見る */
-    if(f.cats.length){if(f.cats.indexOf(this.catOf(qid))<0)return false}
-    else if(f.bigs.length){if(f.bigs.indexOf(this.bigOf(qid))<0)return false}
+    /* 範囲は**単元の集まり**で表す（大分類の名前を押すと、その下の単元がまとめて入る）。
+       1つも選んでいなければ全部が範囲。 */
+    if(f.cats.length&&f.cats.indexOf(this.catOf(qid))<0)return false;
     if(f.difs.length){
       var q=this.q(qid),g=q?D3OF[q.diff]:null;
       if(!g||f.difs.indexOf(g)<0)return false;
     }
     return true;
   },
-  rangeOn:function(){var f=this.f();return !!(f.bigs.length||f.cats.length||f.difs.length)},
+  rangeOn:function(){var f=this.f();return !!(f.cats.length||f.difs.length)},
   /* いまの範囲を1行で言う（面の見出しに出す） */
   rangeLabel:function(){
     var f=this.f(),a=[];
     if(f.cats.length)a.push(f.cats.length===1?f.cats[0]:('単元'+f.cats.length));
-    else if(f.bigs.length)a.push(f.bigs.length===1?f.bigs[0]:('大分類'+f.bigs.length));
     if(f.difs.length)a.push(f.difs.join('・'));
     return a.length?a.join('／'):'すべて';
   },
@@ -7140,9 +7139,12 @@ function rline(label,n,act,strong){
     +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="'+act+'">解く</button>'
        :'<span class="mini">—</span>')+'</div>';
 }
-/* 4択の範囲（2026-09-22 本人「４択問題って範囲選択できなくない？」）。
-   1問1答の「範囲を選ぶ」とは別に、4択の面の中に置く＝どこを絞っているのかが一目で分かる。
-   段は3つ＝大分類 → （選んだ大分類の）単元 → 難易度。 */
+/* 4択の範囲（2026-09-22）。本人「単元学習みたいな選び方で複数選択できるとやりやすいよね」。
+   チップの列から、**単元学習と同じ並び**（大分類を開いて単元を選ぶ・複数可）に変えた。
+   ・大分類の名前を押す＝その下の単元を全部入れる／全部外す
+   ・∨を押す＝その大分類を開く（単元の行が出る）
+   ・単元の行を押す＝その単元だけ入れる／外す
+   ・数字は「その単元の4択の問数（正解済み/全）」＝どこに何問あるかが見える */
 function yonRangeHtml(){
   var f=YB.f();
   var h='<button class="tapline" data-act="yonftog" style="min-height:38px">'
@@ -7150,32 +7152,40 @@ function yonRangeHtml(){
     +'<span class="badge">'+esc(YB.rangeLabel())+'</span>'
     +(S.yonFOpen?IC.up:IC.down)+'</button>';
   if(!S.yonFOpen)return h;
-  h+='<div class="hr"></div>'
-    +'<div class="frow2"><span class="lb">大分類</span><span class="bs">'
-    +'<button class="tog xs'+((!f.bigs.length&&!f.cats.length)?' on':'')
-      +'" data-act="yonfclear">すべて</button>';
+  h+='<div class="hr"></div>';
   bigsOrdered().forEach(function(b){
-    h+='<button class="tog xs'+(f.bigs.indexOf(b)>=0?' on':'')
-      +'" data-act="yonfbig" data-b="'+esc(b)+'">'+esc(b)+'</button>';
-  });
-  h+='</span></div>';
-  /* 単元は、選んだ大分類の分だけ出す（48個を一度に並べない） */
-  var bs=f.bigs.length?f.bigs:[];
-  if(bs.length){
-    h+='<div class="frow2"><span class="lb">単元</span><span class="bs">';
-    bs.forEach(function(b){
-      catsSorted(b).forEach(function(c2){
-        if(!YB.ofCat(c2).length)return;            /* 4択が無い単元は出さない */
-        h+='<button class="tog xs'+(f.cats.indexOf(c2)>=0?' on':'')
-          +'" data-act="yonfcat" data-c="'+esc(c2)+'">'+esc(c2)+'</button>';
-      });
+    var cs=catsSorted(b).filter(function(c2){return YB.ofCat(c2).length>0});
+    if(!cs.length)return;
+    var nsel=cs.filter(function(c2){return f.cats.indexOf(c2)>=0}).length;
+    var onb=(nsel===cs.length&&cs.length>0);
+    var nq=0;cs.forEach(function(c2){nq+=YB.ofCat(c2).length});
+    h+='<div class="rowx" style="gap:0;align-items:stretch">'
+      +'<button class="tapline" data-act="yonfball" data-b="'+esc(b)+'" style="min-height:40px;flex:1">'
+      +'<span class="ck" style="width:20px;opacity:'+(onb?1:0.22)+'">'+IC.check+'</span>'
+      +'<span style="flex:1;font-weight:600">'+esc(b)+'</span>'
+      +((nsel&&!onb)?'<span class="chip">'+nsel+'</span>':'')
+      +'<span class="badge">'+n3(nq)+'問</span></button>'
+      +'<button class="tapline" data-act="yonfopen" data-b="'+esc(b)+'"'
+      +' style="min-height:40px;width:44px;justify-content:center;flex:none" aria-label="開く">'
+      +(S.yonFBig[b]?IC.up:IC.down)+'</button></div>';
+    if(!S.yonFBig[b])return;
+    cs.forEach(function(c2){
+      var ids=YB.ofCat(c2),stt=YB.stat(ids),on=(f.cats.indexOf(c2)>=0);
+      h+='<button class="tapline" data-act="yonfcat" data-c="'+esc(c2)+'"'
+        +' style="min-height:38px;padding-left:28px">'
+        +'<span class="ck" style="width:20px;opacity:'+(on?1:0.22)+'">'+IC.check+'</span>'
+        +'<span style="flex:1">'+esc(c2)+'</span>'
+        +'<span class="badge">'+stt.o+'/'+n3(stt.n)+'問</span></button>';
     });
-    h+='</span></div>';
-  }
-  h+='<div class="frow2"><span class="lb">難易度</span><span class="bs">'
+  });
+  h+='<div class="frow2" style="margin-top:6px"><span class="lb">難易度</span><span class="bs">'
     +D3.map(function(d){return '<button class="tog xs'+(f.difs.indexOf(d)>=0?' on':'')
       +'" data-act="yonfdif" data-d="'+d+'">'+d+'</button>'}).join('')
-    +'</span></div><div class="hr"></div>';
+    +'</span></div>'
+    +'<div class="spread" style="margin-top:6px"><span class="mini">選んだ範囲 <b class="num">'
+      +n3(YB.revList('ng').length+YB.revList('new').length)+'</b> 問（まだ解いていない＋まちがえた）</span>'
+    +'<button class="btn sm" data-act="yonfclear">範囲をクリア</button></div>'
+    +'<div class="hr"></div>';
   return h;
 }
 /* 復習タブの4択の行（件数＋解く）。rline と同じ形で、押す先だけ4択にする */
@@ -8532,14 +8542,21 @@ document.addEventListener('click',function(e){
   if(a==='yonftog'){S.yonFOpen=!S.yonFOpen;render();return}
   /* 「すべて」＝大分類・単元・難易度の**全部**を外す（言葉どおりに戻す） */
   if(a==='yonfclear'){var f0=YB.f();f0.bigs=[];f0.cats=[];f0.difs=[];saveST();render();return}
-  if(a==='yonfbig'){
-    var f1=YB.f(),b1=t.getAttribute('data-b'),i1=f1.bigs.indexOf(b1);
-    if(i1>=0){
-      f1.bigs.splice(i1,1);
-      /* その大分類の単元の選択も外す（見えなくなる選択を残さない） */
-      f1.cats=f1.cats.filter(function(c2){return (CINFO[c2]||{}).big!==b1});
-    }else f1.bigs.push(b1);
+  /* 大分類の名前＝その下の単元を全部入れる／全部外す（単元学習と同じ感じ） */
+  if(a==='yonfball'){
+    var f1=YB.f(),b1=t.getAttribute('data-b');
+    var cs1=catsSorted(b1).filter(function(c2){return YB.ofCat(c2).length>0});
+    var all1=cs1.every(function(c2){return f1.cats.indexOf(c2)>=0});
+    cs1.forEach(function(c2){
+      var i1=f1.cats.indexOf(c2);
+      if(all1){if(i1>=0)f1.cats.splice(i1,1)}
+      else if(i1<0)f1.cats.push(c2);
+    });
+    f1.bigs=[];                       /* 単元の選択で表すので大分類だけの指定は持たない */
     saveST();render();return}
+  if(a==='yonfopen'){
+    var b2=t.getAttribute('data-b');
+    S.yonFBig[b2]=!S.yonFBig[b2];render();return}
   if(a==='yonfcat'){
     var f2=YB.f(),c3=t.getAttribute('data-c'),i2=f2.cats.indexOf(c3);
     if(i2>=0)f2.cats.splice(i2,1);else f2.cats.push(c3);
