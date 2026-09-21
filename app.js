@@ -1287,6 +1287,10 @@ function normST(o){
   if(!o.ox||typeof o.ox!=='object')o.ox={};
   /* 単元ごとの「やめた場所」（2026-09-20 本人「途中から出来ないんだ」）。形＝{単元dir:番号} */
   if(!o.oxPos||typeof o.oxPos!=='object')o.oxPos={};
+  /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
+  if(!(typeof o.settings.nbZ==='number'&&o.settings.nbZ>=.25&&o.settings.nbZ<=3))
+    delete o.settings.nbZ;
+  if(o.settings.nbFit!=='col'&&o.settings.nbFit!=='page')delete o.settings.nbFit;
   /* 「単元で進む」の大分類パネルの開閉（{大分類:true/false}）。null＝まだ一度も触っていない
      ＝そのときは既定（残りがある最初の大分類だけ開く）を使う＝ubOpenMap() 参照。 */
   if(!o.settings.ubOpen||typeof o.settings.ubOpen!=='object')o.settings.ubOpen=null;
@@ -2230,6 +2234,10 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         fmode:((ST.settings&&(ST.settings.fmode==='video'||ST.settings.fmode==='ox'))?ST.settings.fmode:'cat'),
         oxDir:null,oxI:0,oxPick:null,   /* ○×で確認（2026-09-20） */
         oxAgain:false,oxGrid:false,     /* もう一度答える／番号で飛ぶの開閉 */
+        /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
+        nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
+        nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
+               ?ST.settings.nbFit:null),
         ubOpen:null,          /* 単元一覧で開いている大分類（ubOpenMap() が作る／記録にも残す） */
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
         enter:true,dir:null,tier:null,ev:null,broke:false};
@@ -3921,8 +3929,109 @@ function vNote(){
     return '<div class="pad'+stag()+'">'+back
       +'<div class="warn">'+IC.warn+' ノートのデータが読み込めていません。data/notes.js を確認してください。</div></div>';
   NB.mount();
-  return '<div class="pad'+stag()+'">'+back
-    +'<div class="nbwrap"><div class="nb">'+NOTEHTML[u.dir]+'</div></div></div>';
+  return '<div class="pad'+stag()+'">'+back+nbBarHtml()
+    +'<div class="nbwrap"><div class="nbz"><div class="nb">'+NOTEHTML[u.dir]+'</div></div></div></div>';
+}
+/* 拡大縮小の操作（2026-09-21）。紙のままで読めるように、指でも押しても寄れるようにする。
+   ・−／＋＝1段ずつ（×1.25） ・段＝1段の幅にぴったり ・全体＝紙の幅にぴったり
+   ・2本指のつまみ／画面を2回たたく、でも変わる（nbPinch） */
+function nbBarHtml(){
+  var z=Math.round((S.nbZ||1)*100);
+  return '<div class="nbbar">'
+    +'<button class="z big" data-act="nbz" data-v="out" aria-label="小さく">−</button>'
+    +'<span class="pct">'+z+'%</span>'
+    +'<button class="z big" data-act="nbz" data-v="in" aria-label="大きく">＋</button>'
+    +'<button class="z'+(S.nbFit==='col'?' on':'')+'" data-act="nbz" data-v="col">段に合わせる</button>'
+    +'<button class="z'+(S.nbFit==='page'?' on':'')+'" data-act="nbz" data-v="page">全体</button>'
+    +'</div>';
+}
+/* 紙の実寸（拡大の前）。offsetWidth は transform の影響を受けないのでそのまま測れる。 */
+function nbNat(){
+  var nb=document.querySelector('.nb');
+  if(!nb)return null;
+  var gap=41;
+  var inn=nb.querySelector('.in,.cover2');
+  if(inn){var g=parseFloat(getComputedStyle(inn).columnGap);if(g>0)gap=g}
+  return {w:nb.offsetWidth,h:nb.offsetHeight,col:(nb.offsetWidth-gap)/2};
+}
+/* 「段に合わせる」「全体」の倍率を出す。使える幅＝外側の箱の内寸。 */
+function nbFitZ(kind){
+  var wrap=document.querySelector('.nbwrap'),nat=nbNat();
+  if(!wrap||!nat)return 1;
+  var avail=wrap.clientWidth-28;                    /* .nbwrap の左右の余白 14px×2 */
+  if(avail<40)avail=wrap.clientWidth;
+  var z=avail/((kind==='col')?nat.col:nat.w);
+  return Math.max(.25,Math.min(3,z));
+}
+/* いまの倍率を当てる。外側の箱には**拡大後の大きさ**を持たせる＝横スクロールの幅が合う。 */
+function nbApplyZoom(){
+  var wrap=document.querySelector('.nbwrap'),zb=document.querySelector('.nbz'),nat=nbNat();
+  if(!wrap||!zb||!nat)return;
+  var z=S.nbZ||1;
+  zb.style.transform='scale('+z+')';
+  zb.style.width=Math.round(nat.w*z)+'px';
+  zb.style.height=Math.round(nat.h*z)+'px';
+  var p=document.querySelector('.nbbar .pct');
+  if(p)p.textContent=Math.round(z*100)+'%';
+  var b=document.querySelectorAll('.nbbar [data-act="nbz"]');
+  for(var i=0;i<b.length;i++){
+    var v=b[i].getAttribute('data-v');
+    if(v==='col'||v==='page')b[i].classList.toggle('on',S.nbFit===v);
+  }
+}
+/* 倍率を決める。kind＝'in'／'out'／'col'／'page'／数値 */
+function nbSetZoom(kind,keepFit){
+  var nat=nbNat();if(!nat)return;
+  if(kind==='in'||kind==='out'){
+    S.nbZ=Math.max(.25,Math.min(3,(S.nbZ||1)*(kind==='in'?1.25:1/1.25)));
+    if(!keepFit)S.nbFit=null;
+  }else if(kind==='col'||kind==='page'){
+    S.nbZ=nbFitZ(kind);S.nbFit=kind;
+  }else{
+    S.nbZ=Math.max(.25,Math.min(3,+kind||1));
+    if(!keepFit)S.nbFit=null;
+  }
+  ST.settings.nbZ=S.nbZ;ST.settings.nbFit=S.nbFit;saveST();
+  nbApplyZoom();
+}
+/* 2本指のつまみと、2回たたく。中の横スクロールと取り合いにならないよう自前で受ける。 */
+function nbPinch(){
+  var wrap=document.querySelector('.nbwrap');
+  if(!wrap||wrap._pin)return;
+  wrap._pin=true;
+  var d0=0,z0=1,mx=0,my=0,sl=0,sy=0;
+  function dist(t){var a=t[0],b=t[1];
+    return Math.sqrt(Math.pow(a.clientX-b.clientX,2)+Math.pow(a.clientY-b.clientY,2))}
+  wrap.addEventListener('touchstart',function(e){
+    if(e.touches.length!==2)return;
+    d0=dist(e.touches);z0=S.nbZ||1;
+    var r=wrap.getBoundingClientRect();
+    mx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left;
+    my=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
+    sl=wrap.scrollLeft;sy=window.pageYOffset;
+  },{passive:true});
+  wrap.addEventListener('touchmove',function(e){
+    if(e.touches.length!==2||!d0)return;
+    e.preventDefault();                       /* 端末の拡大に持っていかれないように */
+    var z=Math.max(.25,Math.min(3,z0*dist(e.touches)/d0)),k=z/z0;
+    S.nbZ=z;S.nbFit=null;nbApplyZoom();
+    /* つまんだ点を動かさない＝指の下が中心になる */
+    wrap.scrollLeft=(sl+mx)*k-mx;
+    var r=wrap.getBoundingClientRect(),top=sy+r.top;
+    window.scrollTo(0,Math.max(0,top+((sy-top)+my)*k-my));
+  },{passive:false});
+  wrap.addEventListener('touchend',function(e){
+    if(e.touches.length)return;
+    if(d0){d0=0;ST.settings.nbZ=S.nbZ;ST.settings.nbFit=S.nbFit;saveST()}
+  },{passive:true});
+  /* 2回たたく＝「段に合わせる」と「全体」を行き来する（紙の写真と同じ感じ） */
+  var last=0;
+  wrap.addEventListener('click',function(e){
+    if(e.target.closest&&e.target.closest('button'))return;
+    var now=Date.now();
+    if(now-last<320){nbSetZoom(S.nbFit==='col'?'page':'col');last=0;return}
+    last=now;
+  });
 }
 /* ---------- 論点ごとの到達度（2026-09-14。SPEC §4-7-2「第3版」の論点の軸） ----------
    数え方は単元の達成度（catStat の prog）と同じ＝**一度でも正解した問題の割合**。
@@ -4288,6 +4397,15 @@ function nbAfterRender(){
   var secs=box.querySelectorAll('section');
   for(var i=0;i<secs.length;i++)secs[i].id='nbs'+(i+1);
   nbMarkSections();                      /* 節の見出しに到達度を差し込む（2026-09-14） */
+  /* 拡大縮小（2026-09-21）。初めて開くときは**読める大きさ**から始める＝
+     紙の全体を入れると11.6ptが6px以下になって読めないので、狭い画面では1段に合わせる。 */
+  if(typeof S.nbZ!=='number'||!(S.nbZ>0)){
+    var fit=(nbFitZ('page')*1>=.78)?'page':'col';   /* 全体でも字が小さくならないなら全体 */
+    S.nbFit=fit;S.nbZ=nbFitZ(fit);
+  }else if(S.nbFit){
+    S.nbZ=nbFitZ(S.nbFit);               /* 画面の幅が変わっていても合わせ直す */
+  }
+  nbApplyZoom();nbPinch();
   var n=S.noteSec;S.noteSec=null;
   if(!n)return;
   var el=document.getElementById('nbs'+n);
@@ -7954,6 +8072,8 @@ document.addEventListener('click',function(e){
     S.noteCat=t.getAttribute('data-c');S.noteSec=+t.getAttribute('data-s');
     S.noteFrom=(t.getAttribute('data-from')==='prog')?'prog':'search';
     S.dir=null;go('note');return}
+  /* ノートの拡大縮小（2026-09-21） */
+  if(a==='nbz'){nbSetZoom(t.getAttribute('data-v'));return}
   if(a==='nprog'){S.noteCat=t.getAttribute('data-c');S.dir=null;go('nprog');return}
   /* 節から解く（2026-09-14）。単元から解くときと同じ道を通す＝解禁は科目で判定し、
      並びはあこ課長の習う順（基準の動画は渡さない）。 */

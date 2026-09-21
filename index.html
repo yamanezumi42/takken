@@ -1476,8 +1476,22 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 .nb .nbsolvew .btn{width:auto;min-height:30px;padding:0 12px;font-size:11.6pt}
 /* 紙の1段の幅そのままで出す（2026-09-14 本人「ノートのままの方が見やすい」
    「別に拡大したらいいだけ」）。携帯より広いので、ノートの所だけ横に動かせるようにする。 */
-.nbwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -14px;padding:0 14px}
+.nbwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -14px;padding:0 14px;
+  touch-action:pan-x pan-y}      /* 2本指の拡大縮小は自前で受ける（下の nbPinch） */
 .nb{width:135.5mm;padding:2mm 0 6mm}
+/* 拡大縮小（2026-09-21 本人「ノート拡大縮小がしにくいんだけどもう少し何とかならないの？」）。
+   紙は275mm＝携帯より広い。いままでは端末まかせのつまみ操作しかなく、
+   中の横スクロールと画面の拡大が取り合いになって思った所に寄れなかった。
+   .nbz を transform で拡大し、外側の箱に**拡大後の大きさ**を持たせる＝巻物の寸法が合う。 */
+.nbz{transform-origin:0 0}
+.nbbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:6px;
+  margin:0 -14px 8px;padding:6px 14px;background:var(--bg);flex-wrap:wrap}
+.nbbar .z{min-width:38px;height:32px;padding:0 10px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);color:var(--fg);font-family:var(--font);font-size:12px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center}
+.nbbar .z.big{font-size:18px;line-height:1;font-family:var(--num)}
+.nbbar .z.on{background:var(--chipbg);color:var(--chipfg);border-color:var(--chipbg)}
+.nbbar .pct{font-family:var(--num);font-size:12px;color:var(--muted);min-width:44px;text-align:center}
 .nb section{scroll-margin-top:64px}
 .nb section.hit{animation:nbhit 1.6s ease-out 1}
 @keyframes nbhit{
@@ -1690,7 +1704,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='edd41e24';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='f66b6c00';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
