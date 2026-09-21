@@ -338,6 +338,32 @@ a{color:var(--chipfg)}
 .oxg{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
   background:var(--panel);font-family:var(--num);font-size:12px;color:var(--muted);
   cursor:pointer;display:flex;align-items:center;justify-content:center}
+/* 4択（2026-09-21）。選択肢は番号＋本文の横並び。押せる面を大きく取る。 */
+.yono{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.yo{display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px 13px;font-family:var(--font);font-size:14px;line-height:1.75;color:var(--fg);
+  cursor:pointer}
+.yo .no{flex:0 0 24px;height:24px;border-radius:50%;background:var(--soft);color:var(--muted);
+  font-family:var(--num);font-size:12px;display:flex;align-items:center;justify-content:center;
+  margin-top:1px}
+.yo .tx{flex:1;min-width:0}
+.yo[disabled]{cursor:default;opacity:1}
+.yo.ok{border-color:#8fc9ae;background:#dff0e6}
+.yo.ok .no{background:#8fc9ae;color:#12503a}
+.yo.ng{border-color:#e0a8a4;background:#fbe9e7}
+.yo.ng .no{background:#e0a8a4;color:#7d2b25}
+/* 解説（選択肢ごと／ア〜エごと） */
+.yoexp{border-top:1px dashed var(--line);padding:10px 0 2px}
+.yoexp:first-of-type{border-top:0;padding-top:0}
+.yoexp .hd{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.yoexp .lb{font-family:var(--num);font-size:12px;color:var(--muted);
+  min-width:20px;height:20px;border-radius:6px;background:var(--soft);
+  display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.yoexp .lb.ok{background:#dff0e6;color:#1d6b4b}
+.yoexp .lb.ng{background:#fbe9e7;color:#9c3b34}
+.yoexp .tx{font-size:13px;line-height:1.7;color:var(--muted);margin:0 0 4px}
+.yoexp .ex{font-size:13.5px;line-height:1.8}
 /* 色は「正解＝緑・まちがい＝赤」で分ける。accent（桃色）だと、まちがいの赤と見分けにくい。 */
 .oxg.l1{border-color:#e0a8a4;color:#9c3b34;background:#fbe9e7;font-weight:600}  /* 答えたがまだ正解していない */
 .oxg.l2{border-color:#8fc9ae;color:#1d6b4b;background:#dff0e6;font-weight:600}  /* 一度でも正解した */
@@ -1671,6 +1697,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 宅建ノート48冊（節・論点・問題idの対応表＋本体HTML＋アイコン＋CSS）。
      tools/build_notes_data.py → tools/build_notes_js.py が作る。2026-09-14 -->
 <!-- 試験前の○×（解説付き。ノートの論点ごと）。tools/build_ox_js.py が作る。2026-09-20 -->
+<!-- 過去問を4択のまま出すためのデータ。tools/build_yon_js.py が作る。2026-09-21 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
 
@@ -1704,7 +1731,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2a1bbf0d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='d76d2a6d';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -1938,6 +1965,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             notes:rec.parts['notes.json']||null,          /* 宅建ノート（対応表。2026-09-14） */
             notebody:rec.parts['notes_body.json']||null,  /* 同（本体HTML・アイコン・見た目） */
             ox:rec.parts['ox.json']||null,                /* 試験前の○×（2026-09-20） */
+            yon:rec.parts['yon.json']||null,              /* 4択の過去問（2026-09-21） */
             hosokuTiming:rec.parts['hosoku_timing.json']||null};
   }
   /* 差分だけ取って IndexedDB を更新する。戻り値＝落としたファイル数。 */
@@ -2103,6 +2131,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.NOTEHTML=nb.html||{};window.NOTESVG=nb.svg||'';window.NOTECSS=nb.css||'';
     /* 試験前の○×（2026-09-20）。app.html は OXQ を見る。 */
     window.OXQ=d.ox||null;
+    /* 過去問を4択のまま（2026-09-21）。app.html は YONQ を見る。 */
+    window.YONQ=d.yon||null;
     /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
     window.TAKKEN_HOSOKU_TIMING=d.hosokuTiming||{};
   }
