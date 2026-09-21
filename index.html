@@ -338,32 +338,41 @@ a{color:var(--chipfg)}
 .oxg{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
   background:var(--panel);font-family:var(--num);font-size:12px;color:var(--muted);
   cursor:pointer;display:flex;align-items:center;justify-content:center}
-/* 4択（2026-09-21）。選択肢は番号＋本文の横並び。押せる面を大きく取る。 */
-.yono{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-.yo{display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%;
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  padding:12px 13px;font-family:var(--font);font-size:14px;line-height:1.75;color:var(--fg);
-  cursor:pointer}
-.yo .no{flex:0 0 24px;height:24px;border-radius:50%;background:var(--soft);color:var(--muted);
+/* 4択（2026-09-21／2026-09-22 本人が案10＋答えはB＋解説の形を選択）。
+   本人「ものすごく見にくいね」＝囲みの線と丸い番号が文章の邪魔をしていた。
+   **囲みを外して、本文と選択肢を広く、番号は小さい四角**にする。 */
+.yq{font-size:15.5px;line-height:2.15}
+.yq .lead{margin:0}
+.yq .pt{margin:16px 0 0;padding-left:2.2em;text-indent:-2.2em}   /* ア〜エは1つずつ離す（2026-09-22 本人「個数問題はアイウエで分けてほしい」） */
+.yq .pt .m{display:inline-block;width:1.7em;font-weight:600}
+.ymeta{text-align:right;font-size:12px;color:var(--muted);line-height:1.9;margin:22px 0 10px}
+.yqno{font-size:16px;font-weight:600;margin:0 0 10px}
+.yono{margin-top:6px}
+.yo{display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%;
+  background:none;border:0;border-radius:10px;padding:15px 4px;
+  font-family:var(--font);font-size:15px;line-height:1.9;color:var(--fg);cursor:pointer}
+.yo .no{flex:0 0 22px;height:22px;border-radius:5px;background:#5c564e;color:#fff;
   font-family:var(--num);font-size:12px;display:flex;align-items:center;justify-content:center;
-  margin-top:1px}
+  margin-top:5px}
 .yo .tx{flex:1;min-width:0}
 .yo[disabled]{cursor:default;opacity:1}
-.yo.ok{border-color:#8fc9ae;background:#dff0e6}
-.yo.ok .no{background:#8fc9ae;color:#12503a}
-.yo.ng{border-color:#e0a8a4;background:#fbe9e7}
-.yo.ng .no{background:#e0a8a4;color:#7d2b25}
-/* 解説（選択肢ごと／ア〜エごと） */
-.yoexp{border-top:1px dashed var(--line);padding:10px 0 2px}
-.yoexp:first-of-type{border-top:0;padding-top:0}
-.yoexp .hd{display:flex;align-items:center;gap:8px;margin-bottom:4px}
-.yoexp .lb{font-family:var(--num);font-size:12px;color:var(--muted);
-  min-width:20px;height:20px;border-radius:6px;background:var(--soft);
-  display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
-.yoexp .lb.ok{background:#dff0e6;color:#1d6b4b}
-.yoexp .lb.ng{background:#fbe9e7;color:#9c3b34}
-.yoexp .tx{font-size:13px;line-height:1.7;color:var(--muted);margin:0 0 4px}
-.yoexp .ex{font-size:13.5px;line-height:1.8}
+/* 答えたあと＝**線だけ**（本人が案Bを選択）。塗りつぶさない */
+.yo.ok{box-shadow:inset 0 0 0 1.5px #9ccdb5}
+.yo.ok .no{background:#2f8b6d}
+.yo.ng{box-shadow:inset 0 0 0 1.5px #e0a8a4}
+.yo.ng .no{background:#a8534b}
+/* 解説（本人のスクショの形）。番号の札 → 肢の文（かぎかっこ・薄い字）→ 解説 → 点線 */
+.yoexp{border-top:1px dashed var(--line);padding:14px 0 2px;margin-top:14px}
+.yoexp:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.yoexp .lb{font-family:var(--num);font-size:12px;color:#fff;background:#5c564e;
+  min-width:20px;height:20px;border-radius:5px;
+  display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-bottom:6px}
+.yoexp .lb.ok{background:#2f8b6d}
+.yoexp .lb.ng{background:#a8534b}
+.yoexp .tx{font-size:13px;line-height:1.85;color:var(--muted);margin:0 0 8px}
+.yoexp .ex{font-size:14px;line-height:1.95}
+.yoexp .ex b{font-weight:600}
+.yoconcl{margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);font-size:14px}
 /* 色は「正解＝緑・まちがい＝赤」で分ける。accent（桃色）だと、まちがいの赤と見分けにくい。 */
 .oxg.l1{border-color:#e0a8a4;color:#9c3b34;background:#fbe9e7;font-weight:600}  /* 答えたがまだ正解していない */
 .oxg.l2{border-color:#8fc9ae;color:#1d6b4b;background:#dff0e6;font-weight:600}  /* 一度でも正解した */
@@ -1731,7 +1740,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='d76d2a6d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='5ae71791';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

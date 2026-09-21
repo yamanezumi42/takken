@@ -4361,7 +4361,7 @@ var YB={
   ok:function(){return typeof YONQ!=='undefined'&&!!YONQ},
   q:function(id){
     var v=(this.ok()&&YONQ[id])?YONQ[id]:null;
-    return v?{a:v[0],lead:v[1],type:v[2]}:null;
+    return v?{a:v[0],lead:v[1],type:v[2],concl:v[3]||''}:null;
   },
   /* 選択肢4つ（過去問に印刷されているそのままの文） */
   opts:function(id){
@@ -4459,22 +4459,13 @@ function vYon(){
   var ng=YB.ngList(c).length,sq=yonSeq(),pos=yonPos(i),tot=yonTotal(c);
   var src=(head.src&&head.src.raw)?head.src.raw:'';
   var h='<div class="pad'+stag()+'">'+back
-    +'<div class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-    +'<span>'+esc(c)+'</span>'
-    +'<button class="oxjump" data-act="yongrid">'+(pos+1)+' / '+tot
-    +(S.yonGrid?IC.up:IC.down)+'</button>'
-    +(src?'<span>'+esc(src)+'</span>':'')
-    +'<span>一度でも正解 '+st.o+'問</span></div>'
-    +'<div style="margin:0 0 10px">'
-    +'<button class="tog'+(sq?'':' on')+'" style="margin:0 6px 6px 0" data-act="yononly" data-v="">'
-      +'すべて '+ids.length+'</button>'
-    +'<button class="tog'+(sq?' on':'')+'" style="margin:0 6px 6px 0" data-act="yononly" data-v="ng"'
-      +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
-    +'</div>'
-    +(S.yonGrid?yonGridHtml(c,i):'')
-    /* リード（過去問そのまま。一字も変えない）。個数・組合せはア〜エが1行に続いて読みにくいので、
-       **行を折るだけ**（文字は足さない・消さない）。 */
-    +'<div class="panel"><div style="font-size:15px;line-height:1.8">'+yonLead(q.lead)+'</div></div>';
+    +'<div class="yqno">第'+(pos+1)+'問</div>'
+    /* リード（過去問そのまま。一字も変えない）。個数・組合せはア〜エが続いて読みにくいので、
+       **行を折って1つずつ離すだけ**（文字は足さない・消さない。2026-09-22 本人指示）。 */
+    +'<div class="yq">'+yonLead(q.lead)+'</div>'
+    /* 出典と進み具合は右寄せの小さい字（本人が送ってくれた画面と同じ置き方） */
+    +'<div class="ymeta">'+(src?esc(src)+'<br>':'')
+      +(pos+1)+'問目／'+(sq?'まちがえた問題':'選択中の問題')+' '+tot+'問</div>';
   /* 選択肢4つ */
   h+='<div class="yono">';
   for(var n=1;n<=4;n++){
@@ -4489,7 +4480,7 @@ function vYon(){
   }
   h+='</div>';
   if(done){
-    h+='<div class="oxjudge'+(good?' ok':' ng')+'" style="margin-top:12px">'+(good?'正解':'まちがい')
+    h+='<div class="oxjudge'+(good?' ok':' ng')+'" style="margin-top:14px">'+(good?'正解':'まちがい')
       +'　<span>答えは '+q.a+''+(was?'（'+pick+' を選びました）':(good?'':'　選んだのは '+pick))+'</span></div>'
       +yonExpHtml(qid,q)
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
@@ -4499,7 +4490,17 @@ function vYon(){
   h+='<div class="oxnav">'
     +(pos>0?'<button class="btn" data-act="yonprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
     +'<button class="btn" data-act="yonnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
-    +'</div>';
+    +'</div>'
+    /* 絞り込みと番号は**下**に置く（読むところの上を混ませない） */
+    +'<div style="margin:14px 0 0">'
+    +'<button class="tog'+(sq?'':' on')+'" style="margin:0 6px 6px 0" data-act="yononly" data-v="">'
+      +'すべて '+ids.length+'</button>'
+    +'<button class="tog'+(sq?' on':'')+'" style="margin:0 6px 6px 0" data-act="yononly" data-v="ng"'
+      +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
+    +'<button class="tog'+(S.yonGrid?' on':'')+'" style="margin:0 6px 6px 0" data-act="yongrid">'
+      +'番号で飛ぶ</button>'
+    +'</div>'
+    +(S.yonGrid?yonGridHtml(c,i):'');
   return h+'</div>';
 }
 /* リードの ア〜オ の前で行を折る（文字は一切いじらない） */
@@ -4508,25 +4509,32 @@ function yonLead(t){
 }
 /* 解説。ふつうの4択＝選択肢ごと／個数・組合せ＝ア〜エごと（選択肢は「一つ」「ア、ウ」なので） */
 function yonExpHtml(qid,q){
-  var ps=YB.parts(qid),h='<div class="panel" style="margin-top:10px">'
-    +'<div class="sub" style="margin:0 0 8px">解説</div>';
+  var ps=YB.parts(qid),h='<div class="panel" style="margin-top:12px">'
+    +'<div class="sub" style="margin:0 0 10px">解説</div>';
+  /* 解説の1語目（正しい。／誤り。／[正しい]。）だけ太くする。**文字は変えない** */
+  function em(t){
+    return esc(t||'（解説がありません）')
+      .replace(/^(\[?(?:正しい|誤り|誤っている|適切|不適切|適当|不適当)\]?(?:。|、)?)/,'<b>$1</b>');
+  }
   function one(lab,ox,tx,exp){
-    /* 「正しい／誤り」の札は付けない＝解説の1語目がすでに「正しい。」「誤り。」なので
-       二重になる（解説の文は**一字も変えない**ので、こちらを引く）。番号の色で示す。 */
+    /* 本人のスクショの形＝番号の札 → 肢の文（かぎかっこ・薄い字）→ 解説。
+       「正しい／誤り」の札は付けない（解説の1語目と二重になる）。札の色で示す。 */
     return '<div class="yoexp">'
-      +'<div class="hd"><span class="lb'+(ox===true?' ok':(ox===false?' ng':''))+'">'
-      +esc(lab)+'</span></div>'
-      +(tx?'<div class="tx">'+esc(tx)+'</div>':'')
-      +'<div class="ex">'+esc(exp||'（解説がありません）')+'</div></div>';
+      +'<span class="lb'+(ox===true?' ok':(ox===false?' ng':''))+'">'+esc(lab)+'</span>'
+      +(tx?'<div class="tx">「'+esc(tx)+'」</div>':'')
+      +'<div class="ex">'+em(exp)+'</div></div>';
   }
   if(ps.length){
     for(var i=0;i<ps.length;i++)h+=one(ps[i][0],ps[i][1].ox,ps[i][1].stem,ps[i][1].exp);
   }else{
     for(var n=1;n<=4;n++){
+      /* 選択肢の文も出す＝下まで読むと選択肢が画面から消えるため（本人のスクショと同じ） */
       var r=YB.optRow(qid,n);
-      h+=one(String(n),r?r.ox:null,'',r?r.exp:'');
+      h+=one(String(n),r?r.ox:null,r?r.stem:'',r?r.exp:'');
     }
   }
+  /* 解説PDFの結び（したがって正しい記述は[4]です。）。持っている問だけ出す */
+  if(q&&q.concl)h+='<div class="yoconcl">'+esc(q.concl)+'</div>';
   return h+'</div>';
 }
 function yonGridHtml(c,cur){
