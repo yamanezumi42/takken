@@ -1295,6 +1295,8 @@ function normST(o){
   if(!o.yonPos||typeof o.yonPos!=='object')o.yonPos={};
   /* 最後に開いていた4択の一覧（ホームの「続き」に使う） */
   if(!o.yonLast||typeof o.yonLast!=='object'||!o.yonLast.key)delete o.yonLast;
+  /* 4択の範囲（2026-09-22）。形＝{bigs:[大分類],cats:[単元],difs:[易普難]} */
+  if(!o.yonF||typeof o.yonF!=='object')o.yonF={bigs:[],cats:[],difs:[]};
   /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
   if(!(typeof o.settings.nbZ==='number'&&o.settings.nbZ>=.25&&o.settings.nbZ<=3))
     delete o.settings.nbZ;
@@ -2246,6 +2248,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         /* 4択（2026-09-21）。○×と同じ決まりで持つ */
         yonCat:null,yonI:0,yonPick:null,yonAgain:false,yonGrid:false,yonSeen:{},yonSeq:null,
         yonList:null,yonTitle:'',yonKey:'',yonFrom:'unit',  /* いま解いて回っている一覧 */
+        yonFOpen:false,                 /* 4択の範囲を開いているか */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -4495,24 +4498,42 @@ var YB={
     }
     this._tp[qid]=out;return out;
   },
-  /* 範囲の絞り込み（2026-09-22 本人「範囲に効かせてほしいな」）。
-     効かせるのは**単元・章・難易度**の3つ。間違え・いつ・正解率は1問1答の記録の条件なので
-     4択には当てはめない（4択の記録は別に持っている＝「まちがえた4択」の行がその役）。 */
+  /* 4択**専用**の範囲（2026-09-22 本人「４択問題って範囲選択できなくない？」）。
+     はじめは1問1答の「範囲を選ぶ」（F）を流用したが、あれは肢の絞り込みで、
+     単元を選ぶには章の木を開いて全部選ぶしかなく**事実上できなかった**。
+     4択の面の中に、大分類→単元→難易度の3段の範囲を置く。記録＝ST.yonF。 */
+  f:function(){
+    if(!ST.yonF||typeof ST.yonF!=='object')ST.yonF={bigs:[],cats:[],difs:[]};
+    var f=ST.yonF;
+    if(!f.bigs||!f.bigs.slice)f.bigs=[];
+    if(!f.cats||!f.cats.slice)f.cats=[];
+    if(!f.difs||!f.difs.slice)f.difs=[];
+    return f;
+  },
+  bigOf:function(qid){
+    var r=RAWBY[qid+'-1']||RAWBY[qid+'-ア'];
+    return r?r.big:'';
+  },
   inRange:function(qid){
-    if(F.cats.length&&F.cats.indexOf(this.catOf(qid))<0)return false;
-    if(F.topics.length){
-      var tp=this.topicsOf(qid),hit=false;
-      for(var i=0;i<tp.length;i++)if(F.topics.indexOf(tp[i])>=0){hit=true;break}
-      if(!hit)return false;
-    }
-    if(F.difs.length){
+    var f=this.f();
+    /* 単元を選んでいればそれが優先。選んでいなければ大分類で見る */
+    if(f.cats.length){if(f.cats.indexOf(this.catOf(qid))<0)return false}
+    else if(f.bigs.length){if(f.bigs.indexOf(this.bigOf(qid))<0)return false}
+    if(f.difs.length){
       var q=this.q(qid),g=q?D3OF[q.diff]:null;
-      if(!g||F.difs.indexOf(g)<0)return false;
+      if(!g||f.difs.indexOf(g)<0)return false;
     }
     return true;
   },
-  /* 範囲が4択に効いているか（画面に出す文言の出し分けに使う） */
-  rangeOn:function(){return !!(F.cats.length||F.topics.length||F.difs.length)},
+  rangeOn:function(){var f=this.f();return !!(f.bigs.length||f.cats.length||f.difs.length)},
+  /* いまの範囲を1行で言う（面の見出しに出す） */
+  rangeLabel:function(){
+    var f=this.f(),a=[];
+    if(f.cats.length)a.push(f.cats.length===1?f.cats[0]:('単元'+f.cats.length));
+    else if(f.bigs.length)a.push(f.bigs.length===1?f.bigs[0]:('大分類'+f.bigs.length));
+    if(f.difs.length)a.push(f.difs.join('・'));
+    return a.length?a.join('／'):'すべて';
+  },
   /* 復習タブ用＝全単元から拾う。kind='ng'（まちがえたまま）／'new'（まだ解いていない）。
      範囲が選ばれていれば、その範囲だけ */
   revList:function(kind){
@@ -7085,11 +7106,11 @@ function vReview(){
      1問1答とは数え方が違うので**別の面**に置き、記録も別（ST.yon）。
      **範囲を選ぶのすぐ下**に置く＝上の範囲がこの2行に効くことが並びで分かる（同日 本人指示）。 */
   if(YB.ok()){
-    var yng=YB.revList('ng').length,ynew=YB.revList('new').length,yon=YB.rangeOn();
+    var yng=YB.revList('ng').length,ynew=YB.revList('new').length;
     h+='<div class="panel"><div class="h">過去問4択</div>'
       +'<div class="mini" style="margin:-4px 0 8px">本試験と同じ4択。'
-      +(yon?'<b>上の範囲（単元・章・難易度）で絞っています。</b>':'単元をまたいで出します。')
       +'ここの記録は1問1答の成績には入れません。</div>'
+      +yonRangeHtml()
       +ryline('まちがえた4択',yng,'ng',true)
       +ryline('まだ解いていない4択',ynew,'new',false)
       +'</div>';
@@ -7118,6 +7139,44 @@ function rline(label,n,act,strong){
     +'<b class="num" style="font-size:20px">'+rn+'</b>'
     +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="'+act+'">解く</button>'
        :'<span class="mini">—</span>')+'</div>';
+}
+/* 4択の範囲（2026-09-22 本人「４択問題って範囲選択できなくない？」）。
+   1問1答の「範囲を選ぶ」とは別に、4択の面の中に置く＝どこを絞っているのかが一目で分かる。
+   段は3つ＝大分類 → （選んだ大分類の）単元 → 難易度。 */
+function yonRangeHtml(){
+  var f=YB.f();
+  var h='<button class="tapline" data-act="yonftog" style="min-height:38px">'
+    +'<span style="flex:1">範囲</span>'
+    +'<span class="badge">'+esc(YB.rangeLabel())+'</span>'
+    +(S.yonFOpen?IC.up:IC.down)+'</button>';
+  if(!S.yonFOpen)return h;
+  h+='<div class="hr"></div>'
+    +'<div class="frow2"><span class="lb">大分類</span><span class="bs">'
+    +'<button class="tog xs'+((!f.bigs.length&&!f.cats.length)?' on':'')
+      +'" data-act="yonfclear">すべて</button>';
+  bigsOrdered().forEach(function(b){
+    h+='<button class="tog xs'+(f.bigs.indexOf(b)>=0?' on':'')
+      +'" data-act="yonfbig" data-b="'+esc(b)+'">'+esc(b)+'</button>';
+  });
+  h+='</span></div>';
+  /* 単元は、選んだ大分類の分だけ出す（48個を一度に並べない） */
+  var bs=f.bigs.length?f.bigs:[];
+  if(bs.length){
+    h+='<div class="frow2"><span class="lb">単元</span><span class="bs">';
+    bs.forEach(function(b){
+      catsSorted(b).forEach(function(c2){
+        if(!YB.ofCat(c2).length)return;            /* 4択が無い単元は出さない */
+        h+='<button class="tog xs'+(f.cats.indexOf(c2)>=0?' on':'')
+          +'" data-act="yonfcat" data-c="'+esc(c2)+'">'+esc(c2)+'</button>';
+      });
+    });
+    h+='</span></div>';
+  }
+  h+='<div class="frow2"><span class="lb">難易度</span><span class="bs">'
+    +D3.map(function(d){return '<button class="tog xs'+(f.difs.indexOf(d)>=0?' on':'')
+      +'" data-act="yonfdif" data-d="'+d+'">'+d+'</button>'}).join('')
+    +'</span></div><div class="hr"></div>';
+  return h;
 }
 /* 復習タブの4択の行（件数＋解く）。rline と同じ形で、押す先だけ4択にする */
 function ryline(label,n,kind,strong){
@@ -8469,6 +8528,26 @@ document.addEventListener('click',function(e){
     else{var yp=YB.pos(S.yonKey,yids.length);S.yonI=(yp===null)?YB.firstRest(yids):yp}
     YB.setPos(S.yonKey,S.yonI);
     S.dir=null;go('yon');return}
+  /* 4択の範囲（2026-09-22）。押すたびに数え直して画面を描き直す */
+  if(a==='yonftog'){S.yonFOpen=!S.yonFOpen;render();return}
+  /* 「すべて」＝大分類・単元・難易度の**全部**を外す（言葉どおりに戻す） */
+  if(a==='yonfclear'){var f0=YB.f();f0.bigs=[];f0.cats=[];f0.difs=[];saveST();render();return}
+  if(a==='yonfbig'){
+    var f1=YB.f(),b1=t.getAttribute('data-b'),i1=f1.bigs.indexOf(b1);
+    if(i1>=0){
+      f1.bigs.splice(i1,1);
+      /* その大分類の単元の選択も外す（見えなくなる選択を残さない） */
+      f1.cats=f1.cats.filter(function(c2){return (CINFO[c2]||{}).big!==b1});
+    }else f1.bigs.push(b1);
+    saveST();render();return}
+  if(a==='yonfcat'){
+    var f2=YB.f(),c3=t.getAttribute('data-c'),i2=f2.cats.indexOf(c3);
+    if(i2>=0)f2.cats.splice(i2,1);else f2.cats.push(c3);
+    saveST();render();return}
+  if(a==='yonfdif'){
+    var f3=YB.f(),d3v=t.getAttribute('data-d'),i3=f3.difs.indexOf(d3v);
+    if(i3>=0)f3.difs.splice(i3,1);else f3.difs.push(d3v);
+    saveST();render();return}
   /* ホームの「4択の続き」＝覚えている一覧を組み直して、やめた所から開く */
   if(a==='yonhome'){
     var yl=ST.yonLast,yf=yl?YB.fromKey(yl.key):null;
