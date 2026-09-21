@@ -4369,7 +4369,7 @@ var YB={
   ok:function(){return typeof YONQ!=='undefined'&&!!YONQ},
   q:function(id){
     var v=(this.ok()&&YONQ[id])?YONQ[id]:null;
-    return v?{a:v[0],lead:v[1],type:v[2],concl:v[3]||''}:null;
+    return v?{a:v[0],lead:v[1],type:v[2],concl:v[3]||'',diff:v[4]||''}:null;
   },
   /* 選択肢4つ（過去問に印刷されているそのままの文） */
   opts:function(id){
@@ -4482,12 +4482,46 @@ var YB={
     for(var i=0;i<ids.length;i++)if(this.lv(ids[i])===1)out.push(i);
     return out;
   },
-  /* 復習タブ用＝全単元から拾う。kind='ng'（まちがえたまま）／'new'（まだ解いていない） */
+  /* その問の章（肢が持っている。1問で複数の章にまたがることがある） */
+  topicsOf:function(qid){
+    if(!this._tp)this._tp={};
+    if(this._tp[qid])return this._tp[qid];
+    var ks=['1','2','3','4','ア','イ','ウ','エ','オ'],out=[],seen={};
+    for(var i=0;i<ks.length;i++){
+      var r=RAWBY[qid+'-'+ks[i]];
+      if(!r)continue;
+      var k=r.cat+'|:|'+(r.topic||'未分類');
+      if(!seen[k]){seen[k]=1;out.push(k)}
+    }
+    this._tp[qid]=out;return out;
+  },
+  /* 範囲の絞り込み（2026-09-22 本人「範囲に効かせてほしいな」）。
+     効かせるのは**単元・章・難易度**の3つ。間違え・いつ・正解率は1問1答の記録の条件なので
+     4択には当てはめない（4択の記録は別に持っている＝「まちがえた4択」の行がその役）。 */
+  inRange:function(qid){
+    if(F.cats.length&&F.cats.indexOf(this.catOf(qid))<0)return false;
+    if(F.topics.length){
+      var tp=this.topicsOf(qid),hit=false;
+      for(var i=0;i<tp.length;i++)if(F.topics.indexOf(tp[i])>=0){hit=true;break}
+      if(!hit)return false;
+    }
+    if(F.difs.length){
+      var q=this.q(qid),g=q?D3OF[q.diff]:null;
+      if(!g||F.difs.indexOf(g)<0)return false;
+    }
+    return true;
+  },
+  /* 範囲が4択に効いているか（画面に出す文言の出し分けに使う） */
+  rangeOn:function(){return !!(F.cats.length||F.topics.length||F.difs.length)},
+  /* 復習タブ用＝全単元から拾う。kind='ng'（まちがえたまま）／'new'（まだ解いていない）。
+     範囲が選ばれていれば、その範囲だけ */
   revList:function(kind){
     var all=this.all(),out=[],me=this;
     all.forEach(function(q){
       var lv=me.lv(q);
-      if(kind==='ng'?(lv===1):(lv===0))out.push(q);
+      if(!(kind==='ng'?(lv===1):(lv===0)))return;
+      if(!me.inRange(q))return;
+      out.push(q);
     });
     return out;
   }
@@ -7046,18 +7080,20 @@ function vReview(){
     +rline('今日の間違い',wt.length,'startWrong',false)
     +rline('間違い',pl.wrong,'startWrongAll',false)
     +'</div>';
+  h+=filterHtml();
   /* 過去問4択（2026-09-22 本人指示「復習タブにも4択問題を選べるようにして欲しいな」）。
-     1問1答とは数え方が違うので**別の面**に置き、記録も別（ST.yon）。 */
+     1問1答とは数え方が違うので**別の面**に置き、記録も別（ST.yon）。
+     **範囲を選ぶのすぐ下**に置く＝上の範囲がこの2行に効くことが並びで分かる（同日 本人指示）。 */
   if(YB.ok()){
-    var yng=YB.revList('ng').length,ynew=YB.revList('new').length;
+    var yng=YB.revList('ng').length,ynew=YB.revList('new').length,yon=YB.rangeOn();
     h+='<div class="panel"><div class="h">過去問4択</div>'
-      +'<div class="mini" style="margin:-4px 0 8px">本試験と同じ4択。単元をまたいで出します。'
+      +'<div class="mini" style="margin:-4px 0 8px">本試験と同じ4択。'
+      +(yon?'<b>上の範囲（単元・章・難易度）で絞っています。</b>':'単元をまたいで出します。')
       +'ここの記録は1問1答の成績には入れません。</div>'
       +ryline('まちがえた4択',yng,'ng',true)
       +ryline('まだ解いていない4択',ynew,'new',false)
       +'</div>';
   }
-  h+=filterHtml();
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
   if(!sev.length)h+='<div class="mini">5問以上解いて誤答が35%以上の章、または誤答3回の問題が2つ以上ある章が出ます。今はありません。</div>';
   sev.forEach(function(x){
