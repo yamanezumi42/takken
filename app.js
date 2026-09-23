@@ -1297,6 +1297,8 @@ function normST(o){
   if(!o.yonLast||typeof o.yonLast!=='object'||!o.yonLast.key)delete o.yonLast;
   /* 4択の範囲（2026-09-22）。形＝{bigs:[大分類],cats:[単元],difs:[易普難]} */
   if(!o.yonF||typeof o.yonF!=='object')o.yonF={bigs:[],cats:[],difs:[]};
+  /* いま解いて回っている4択の一覧（2026-09-24）。形が違えば捨てる＝壊れた値で止まらない */
+  if(!o.yonRun||typeof o.yonRun!=='object'||!o.yonRun.ids||!o.yonRun.ids.slice)delete o.yonRun;
   /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
   if(!(typeof o.settings.nbZ==='number'&&o.settings.nbZ>=.25&&o.settings.nbZ<=3))
     delete o.settings.nbZ;
@@ -4452,28 +4454,34 @@ var YB={
     ST.yonPos[key]=i;
     /* ホームの「続き」に出すため、最後に開いていた一覧を覚える（2026-09-22 本人指示） */
     ST.yonLast={key:key,i:i};
+    var r=ST.yonRun;
+    if(r&&r.key===key)r.i=i;          /* 走っている一覧の場所も一緒に動かす */
     saveST();
   },
-  /* 鍵（cat:単元名／rev:ng／rev:new）から一覧と名前を戻す */
-  fromKey:function(key){
-    if(!key)return null;
-    if(key.indexOf('cat:')===0){
-      var c=key.slice(4);
-      return {ids:this.ofCat(c),title:c,cat:c,from:'unit'};
-    }
-    if(key==='rev:ng')return {ids:this.revList('ng'),title:'まちがえた4択',cat:null,from:'review'};
-    if(key==='rev:new')return {ids:this.revList('new'),title:'まだ解いていない4択',cat:null,from:'review'};
-    return null;
+  /* いま解いて回っている一覧を**そのまま持つ**（2026-09-24 本人
+     「4択問題が、基本的にホーム画面から再開できなくて困ってる」）。
+     前は鍵から作り直していたので、復習の一覧は答えるたびに縮み、覚えた場所がずれて
+     （3問答えたら3問飛ぶ）、全部答えると続きの行ごと消えていた。
+     形＝{key,title,from,cat,ids:[問id],i:場所,rand:並べ替えたか} */
+  run:function(){
+    var r=ST.yonRun;
+    if(!r||!r.ids||!r.ids.length)return null;
+    return r;
   },
-  /* ホームに出す「続き」。途中（2問目以降）で、まだ終わっていないものだけ */
+  startRun:function(key,title,from,cat,ids,i,rand){
+    ST.yonRun={key:key,title:title,from:from,cat:cat||null,
+               ids:rand?shuffle(ids):ids.slice(),i:i|0,rand:!!rand};
+    saveST();
+    return ST.yonRun;
+  },
+  /* ホームに出す「続き」。おしまいまで行ったものは出さない */
   cont:function(){
-    var l=ST.yonLast;
-    if(!l||!l.key)return null;
-    var f=this.fromKey(l.key);
-    if(!f||!f.ids.length)return null;
-    var i=l.i|0;
-    if(i<1||i>=f.ids.length)return null;
-    return {key:l.key,i:i,n:f.ids.length,title:f.title};
+    var r=this.run();
+    if(!r)return null;
+    var i=r.i|0;
+    if(i>=r.ids.length)return null;                 /* 終わっている */
+    if(i<1&&this.lv(r.ids[0])===0)return null;      /* 開いただけ＝まだ何もしていない */
+    return {key:r.key,i:i,n:r.ids.length,title:r.title};
   },
   firstRest:function(ids){
     for(var i=0;i<ids.length;i++)if(this.lv(ids[i])!==2)return i;
@@ -4508,6 +4516,7 @@ var YB={
     if(!f.bigs||!f.bigs.slice)f.bigs=[];
     if(!f.cats||!f.cats.slice)f.cats=[];
     if(!f.difs||!f.difs.slice)f.difs=[];
+    if(typeof f.rand!=='boolean')f.rand=false;   /* 並び＝順番どおり（既定）／ランダム */
     return f;
   },
   bigOf:function(qid){
@@ -7182,6 +7191,12 @@ function yonRangeHtml(){
     +D3.map(function(d){return '<button class="tog xs'+(f.difs.indexOf(d)>=0?' on':'')
       +'" data-act="yonfdif" data-d="'+d+'">'+d+'</button>'}).join('')
     +'</span></div>'
+    /* 並び（2026-09-24 本人「ランダムは選べるようにして欲しい」）。
+       押した時点の一覧を固定して出すので、途中でやめても順番は変わらない。 */
+    +'<div class="frow2"><span class="lb">並び</span><span class="bs">'
+    +'<button class="tog xs'+(f.rand?'':' on')+'" data-act="yonfrand" data-v="">年度順</button>'
+    +'<button class="tog xs'+(f.rand?' on':'')+'" data-act="yonfrand" data-v="1">ランダム</button>'
+    +'</span></div>'
     +'<div class="spread" style="margin-top:6px"><span class="mini">選んだ範囲 <b class="num">'
       +n3(YB.revList('ng').length+YB.revList('new').length)+'</b> 問（まだ解いていない＋まちがえた）</span>'
     +'<button class="btn sm" data-act="yonfclear">範囲をクリア</button></div>'
@@ -8519,23 +8534,36 @@ document.addEventListener('click',function(e){
   if(a==='yonopen'||a==='yonstart'||a==='yonrev'){
     var yi=t.getAttribute('data-i');
     if(a==='yonrev'){
-      var yk=t.getAttribute('data-r');
-      S.yonList=YB.revList(yk);
-      S.yonTitle=(yk==='ng')?'まちがえた4択':'まだ解いていない4択';
-      S.yonKey='rev:'+yk;S.yonFrom='review';S.yonCat=null;
-      if(!S.yonList.length){msg('いまは0問です');return}
+      /* 復習＝**その時の一覧を固定して、順番をばらす**（2026-09-24 本人
+         「範囲を選択したときに問題が順番通りに出ちゃうからランダムに出るようになってくれたらいい」
+         「ランダムは選べるようにして欲しいってことね」）。並びは面の「並び」で選ぶ。
+         固定するので、答えて一覧が縮んでも場所はずれない＝ホームから続きに戻れる。 */
+      var yk=t.getAttribute('data-r'),yl=YB.revList(yk);
+      if(!yl.length){msg('いまは0問です');return}
+      var yr=YB.startRun('rev:'+yk,(yk==='ng')?'まちがえた4択':'まだ解いていない4択',
+                         'review',null,yl,0,!!YB.f().rand);
+      S.yonList=yr.ids;S.yonTitle=yr.title;S.yonKey=yr.key;S.yonFrom='review';S.yonCat=null;
+      S.yonI=0;
     }else if(a==='yonopen'){
-      var yc=t.getAttribute('data-c');
-      S.yonCat=yc;S.yonList=YB.ofCat(yc);S.yonTitle=yc;
-      S.yonKey='cat:'+yc;S.yonFrom='unit';
+      /* 単元＝過去問の年度の並びのまま（本試験の順に見たいので、ここはばらさない）。
+         同じ単元を開き直したときは、やめた場所から。 */
+      var yc=t.getAttribute('data-c'),yids0=YB.ofCat(yc);
+      if(!yids0.length){msg('この単元には4択がありません');return}
+      var yp=YB.pos('cat:'+yc,yids0.length);
+      var yst=(yi==='0')?0:((yi==='rest')?YB.firstRest(yids0)
+              :((yp===null)?YB.firstRest(yids0):yp));
+      var yr2=YB.startRun('cat:'+yc,yc,'unit',yc,yids0,yst,false);
+      S.yonList=yr2.ids;S.yonTitle=yc;S.yonKey=yr2.key;S.yonFrom='unit';S.yonCat=yc;
+      S.yonI=yst;
+    }else{
+      /* おしまいの画面からの「はじめから／まだ正解していない／最後の問題へ」＝いまの一覧の中で動く */
+      var yids=S.yonList||[];
+      if(!yids.length)return;
+      S.yonI=(yi==='0')?0:((yi==='rest')?YB.firstRest(yids)
+             :((yi==='last')?Math.max(0,yids.length-1):0));
     }
-    var yids=S.yonList||[];
     S.yonPick=null;S.yonAgain=false;S.yonGrid=false;
     S.yonSeen={};S.yonSeq=null;      /* 入り直したら白紙から（答えを先に見せない） */
-    if(yi==='0')S.yonI=0;
-    else if(yi==='rest')S.yonI=YB.firstRest(yids);
-    else if(a==='yonrev')S.yonI=0;   /* 復習は毎回その時の一覧の頭から */
-    else{var yp=YB.pos(S.yonKey,yids.length);S.yonI=(yp===null)?YB.firstRest(yids):yp}
     YB.setPos(S.yonKey,S.yonI);
     S.dir=null;go('yon');return}
   /* 4択の範囲（2026-09-22）。押すたびに数え直して画面を描き直す */
@@ -8561,16 +8589,19 @@ document.addEventListener('click',function(e){
     var f2=YB.f(),c3=t.getAttribute('data-c'),i2=f2.cats.indexOf(c3);
     if(i2>=0)f2.cats.splice(i2,1);else f2.cats.push(c3);
     saveST();render();return}
+  if(a==='yonfrand'){
+    var f4=YB.f();f4.rand=(t.getAttribute('data-v')==='1');saveST();render();return}
   if(a==='yonfdif'){
     var f3=YB.f(),d3v=t.getAttribute('data-d'),i3=f3.difs.indexOf(d3v);
     if(i3>=0)f3.difs.splice(i3,1);else f3.difs.push(d3v);
     saveST();render();return}
   /* ホームの「4択の続き」＝覚えている一覧を組み直して、やめた所から開く */
   if(a==='yonhome'){
-    var yl=ST.yonLast,yf=yl?YB.fromKey(yl.key):null;
-    if(!yf||!yf.ids.length){msg('続きがありません');return}
-    S.yonList=yf.ids;S.yonTitle=yf.title;S.yonCat=yf.cat;S.yonKey=yl.key;S.yonFrom=yf.from;
-    S.yonI=Math.min(yl.i|0,yf.ids.length-1);
+    var yrun=YB.run();
+    if(!yrun){msg('続きがありません');return}
+    S.yonList=yrun.ids;S.yonTitle=yrun.title;S.yonCat=yrun.cat;
+    S.yonKey=yrun.key;S.yonFrom=yrun.from;
+    S.yonI=Math.min(yrun.i|0,yrun.ids.length-1);
     S.yonPick=null;S.yonAgain=false;S.yonGrid=false;S.yonSeen={};S.yonSeq=null;
     S.dir=null;go('yon');return}
   if(a==='yonans'){
@@ -8610,6 +8641,7 @@ document.addEventListener('click',function(e){
     if(yni>ymax)yni=ymax;
     S.yonI=yni;S.yonPick=null;S.yonAgain=false;
     if(yni<ymax)YB.setPos(S.yonKey,yni);
+    else{var yr3=YB.run();if(yr3&&yr3.key===S.yonKey){yr3.i=yr3.ids.length;saveST()}}
     render();return}
   if(a==='yonback'){
     S.dir=null;
