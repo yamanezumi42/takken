@@ -2250,7 +2250,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         /* 4択（2026-09-21）。○×と同じ決まりで持つ */
         yonCat:null,yonI:0,yonPick:null,yonAgain:false,yonGrid:false,yonSeen:{},yonSeq:null,
         yonList:null,yonTitle:'',yonKey:'',yonFrom:'unit',  /* いま解いて回っている一覧 */
-        yonFOpen:false,yonFBig:{},      /* 4択の範囲を開いているか／どの大分類を開いているか */
+        yonFOpen:false,yonFBig:{},yonFYear:false,  /* 範囲の開閉（面・大分類・年度） */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -4517,7 +4517,31 @@ var YB={
     if(!f.cats||!f.cats.slice)f.cats=[];
     if(!f.difs||!f.difs.slice)f.difs=[];
     if(typeof f.rand!=='boolean')f.rand=false;   /* 並び＝順番どおり（既定）／ランダム */
+    if(!f.years||!f.years.slice)f.years=[];      /* 年度（回）＝複数選べる */
     return f;
+  },
+  /* その問の年度（回）。令和3年・令和2年は10月／12月の2回あるので月まで見る */
+  yearOf:function(qid){
+    if(!this._y)this._y={};
+    if(this._y[qid]!==undefined)return this._y[qid];
+    var r=RAWBY[qid+'-1']||RAWBY[qid+'-ア'],sc=r?r.src:null;
+    var k=sc?((sc.era||'')+(sc.month?(sc.month+'月'):'')):'';
+    this._y[qid]=k;return k;
+  },
+  /* 年度の一覧（新しい順）と、その回の4択の数 */
+  years:function(){
+    if(this._ys)return this._ys;
+    var m={},out=[],me=this;
+    this.all().forEach(function(q){
+      var r=RAWBY[q+'-1']||RAWBY[q+'-ア'],sc=r?r.src:null;
+      var k=me.yearOf(q);
+      if(!k)return;
+      if(!m[k])m[k]={key:k,n:0,year:(sc&&sc.year)||0,month:(sc&&sc.month)||0};
+      m[k].n++;
+    });
+    for(var k in m)if(m.hasOwnProperty(k))out.push(m[k]);
+    out.sort(function(a,b){return (b.year-a.year)||(b.month-a.month)});
+    this._ys=out;return out;
   },
   bigOf:function(qid){
     var r=RAWBY[qid+'-1']||RAWBY[qid+'-ア'];
@@ -4528,17 +4552,19 @@ var YB={
     /* 範囲は**単元の集まり**で表す（大分類の名前を押すと、その下の単元がまとめて入る）。
        1つも選んでいなければ全部が範囲。 */
     if(f.cats.length&&f.cats.indexOf(this.catOf(qid))<0)return false;
+    if(f.years.length&&f.years.indexOf(this.yearOf(qid))<0)return false;
     if(f.difs.length){
       var q=this.q(qid),g=q?D3OF[q.diff]:null;
       if(!g||f.difs.indexOf(g)<0)return false;
     }
     return true;
   },
-  rangeOn:function(){var f=this.f();return !!(f.cats.length||f.difs.length)},
+  rangeOn:function(){var f=this.f();return !!(f.cats.length||f.difs.length||f.years.length)},
   /* いまの範囲を1行で言う（面の見出しに出す） */
   rangeLabel:function(){
     var f=this.f(),a=[];
     if(f.cats.length)a.push(f.cats.length===1?f.cats[0]:('単元'+f.cats.length));
+    if(f.years.length)a.push(f.years.length===1?f.years[0]:(f.years[0]+'ほか'+(f.years.length-1)));
     if(f.difs.length)a.push(f.difs.join('・'));
     return a.length?a.join('／'):'すべて';
   },
@@ -7187,6 +7213,25 @@ function yonRangeHtml(){
         +'<span class="badge">'+stt.o+'/'+n3(stt.n)+'問</span></button>';
     });
   });
+  /* 年度（回）＝28回ぶん。行が長くなるので畳んでおく（2026-09-24 本人
+     「過去問の範囲を年度別というか回数を複数選択してそこのみを出せるように出来たりする？」） */
+  var ys=YB.years();
+  h+='<button class="tapline" data-act="yonfyopen" style="min-height:38px">'
+    +'<span style="flex:1">年度（回）</span>'
+    +(f.years.length?'<span class="chip">'+f.years.length+'</span>':'')
+    +'<span class="badge">'+n3(ys.length)+'回</span>'
+    +(S.yonFYear?IC.up:IC.down)+'</button>';
+  if(S.yonFYear){
+    h+='<div style="padding:2px 0 8px">'
+      +'<button class="tog xs'+(f.years.length?'':' on')+'" data-act="yonfyall" data-v="">すべて</button>'
+      +'<button class="tog xs" data-act="yonfyall" data-v="5">直近5回</button>'
+      +'<button class="tog xs" data-act="yonfyall" data-v="10">直近10回</button>';
+    ys.forEach(function(y){
+      h+='<button class="tog xs'+(f.years.indexOf(y.key)>=0?' on':'')
+        +'" data-act="yonfyear" data-y="'+esc(y.key)+'">'+esc(y.key)+' '+y.n+'</button>';
+    });
+    h+='</div>';
+  }
   h+='<div class="frow2" style="margin-top:6px"><span class="lb">難易度</span><span class="bs">'
     +D3.map(function(d){return '<button class="tog xs'+(f.difs.indexOf(d)>=0?' on':'')
       +'" data-act="yonfdif" data-d="'+d+'">'+d+'</button>'}).join('')
@@ -8569,7 +8614,7 @@ document.addEventListener('click',function(e){
   /* 4択の範囲（2026-09-22）。押すたびに数え直して画面を描き直す */
   if(a==='yonftog'){S.yonFOpen=!S.yonFOpen;render();return}
   /* 「すべて」＝大分類・単元・難易度の**全部**を外す（言葉どおりに戻す） */
-  if(a==='yonfclear'){var f0=YB.f();f0.bigs=[];f0.cats=[];f0.difs=[];saveST();render();return}
+  if(a==='yonfclear'){var f0=YB.f();f0.bigs=[];f0.cats=[];f0.difs=[];f0.years=[];saveST();render();return}
   /* 大分類の名前＝その下の単元を全部入れる／全部外す（単元学習と同じ感じ） */
   if(a==='yonfball'){
     var f1=YB.f(),b1=t.getAttribute('data-b');
@@ -8588,6 +8633,16 @@ document.addEventListener('click',function(e){
   if(a==='yonfcat'){
     var f2=YB.f(),c3=t.getAttribute('data-c'),i2=f2.cats.indexOf(c3);
     if(i2>=0)f2.cats.splice(i2,1);else f2.cats.push(c3);
+    saveST();render();return}
+  if(a==='yonfyopen'){S.yonFYear=!S.yonFYear;render();return}
+  if(a==='yonfyear'){
+    var f5=YB.f(),y5=t.getAttribute('data-y'),i5=f5.years.indexOf(y5);
+    if(i5>=0)f5.years.splice(i5,1);else f5.years.push(y5);
+    saveST();render();return}
+  /* すべて／直近n回をまとめて入れる */
+  if(a==='yonfyall'){
+    var f6=YB.f(),n6=+t.getAttribute('data-v')||0;
+    f6.years=n6?YB.years().slice(0,n6).map(function(y){return y.key}):[];
     saveST();render();return}
   if(a==='yonfrand'){
     var f4=YB.f();f4.rand=(t.getAttribute('data-v')==='1');saveST();render();return}
