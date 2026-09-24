@@ -4666,14 +4666,25 @@ function vYon(){
    （2026-09-22 本人が案1を選択。「これ見にくいよね？選択問題と同じようにできないの？」）。
    文字は足さない・消さない＝組み方だけ変える。 */
 function yonLead(t){
-  var s=esc(t),re=/。\s*([アイウエオ])\s+/g,m,ix=[];
-  while((m=re.exec(s)))ix.push([m.index+1,m.index+m[0].length,m[1]]);
-  if(!ix.length)return '<p class="ylead">'+s+'</p>';
+  /* 印は**ア→イ→ウ→エ→オ の順に、うしろに空白が続くもの**だけを拾う。
+     2026-09-24 本人「この問題アイウ入ってないね」＝前は「。の直後」だけを見ていたので、
+     「…3,000平方メートルの開発行為イ 準都市計画区域において、」のように
+     句点なしで続く問題（13問）が割れず、イ・ウがアの中に埋まっていた。
+     2つ以上そろったときだけ割る＝ふつうの4択の本文を誤って割らない。 */
+  var s=esc(t),ks=['ア','イ','ウ','エ','オ'],ix=[],at=0;
+  for(var i=0;i<ks.length;i++){
+    var m=new RegExp(ks[i]+'[ \u3000]').exec(s.slice(at));
+    if(!m)break;
+    var st=at+m.index;
+    ix.push([st,st+m[0].length,ks[i]]);
+    at=st+m[0].length;
+  }
+  if(ix.length<2)return '<p class="ylead">'+s+'</p>';
   var h='<p class="ylead">'+s.slice(0,ix[0][0])+'</p><div class="aewrap">';
-  for(var i=0;i<ix.length;i++){
-    var en=(i+1<ix.length)?ix[i+1][0]:s.length;
-    h+='<div class="ae"><span class="m">'+ix[i][2]+'</span>'
-      +'<span class="tx">'+s.slice(ix[i][1],en)+'</span></div>';
+  for(var j=0;j<ix.length;j++){
+    var en=(j+1<ix.length)?ix[j+1][0]:s.length;
+    h+='<div class="ae"><span class="m">'+ix[j][2]+'</span>'
+      +'<span class="tx">'+s.slice(ix[j][1],en)+'</span></div>';
   }
   return h+'</div>';
 }
