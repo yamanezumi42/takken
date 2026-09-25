@@ -847,6 +847,18 @@ function chapFor(it){
 /* その問題が出てくる全部の章（同じ問題が複数の動画に現れるのが正しい状態） */
 function chapsFor(it){return vidsOf(it).map(function(v){return chapOf(v,it)})}
 function vurl(vid,sec){return 'https://youtu.be/'+vid+'?t='+(sec||0)}
+/* ---------- 動画リンクをChromeで開く（2026-09-25 本人指示・案2） ----------
+   PCの宅建アプリは Edge をアプリモードで起動している（Desktop\宅建アプリ.lnk の
+   msedge.exe --app=...）ので、中の動画リンクもEdgeが開く。ページから exe は起動できないので、
+   Windowsに自分用のプロトコル takken-yt: を1つ作り、そこからChromeを起動する。
+     登録＝tools/reg_chrome_link.py（HKCU・管理者権限なし・--off で取り消せる）
+     中身の見張り＝tools/open_chrome.pyw（YouTubeのhttpsだけ通す）
+   スマホ（PWA）の UA に Edg/ は無いので、これまでどおり普通のリンクのまま。
+   未設定＝自動（デスクトップのEdgeのときだけ使う）。設定で「する／しない」を決められる。 */
+function ytEdgePC(){var u=navigator.userAgent||'';
+  return /Edg\//.test(u)&&!/Mobile|Android|iPhone|iPad/.test(u)}
+function ytChromeOn(){var v=ST.settings&&ST.settings.ytChrome;
+  return v===true?true:(v===false?false:ytEdgePC())}
 /* 図表：単一ファイル版では build.py が window.TAKKEN_FIGS に data URI を埋め込む。
    開発用の app.html では figs/ の相対パスをそのまま使う。 */
 function figSrc(p){var m=window.TAKKEN_FIGS;return (m&&m[p])?m[p]:p}
@@ -7878,6 +7890,17 @@ function dataSheet(){
    +'小分類を閉じた瞬間だけ最大。強＝毎問フル／弱＝マークと光だけ（約0.6秒）／なし＝すぐ解説。<br>'
    +'連続正解の最高記録 '+(ST.session.best||0)+' ／ 閉じた分野 '+Object.keys(ST.closedSeen||{}).length+'</div>'
    +'<div class="hr"></div>'
+   /* 動画リンクをChromeで開く（2026-09-25 本人指示・案2）。PCのEdge専用の設定。 */
+   +'<div class="mini" style="margin-bottom:6px">動画リンク（このPCだけ）</div><div>'
+   +'<button class="tog'+(ytChromeOn()?' on':'')+'" style="margin:0 6px 6px 0" data-act="ytch" data-v="1">Chromeで開く</button>'
+   +'<button class="tog'+(ytChromeOn()?'':' on')+'" style="margin:0 6px 6px 0" data-act="ytch" data-v="0">このまま</button>'
+   +'</div>'
+   +'<div class="mini">PCはEdgeでアプリを開いているので、動画もEdgeが開きます。Chromeで開くには'
+   +' Windows側の登録（tools/reg_chrome_link.py --on）が要ります。'
+   +'初回はEdgeが「このサイトがアプリを開こうとしています」と聞いてきます'
+   +'（「常に許可」にすると次からは出ません）。'
+   +'押しても何も起きないときは「このまま」に戻してください。スマホには関係しません。</div>'
+   +'<div class="hr"></div>'
    +'<div class="mini">書き出し：下のテキストを全選択してコピー（メモ帳やメールに貼って保管）。</div>'
    +'<textarea id="ta" readonly>'+esc(json)+'</textarea>'
    +'<div class="rowx" style="gap:8px;margin:8px 0 14px"><button class="btn" data-act="selall">全選択</button>'
@@ -8952,6 +8975,12 @@ document.addEventListener('click',function(e){
     if(wk&&!ST.watched[wk]){applyEvent(logEv('watch',{key:wk,day:today()}),true);saveST();try{syncSoon()}catch(e){}}
     /* 視聴の実測を開始（アプリに戻ってきた時点との差を watchMs に積む） */
     if(wk)watchStart(String(wk).split('#')[0]);
+    /* PCのEdgeのときは、リンクの既定動作を止めてChromeへ渡す（2026-09-25 本人指示・案2）。
+       視聴の記録（watch・watchStart）は上で済ませてあるので、どちらで開いても残る。 */
+    if(ytChromeOn()){
+      var yu=t.getAttribute('href')||'';
+      if(yu.indexOf('https://')===0){e.preventDefault();location.href='takken-yt:'+yu}
+    }
     /* 一覧から「動画を見る」を押したときも、次の1本と「ここまでで解ける」を数え直す */
     setTimeout(function(){if(S.view==='study'||S.view==='fields')render()},0);
     return;
@@ -8970,6 +8999,7 @@ document.addEventListener('click',function(e){
     return;
   }
   if(a==='fxlv'){ST.settings.fx=t.getAttribute('data-v');saveST();dataSheet();return}
+  if(a==='ytch'){ST.settings.ytChrome=(t.getAttribute('data-v')==='1');saveST();dataSheet();return}
   if(a==='snd'){
     ST.settings.sound=(t.getAttribute('data-v')==='1');
     saveST();M2.setSound(ST.settings.sound);
