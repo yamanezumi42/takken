@@ -1230,6 +1230,9 @@ function applyEvent(E,live){
   if(E.e==='reset'){applyReset(E);return}
   if(E.e==='rep'){if(!ST.reports)ST.reports={};ST.reports[E.id]={tags:(E.tags||[]).slice(),memo:E.memo||'',at:E.at};return}
   if(E.e==='check'){if(E.key)ST.checkDone[E.key]=E.day;return}
+  /* ○×・4択（2026-09-27）。**その場と同じ関数**を通す＝別々に書くとずれる */
+  if(E.e==='oxa'){try{OXB.apply(E)}catch(e){}return}
+  if(E.e==='yona'){try{YB.apply(E)}catch(e){}return}
   if(E.e==='closed'){if(E.cat)ST.closedSeen[E.cat]=E.day;return}
 }
 
@@ -1259,6 +1262,54 @@ try{
 applyTheme();          /* 保存されている配色を、描画より前に当てる（切り替わりが見えない） */
 applyText();           /* 本文の見た目（大きさ・行間・字間・余白・書体）も先に当てる */
 applyRdColor();        /* 読み上げの帯の色 */
+/* ---------- ○×・4択の記録を並びへ取り込む（2026-09-27） ----------
+   この日より前は ST.ox / ST.yon に直接書いていたので、並びに載っていない。
+   同期の数え直しで消えてしまうため、起動時に一度**出来事へ起こして**から同期する。
+   鍵（k）を決め打ちにするので、何回走っても・2台で走っても**二重にならない**
+   （同じ問題を両方の端末で解いていた場合は、多い方が残る＝足し算にしない）。 */
+function oxyonMigrate(){
+  var made=0,have={},cnt={};
+  /* ★すでに並びに載っている分を**中身で**数える（鍵だけで見ると、その場で答えた分
+     （鍵を持たない）を見落として二重に起こす。2026-09-27 実測で発覚）。 */
+  (ST.log||[]).forEach(function(E){
+    if(!E)return;
+    if(E.k)have[E.k]=1;
+    if(E.e==='oxa'&&E.dir){var k1='ox|'+E.dir+'|'+(E.i|0);cnt[k1]=(cnt[k1]||0)+1}
+    if(E.e==='yona'&&E.qid){var k2='yon|'+E.qid;cnt[k2]=(cnt[k2]||0)+1}
+  });
+  function done(k){return cnt[k]||0}
+  function emit(kind,key,o){
+    if(have[key])return;
+    /* ★当てない。いま ST.ox / ST.yon にある記録が、まさにこの出来事の結果だから。
+       ここで当てると二重に数える（数え直しのときだけ当たればよい）。 */
+    var E=logEv(kind,o);E.k=key;have[key]=1;made++;
+  }
+  Object.keys(ST.ox||{}).forEach(function(dir){
+    var r=ST.ox[dir]||{};
+    Object.keys(r).forEach(function(i){
+      var v=r[i]||[0,0,null],att=v[0]|0,ok=v[1]|0,had=done('ox|'+dir+'|'+(+i|0));
+      for(var c=had;c<att;c++)
+        emit('oxa','mig-ox-'+dir+'-'+i+'-'+c,
+             {dir:dir,i:(+i|0),ok:(c<ok),pick:(c===att-1?v[2]:null),day:today(),mig:1});
+    });
+  });
+  Object.keys(ST.yon||{}).forEach(function(cat){
+    var r=ST.yon[cat]||{};
+    Object.keys(r).forEach(function(qid){
+      var v=r[qid]||[0,0,null],att=v[0]|0,ok=v[1]|0,had2=done('yon|'+qid);
+      for(var c=had2;c<att;c++)
+        emit('yona','mig-yon-'+qid+'-'+c,
+             {qid:qid,ok:(c<ok),pick:(c===att-1?v[2]:null),day:today(),mig:1});
+    });
+  });
+  if(made){
+    /* 取り込んだ分は**いま持っている記録と同じ**なので、当て直さずに保存するだけ。
+       （apply は emit の中で通していない＝二重に数えないため） */
+    saveST();
+  }
+  return made;
+}
+setTimeout(function(){try{oxyonMigrate()}catch(e){}},3500);   /* 同期より前に起こす */
 setTimeout(function(){try{bootSync()}catch(e){}},4000);   /* 起動のたび（2台で共有する同期） */
 /* 記録が壊れて読めなかったら、**元の文字列を退避してから**空で始める。
    退避しないと直後の saveST() が原本を上書きして、部分的に救えたはずの記録まで消える
@@ -4228,8 +4279,17 @@ var OXB={
      3つ目＝2026-09-20 本人「前の問題に戻れないの悲しいね」。前へ戻ったときに
      そのとき押した答えと正誤をそのまま出すために要る（戻ったのに白紙では見直せない）。 */
   put:function(d,i,good,pick){
-    var r=this.rec(d),k=String(i),v=r[k]||[0,0,null];
-    v[0]++;if(good)v[1]++;v[2]=pick;r[k]=v;saveST();
+    /* ★2026-09-27：記録を**出来事**として残す。いままで ST.ox に直接書いていたので、
+       同期の数え直し（replay）で毎回消えていた（実測で確認）。
+       書く所は apply の1つだけにする＝その場と数え直しでずれない。 */
+    this.apply(logEv('oxa',{dir:d,i:(i|0),ok:!!good,pick:pick,day:today()}));
+    saveST();
+  },
+  /* 出来事1件を記録に当てる。その場（put）でも数え直し（applyEvent）でも、ここだけを通る。 */
+  apply:function(E){
+    if(!E||!E.dir)return;
+    var r=this.rec(E.dir),k=String(E.i|0),v=r[k]||[0,0,null];
+    v[0]++;if(E.ok)v[1]++;v[2]=(E.pick===undefined?null:E.pick);r[k]=v;
   },
   /* その問に前に押した答え（無ければ null） */
   picked:function(d,i){
@@ -4464,8 +4524,14 @@ var YB={
   /* 読むだけのとき＝箱を作らない（作ると空の箱が49個も記録に溜まる） */
   box:function(qid){return (ST.yon&&ST.yon[this.catOf(qid)])||null},
   put:function(qid,good,pick){
-    var r=this.rec(qid),v=r[qid]||[0,0,null];
-    v[0]++;if(good)v[1]++;v[2]=pick;r[qid]=v;saveST();
+    /* ★2026-09-27：○×と同じく、出来事として残す（同期で消えないように） */
+    this.apply(logEv('yona',{qid:qid,ok:!!good,pick:pick,day:today()}));
+    saveST();
+  },
+  apply:function(E){
+    if(!E||!E.qid)return;
+    var r=this.rec(E.qid),v=r[E.qid]||[0,0,null];
+    v[0]++;if(E.ok)v[1]++;v[2]=(E.pick===undefined?null:E.pick);r[E.qid]=v;
   },
   lv:function(qid){
     var b=this.box(qid),v=b?b[qid]:null;
