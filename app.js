@@ -859,6 +859,29 @@ function ytEdgePC(){var u=navigator.userAgent||'';
   return /Edg\//.test(u)&&!/Mobile|Android|iPhone|iPad/.test(u)}
 function ytChromeOn(){var v=ST.settings&&ST.settings.ytChrome;
   return v===true?true:(v===false?false:ytEdgePC())}
+/* 渡した先（Windows側の登録）が無いと**何も起きない**＝動画が見られなくなる。
+   2026-09-26 実際にそうなった（登録がこのPCに届いていなかった）。
+   1.2秒たってもこの画面に焦点が残っていれば「渡せていない」と見て、逃げ道を画面に出す。
+   Chromeが立ち上がるときも、Edgeが許可を聞くときも焦点は外れるので、そのときは出ない。
+   ※ window.open で勝手に開く手は採らない（押した瞬間から離れているとブラウザに止められ、
+     止められたことに気づけない＝また「何も起きない」になる。実測で塞がれた）。
+     押すのは本人＝確実に開く。 */
+function ytWatchFail(u){
+  setTimeout(function(){
+    try{
+      if(!(document.hasFocus&&document.hasFocus())||document.hidden)return;
+      var b=document.getElementById('ytbar');
+      if(b)b.parentNode.removeChild(b);
+      b=document.createElement('div');b.id='ytbar';
+      b.innerHTML='<div class="t">Chromeに渡せませんでした（Windows側の登録が要ります）</div>'
+        +'<div class="r"><a class="btn sm" href="'+esc(u)+'" target="_blank" rel="noreferrer">このまま開く</a>'
+        +'<button class="btn sm" data-act="ytbaroff">以後このまま</button>'
+        +'<button class="btn sm" data-act="ytbarx">閉じる</button></div>';
+      document.body.appendChild(b);
+    }catch(x){}
+  },1200);
+}
+function ytBarHide(){var b=document.getElementById('ytbar');if(b)b.parentNode.removeChild(b)}
 /* 図表：単一ファイル版では build.py が window.TAKKEN_FIGS に data URI を埋め込む。
    開発用の app.html では figs/ の相対パスをそのまま使う。 */
 function figSrc(p){var m=window.TAKKEN_FIGS;return (m&&m[p])?m[p]:p}
@@ -8979,7 +9002,11 @@ document.addEventListener('click',function(e){
        視聴の記録（watch・watchStart）は上で済ませてあるので、どちらで開いても残る。 */
     if(ytChromeOn()){
       var yu=t.getAttribute('href')||'';
-      if(yu.indexOf('https://')===0){e.preventDefault();location.href='takken-yt:'+yu}
+      if(yu.indexOf('https://')===0){
+        e.preventDefault();
+        location.href='takken-yt:'+yu;
+        ytWatchFail(yu);
+      }
     }
     /* 一覧から「動画を見る」を押したときも、次の1本と「ここまでで解ける」を数え直す */
     setTimeout(function(){if(S.view==='study'||S.view==='fields')render()},0);
@@ -8999,7 +9026,9 @@ document.addEventListener('click',function(e){
     return;
   }
   if(a==='fxlv'){ST.settings.fx=t.getAttribute('data-v');saveST();dataSheet();return}
-  if(a==='ytch'){ST.settings.ytChrome=(t.getAttribute('data-v')==='1');saveST();dataSheet();return}
+  if(a==='ytch'){ST.settings.ytChrome=(t.getAttribute('data-v')==='1');saveST();ytBarHide();dataSheet();return}
+  if(a==='ytbarx'){ytBarHide();return}
+  if(a==='ytbaroff'){ST.settings.ytChrome=false;saveST();ytBarHide();return}
   if(a==='snd'){
     ST.settings.sound=(t.getAttribute('data-v')==='1');
     saveST();M2.setSound(ST.settings.sound);

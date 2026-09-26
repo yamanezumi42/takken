@@ -540,6 +540,14 @@ a{color:var(--chipfg)}
   padding:10px 14px 12px;pointer-events:none;
   background:linear-gradient(to top,var(--bg) 58%,rgba(255,255,255,0))}
 #nextbar[hidden]{display:none}
+/* 動画をChromeに渡せなかったときの逃げ道（2026-09-26）。画面の下に出して、押せば開ける。 */
+#ytbar{position:fixed;left:10px;right:10px;bottom:calc(60px + env(safe-area-inset-bottom));z-index:39;
+  max-width:520px;margin:0 auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:11px 13px;box-shadow:0 8px 22px rgba(29,33,31,.14)}
+#ytbar .t{font-size:12.5px;line-height:1.7;color:var(--fg);margin-bottom:8px}
+#ytbar .r{display:flex;gap:8px}
+#ytbar .btn{flex:1;min-height:36px;font-size:12.5px}
+#ytbar a.btn{text-decoration:none}   /* 3つとも同じ見た目にそろえる（下線を消す） */
 #nextbar .btn{pointer-events:auto;max-width:520px;margin:0 auto}
 /* ---------- 切り替えスイッチ（2026-08-24 本人指定・見本の画像に合わせた寸法） ---------- */
 .sw{position:relative;width:51px;height:31px;border-radius:999px;border:0;background:#c9c5be;
@@ -1743,7 +1751,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='ea109f9c';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='39ed66fe';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
