@@ -1205,7 +1205,13 @@ function replay(log){
      **同期のたびに「相手が新しい」と誤判定して乗り換え、この端末で解いた分を毎回捨てる**
      （2026-08-29 本人報告「20問やったのに数が減らない」の根本原因）。 */
   var keep={settings:ST.settings,run:ST.run,wpend:ST.wpend,lastChap:ST.lastChap,
-             mockRun:ST.mockRun,logn:ST.logn,gen:ST.gen};   /* 途中の模試も端末ごと（2026-08-29 批評） */
+             mockRun:ST.mockRun,logn:ST.logn,gen:ST.gen,   /* 途中の模試も端末ごと（2026-08-29 批評） */
+             /* ★「どこまでやったか」も端末ごと＝数え直しで捨てない（2026-09-27）。
+                捨てていたため、**答えるたびに走る同期のあと**に ST.yonRun が消え、
+                ホームの「過去問4択の続き」が出なくなっていた（本人が三度報告）。
+                これは成績ではなく居場所なので、土台にも出来事にも入っていない。 */
+             yonRun:ST.yonRun,yonPos:ST.yonPos,yonLast:ST.yonLast,yonF:ST.yonF,
+             oxPos:ST.oxPos,oxSeq:ST.oxSeq};
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
   Object.keys(ST.items||{}).forEach(function(k){
@@ -1220,6 +1226,15 @@ function replay(log){
   ST.settings=keep.settings||ST.settings;
   ST.run=keep.run||null;ST.wpend=keep.wpend||null;ST.lastChap=keep.lastChap||null;
   ST.mockRun=keep.mockRun||null;
+  /* ★「どこまでやったか」（端末ごとの居場所）を戻す（2026-09-27）。
+     戻していなかったので、答えるたびに走る同期のあとに ST.yonRun が消え、
+     ホームの「過去問4択の続き」が出なくなっていた（本人が三度報告）。 */
+  if(keep.yonRun)ST.yonRun=keep.yonRun;
+  if(keep.yonPos)ST.yonPos=keep.yonPos;
+  if(keep.yonLast)ST.yonLast=keep.yonLast;
+  if(keep.yonF)ST.yonF=keep.yonF;
+  if(keep.oxPos)ST.oxPos=keep.oxPos;
+  if(keep.oxSeq)ST.oxSeq=keep.oxSeq;
   ST.logn=keep.logn||0;
   ST.gen=keep.gen||0;
   ST.log=L;
