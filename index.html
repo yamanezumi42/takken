@@ -426,6 +426,8 @@ a{color:var(--chipfg)}
 .oxp .chips{display:flex;flex-wrap:wrap;gap:6px}
 .oxp .chips span{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:14px;background:#fff}
 .oxp .law{font-size:12.5px;color:#8a8074;margin-top:2px}
+.tog.oxrst{vertical-align:top}
+.tog.oxrst svg{width:14px;height:14px;flex:none}
 .bigrow{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:8px 11px;margin-bottom:6px}
 .bigrow .t{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
@@ -1795,7 +1797,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='4f2e5323';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='e0e9a9c1';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

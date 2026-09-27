@@ -1283,6 +1283,8 @@ function applyEvent(E,live){
   /* ○×・4択（2026-09-27）。**その場と同じ関数**を通す＝別々に書くとずれる */
   if(E.e==='mq'){if(E.id){if(!ST.qm||typeof ST.qm!=='object')ST.qm={};ST.qm[E.id]=E.day}return}
   if(E.e==='oxa'){try{OXB.apply(E)}catch(e){}return}
+  /* ○×の記録リセット（2026-09-28 本人「〇×問題はリセットできるようにしておいて」） */
+  if(E.e==='oxreset'){try{OXB.reset(E)}catch(e){}return}
   if(E.e==='yona'){try{YB.apply(E)}catch(e){}return}
   if(E.e==='closed'){if(E.cat)ST.closedSeen[E.cat]=E.day;return}
 }
@@ -4346,8 +4348,48 @@ var OXB={
   lv:function(d,i){
     var v=this.rec(d)[String(i)];
     return (!v||!v[0])?0:(v[1]?2:1);
+  },
+  /* 記録リセットを当てる（その場でも数え直しでも、ここだけを通る）。
+     E.all＝○×すべて／E.dir＝その単元だけ。消すのは正誤・最後に押した答え・やめた場所。 */
+  reset:function(E){
+    if(!E)return;
+    if(!ST.ox||typeof ST.ox!=='object')ST.ox={};
+    if(!ST.oxPos||typeof ST.oxPos!=='object')ST.oxPos={};
+    if(E.all){ST.ox={};ST.oxPos={};return}
+    if(E.dir){delete ST.ox[E.dir];delete ST.oxPos[E.dir]}
   }
 };
+/* ○×の記録リセットの確認（d＝単元。空なら○×すべて） */
+function oxResetAsk(d){
+  var dirs=d?[d]:OXB.dirs(),n=0,a=0;
+  dirs.forEach(function(x){var st=OXB.stat(x);n+=st.n;a+=st.a});
+  var m=document.getElementById('modal');
+  m.innerHTML='<div class="sheet">'
+   +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">○×の記録をリセット</div>'
+   +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+   +'<div class="mini" style="line-height:1.9">'+(d?esc(OXB.cat(d)):'○×問題すべて（'+dirs.length+'単元）')+'<br>'
+   +'全'+n3(n)+'問のうち、<b>答えた記録がある '+n3(a)+'問</b>を「まだ答えていない」状態に戻します。<br>'
+   +'消えるのは、正解・まちがい・最後に押した答え・やめた場所です。<br>'
+   +'<b>解いた日数・学習時間は残ります。</b>過去問の記録には触りません。<br>'
+   +'元に戻せません。</div>'
+   +'<div class="rowx" style="gap:8px;margin-top:12px">'
+   +'<button class="btn sm" style="width:auto" data-act="oxresetgo" data-d="'+esc(d||'')+'">'
+   +'リセットする（'+n3(a)+'問）</button>'
+   +'<button class="btn sm" style="width:auto" data-act="closeModal">やめる</button></div></div>';
+  m6SheetOpen();
+}
+function oxResetGo(d){
+  var dirs=d?[d]:OXB.dirs(),a=0;
+  dirs.forEach(function(x){a+=OXB.stat(x).a});
+  applyEvent(logEv('oxreset',d?{dir:d,day:today()}:{all:1,day:today()}),true);
+  /* この回に押した答え・並びも捨てる（前へ戻ったときに古い答えが出ないように） */
+  S.oxPick=null;S.oxSeen={};S.oxSeq=null;S.oxAgain=false;
+  if(d&&S.oxDir===d)S.oxI=0;
+  saveST();try{syncSoon()}catch(e){}
+  var mm=document.getElementById('modal');if(mm)mm.hidden=true;
+  msg(a+'問を「まだ答えていない」に戻しました');
+  render();
+}
 /* 単元の一覧（動画学習・単元学習と同じ並びの3つ目の入口） */
 function vFieldsOx(){
   if(!OXB.ok()||!NB.ok())
@@ -4373,7 +4415,11 @@ function vFieldsOx(){
     h+='<div class="bigrow"><button class="t"><span>'+esc(b)+'</span></button></div>';
     byBig[b].forEach(function(d){h+=oxRowHtml(d)});
   });
-  return h+'</div>';
+  h+='</div>';
+  /* ○×の記録をすべてリセット（2026-09-28）。答えた記録が無ければ出さない */
+  if(tot.a)h+='<div style="margin:14px 0 4px"><button class="btn sm" style="width:auto" data-act="oxreset" data-d="">'
+    +IC.again+'<span style="margin-left:6px">○×の記録をすべてリセット（'+n3(tot.a)+'問）</span></button></div>';
+  return h;
 }
 function oxRowHtml(d){
   var st=OXB.stat(d),pc=st.pct,po=OXB.pos(d);
@@ -4442,6 +4488,9 @@ function vOx(){
       +'すべて '+rows.length+'</button>'
     +'<button class="tog'+(sq?' on':'')+'" style="margin:0 6px 6px 0" data-act="oxonly" data-v="ng"'
       +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
+    /* 記録をリセット（2026-09-28）。答えた記録が無ければ出さない */
+    +(st.a?('<button class="tog oxrst" style="margin:0 6px 6px 0" data-act="oxreset" data-d="'+esc(d)+'">'
+      +IC.again+'<span>記録をリセット</span></button>'):'')
     +'</div>'
     +(S.oxGrid?oxGridHtml(d,i):'')
     +'<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(oxQText(d,i,row))+'</div></div>';
@@ -9204,6 +9253,8 @@ document.addEventListener('click',function(e){
   if(a==='vreset'){vResetAsk(t.getAttribute('data-v'));return}
   if(a==='vresetgo'){vResetGo(t.getAttribute('data-v'));return}
   if(a==='creset'){cResetAsk(t.getAttribute('data-c'));return}
+  if(a==='oxreset'){oxResetAsk(t.getAttribute('data-d')||'');return}
+  if(a==='oxresetgo'){oxResetGo(t.getAttribute('data-d')||'');return}
   if(a==='cresetgo'){cResetGo(t.getAttribute('data-c'));return}
   if(a==='why'){applyWhy(t.getAttribute('data-id'),t.getAttribute('data-w'));render();return}
   /* データの間違いの報告。同じものをもう一度押したら取り消し。 */
