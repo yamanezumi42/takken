@@ -4455,8 +4455,11 @@ function vOx(){
   }else{
     h+='<div class="oxjudge'+(good?' ok':' ng')+'">'+(good?'正解':'まちがい')
       +'　<span>答えは '+esc(ans)+(was?'（'+esc(pick)+' と答えました）':'')+'</span></div>'
-      +'<div class="panel" style="margin-top:10px"><div class="sub" style="margin:0 0 6px">解説</div>'
-      +'<div style="font-size:14px;line-height:1.75">'+esc(row[3])+'</div></div>'
+      /* 足した中身（ひとことで）がある問は、元の1行の解説を出さない
+         （2026-09-28 本人「一言でで足りてる気がする」＝同じことを2回言っていた）。
+         足していない問（保留の問など）は、これまでどおり元の解説を出す。 */
+      +((oxPlus(d,i)&&oxPlus(d,i).one)?'':('<div class="panel" style="margin-top:10px"><div class="sub" style="margin:0 0 6px">解説</div>'
+      +'<div style="font-size:14px;line-height:1.75">'+esc(row[3])+'</div></div>'))
       /* 足した解説（2026-09-28）。中身が無い問には何も出ない */
       +oxPlusHtml(d,i)
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
