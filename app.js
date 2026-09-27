@@ -847,6 +847,50 @@ function chapFor(it){
 /* その問題が出てくる全部の章（同じ問題が複数の動画に現れるのが正しい状態） */
 function chapsFor(it){return vidsOf(it).map(function(v){return chapOf(v,it)})}
 function vurl(vid,sec){return 'https://youtu.be/'+vid+'?t='+(sec||0)}
+/* ---------- 4択に付ける○×？（2026-09-27 本人指示） ----------
+   ○＝この記述は正しいと思う／×＝誤りだと思う／？＝自信なし。
+   答えたときに、付けた印を**1問1答の記録にも入れる**（○×は肢の正解と突き合わせて正誤が決まる）。
+   ？は成績に混ぜず、別に持つ（ST.qm）。 */
+var YMK={'':'・','o':'○','x':'×','q':'？'},YMKSEQ=['','o','x','q'];
+function yonMkGet(k){return (S.yonMk&&S.yonMk[k])||''}
+function yonMkNext(k){
+  if(!S.yonMk)S.yonMk={};
+  S.yonMk[k]=YMKSEQ[(YMKSEQ.indexOf(yonMkGet(k))+1)%YMKSEQ.length];
+  return S.yonMk[k];
+}
+/* 答えたあとに「付けた印が合っていたか」を出す（画面用）。記録は yonMarkSave が入れる。 */
+function yonMkResHtml(qid){
+  var mk=S.yonMk||{},rows=[];
+  Object.keys(mk).forEach(function(k){
+    if(k.indexOf(qid+'-')!==0||!mk[k])return;
+    var m=mk[k],it=BY[k],lab=k.slice(qid.length+1);
+    if(m==='q'){rows.push([lab,'？','自信なし']);return}
+    if(!it){rows.push([lab,YMK[m],'（1問1答に無い記述）']);return}
+    var ok=((m==='o')===!!it.ox);
+    rows.push([lab,YMK[m],ok?'合っていた':'ちがった（正しくは'+(it.ox?'○':'×')+'）']);
+  });
+  if(!rows.length)return '';
+  rows.sort(function(x,y){return x[0]<y[0]?-1:1});
+  var n=0;rows.forEach(function(r){if(r[2]==='合っていた')n++});
+  return '<div class="mkres">付けた印<br>'
+    +rows.map(function(r){return r[0]+'　'+r[1]+'　'+r[2]}).join('<br>')
+    +'<br>合っていた印 <b>'+n+'</b> / '+rows.length+'　（1問1答の記録にも入れました）</div>';
+}
+/* 付けた印を記録に入れる。戻り＝[[肢id,印,合っていたか(null＝？や1問1答に無い肢)],…] */
+function yonMarkSave(qid){
+  var out=[],mk=S.yonMk||{},any=false;
+  Object.keys(mk).forEach(function(k){
+    if(k.indexOf(qid+'-')!==0||!mk[k])return;
+    var m=mk[k],it=BY[k];
+    if(!it){out.push([k,m,null]);return}          /* 1問1答に出ない肢＝記録しない */
+    if(m==='q'){applyEvent(logEv('mq',{id:k,day:today()}));any=true;out.push([k,m,null]);return}
+    var ok=((m==='o')===!!it.ox);
+    applyA(logEv('a',{id:k,ok:ok,day:today(),kind:'mark',m:m}),true);
+    any=true;out.push([k,m,ok]);
+  });
+  if(any){saveST();try{syncSoon()}catch(e){}}
+  return out;
+}
 /* ---------- 動画リンクをChromeで開く（2026-09-25 本人指示・案2） ----------
    PCの宅建アプリは Edge をアプリモードで起動している（Desktop\宅建アプリ.lnk の
    msedge.exe --app=...）ので、中の動画リンクもEdgeが開く。ページから exe は起動できないので、
@@ -1231,6 +1275,7 @@ function applyEvent(E,live){
   if(E.e==='rep'){if(!ST.reports)ST.reports={};ST.reports[E.id]={tags:(E.tags||[]).slice(),memo:E.memo||'',at:E.at};return}
   if(E.e==='check'){if(E.key)ST.checkDone[E.key]=E.day;return}
   /* ○×・4択（2026-09-27）。**その場と同じ関数**を通す＝別々に書くとずれる */
+  if(E.e==='mq'){if(E.id){if(!ST.qm||typeof ST.qm!=='object')ST.qm={};ST.qm[E.id]=E.day}return}
   if(E.e==='oxa'){try{OXB.apply(E)}catch(e){}return}
   if(E.e==='yona'){try{YB.apply(E)}catch(e){}return}
   if(E.e==='closed'){if(E.cat)ST.closedSeen[E.cat]=E.day;return}
@@ -1339,6 +1384,9 @@ function normST(o){
   /* 講義を見た印・ゲームの報告も数え直しで消えないよう欄を作る（2026-08-29 批評） */
   if(!o.lessonDone||typeof o.lessonDone!=='object')o.lessonDone={};
   if(!o.greports||typeof o.greports!=='object')o.greports={};
+  /* 4択で付けた印（2026-09-27）。mk＝○×の印／qm＝「？」を付けた肢 */
+  if(!o.mk||typeof o.mk!=='object')o.mk={};
+  if(!o.qm||typeof o.qm!=='object')o.qm={};
   if(!Array.isArray(o.log))o.log=[];
   /* 共有の世代（2026-08-29 検証）。「この端末の記録を使う」で1つ進む。
      自分より新しい世代を見たら、混ぜずに丸ごと乗り換える。 */
@@ -1552,6 +1600,8 @@ function applyA(E,live){
   var id=E.id,it=BY[id];
   if(!it)return {ok:false,gap:0};        /* 問題が消えている（データが古い）＝飛ばす */
   var r=mk(id),t=E.day,ok=!!E.ok,gap=0;
+  /* 4択で付けた印（○×）を覚えておく＝あとで見返したときに出せる（2026-09-27） */
+  if(E.m){if(!ST.mk||typeof ST.mk!=='object')ST.mk={};ST.mk[id]=E.m}
   var pre=r.box||0,wasGrad=(r.state==='卒業');
   var isFirst=(att(r)===0);
   r.last=stampOf(E);r._pre=pre;r._why=null;r._preStreak=r.streak||0;
@@ -2869,7 +2919,8 @@ function vHome(){
                                       :('間違い直しの期間（〜'+md(addD(PLAN2.allStart,-1))+'）')),
        'all':'総復習の期間（'+md(PLAN2.allStart)+'〜'+md(PLAN2.allEnd)+'）',
        'last':'仕上げ'}[ph()])
-    +'</span><span>日曜は通し演習</span></div>';
+    /* 「日曜は通し演習」は出さない（2026-09-27 本人「通し演習はやらないから消してほしい」） */
+    +'</span></div>';
   if(!LSOK)h+='<div class="warn" style="margin-bottom:12px">'+IC.warn+' この端末では進行状況が残りません</div>';
   /* 記録を失わないための案内。条件を満たしたときだけ1行（常設しない＝SPEC §5-1 引き算の原則）。
      ホーム画面の案内は一度閉じたら二度出さない（settings.a2hs）。 */
@@ -3328,87 +3379,25 @@ function startCheck(at){
   startQueue(c.ids.map(function(i){return BY[i]}),'チェック用問題',false,null,true,false);
 }
 function flowHtml(){
-  /* 順番は固定＝①今日の新規 ②間違えた問題 ③復習 ④通し演習（2026-08-23 本人指定）。
-     以前は演習が先頭（mockRowHtml を先に呼んでいた）で、何から始めるのか分からなかった。
-     「次にやる1行」だけ濃くする＝どれを押すかで迷わせない。 */
-  var g=goal2(),rows=[],h='<div class="flow">';
-  /* 中断した演習は「続き」なので最優先。1行だけ出して残りは畳む。 */
-  var mr=ST.mockRun;
-  if(mr&&!mr.done){
-    var tot=(mr.qs||[]).length||49,ok2=0,i2;
-    for(i2=0;i2<(mr.sel||[]).length;i2++)
-      if(mr.sel[i2]!=null&&mr.qs&&mr.qs[i2]&&mr.sel[i2]===mr.qs[i2].ans)ok2++;
-    rows.push({act:'resumeMock',lab:'通し演習を続ける',
-               st:(mr.i||0)+' / '+tot+'問　いま '+ok2+'問正解',done:false});
-  }
-  /* 過去問4択の続き（2026-09-22 本人指示「4択問題も途中から出来るようにホーム画面に出してほしい」）。
-     途中でやめたときだけ1行出す。終わっていれば出さない＝行を無駄に増やさない。 */
+  /* 2026-09-27 本人指示でホームの行を**2つだけ**にした。
+     > 「①HOME画面の通し演習はやらないから消してほしい。
+     >   ②再開と間違えた問題以外は必要ないかな。HOME画面の問題に飛ぶ選択肢のところについてね」
+     ＝出すのは「過去問4択の続き（再開）」と「間違えた問題」だけ。
+     以前の行（今日の新規・復習・通し演習・中断した通し演習）は出さない。
+     ※計算そのもの（goal2 など）は分析タブでも使うので消さない。行にしないだけ。 */
+  var rows=[],h='<div class="flow">';
+  /* ①再開＝過去問4択の続き。途中でやめたときだけ出す（終わっていれば出さない）。 */
   var yc=YB.ok()?YB.cont():null;
   if(yc)rows.push({act:'yonhome',lab:'過去問4択の続き（'+yc.title+'）',
                    st:(yc.i+1)+' / '+n3(yc.n)+'問',done:false});
-  /* ①今日の新規（1周が終わるまで）。数字は「今日やる分の残り」＝押せば終わる数。 */
-  var restAll=unseenItems(true).length,restNow=unseenItems().length;
-  var newLeft=Math.max(0,g.n-g.done);
-  if(g.lab==='新規'){
-    /* 新規は**動画から始める**（2026-08-23 本人指摘「今日の新規は動画学習に飛んで欲しい。
-       そこの次にやる単元から」）。押すと学習タブの「次にやる単元（あこ課長の次の1本）」の
-       ページへ飛ぶ。そのページに章の一覧と「残り／全」の解くボタンがあるので、
-       見てからそのまま解ける。行の数字は「今日やる分の残り」＝押して終わらせる数。
-       前の版は「出せる新規が0のときだけ」飛ばしていて、本人の狙いに足りていなかった。 */
-    var nv=nextAkoVid();      /* 学習タブの一覧と同じ1本（あこ課長） */
-    if(nv){
-      rows.push({act:'gonextvid',
-                 /* ＃番号は出さない（2026-08-23 本人指示「＃数字がいらない」）。見出しだけ出す。 */
-                 lab:'今日の新規'+(vlab(nv)?('（'+vlab(nv)+'）'):''),
-                 st:((!restNow&&restAll)?'動画を見てから'
-                     :((newLeft?n3(newLeft)+'問':'今日は済')+'　動画から')),
-                 done:(newLeft===0&&restNow>0),vid:nv});
-    }else{
-      /* 動画が全部終わっている＝飛ぶ先が無いので、その場で出題を始める。 */
-      rows.push({act:'startNew',lab:'今日の新規',
-                 st:(newLeft?n3(newLeft)+'問':'今日は済'),
-                 done:(newLeft===0)});
-    }
-  }
-  else
-    rows.push({act:'startNew',lab:({'間違い直し':'間違い直し','総復習':'総復習（全論点を1肢ずつ）',
-                                    '仕上げ':'仕上げ'}[g.lab]||g.lab),
-               st:n3(Math.max(0,g.n-g.done))+'問',done:(g.done>=g.n)});
+
   /* ②間違えた問題＝解いて間違えて、まだ正解し直していないもの。 */
   var wp=wrongPool().length;
   rows.push({act:'startWrongAll',lab:'間違えた問題',st:(wp?n3(wp)+'問':'なし'),done:!wp});
-  /* ③復習＝最後に解いてから日が経った順に20問（旧「思い出し」。名前は本人指示で復習に統一）。 */
-  var rl=recallLeft();
-  if(rl!==null&&recallOn())
-    rows.push({act:'startRecall',lab:'復習',st:(rl?n3(rl)+'問':'今日は済'),done:!rl});
-  /* ④通し演習＝習った範囲だけで本試験の形（日曜）。 */
-  if(MOCKS.length&&!(mr&&!mr.done)){
-    var ml=mockLearned(),mn=ml.length,a=ST.mock||[],last=a[a.length-1];
-    /* 日曜＝通し演習（本試験の形・習った範囲の全部）。平日＝オリジナル4択を5問だけ。
-       行は増やさない（2026-08-23 本人「無駄に押せるものが多いと困る」）。 */
-    if(isSunday()){
-      if(mn)rows.push({act:'startMock',lab:'通し演習（'+mn+'問）',
-                       st:(last?('前回 '+last.ok+'/'+last.n+'　'):'')+'今日',done:false});
-    }else{
-      var on=ml.filter(function(q){return !!q.own}).length,od=mockToday();
-      /* 1周が終わるまでは**1問**（2026-08-23 本人指示）。新規だけで1日187問あるので、
-         5問（＝20肢）を足すと明らかに超える。型を切らさないための1問に留める。
-         未着手が0になったら5問に上げる。 */
-      var oN=Math.min(restAll?1:5,on);
-      if(on)rows.push({act:'startMock',adata:oN,
-                       lab:'4択（オリジナル）',
-                       st:(od?'今日は済':(oN+'問')),done:!!od});
-    }
-  }
-  /* ⑤担保物権だけ（特別枠・2026-08-29 本人指示）。今日の流れの最後に置く。 */
-  var tp=tanpoItems(),tpr=tp.filter(function(it){return att(R(it.id))===0}).length;
-  rows.push({act:'startTanpo',lab:'担保物権だけ（特別）',
-             st:(tpr?(n3(tpr)+'問 / '+n3(tp.length)+'問'):('解き直す　'+n3(tp.length)+'問')),
-             done:!tpr});
-
-  /* 濃くするのは「済んでいない最初の1行」だけ。 */
-  var nowAt=-1,k;
-  for(k=0;k<rows.length;k++)if(!rows[k].done&&!rows[k].yet){nowAt=k;break}
+  /* ③復習・④通し演習の行は出さない（2026-09-27 本人「再開と間違えた問題以外は必要ない」）。 */
+  /* 「次に押す1行」を濃くする＝まだ終わっていない最初の行 */
+  var nowAt=-1;
+  for(var ri=0;ri<rows.length;ri++){if(!rows[ri].done){nowAt=ri;break}}
   rows.forEach(function(r,idx){
     var cls=(idx===nowAt)?' now':(r.done?' done':(r.yet?' yet':''));
     h+='<button class="frow'+cls+'" data-act="'+r.act+'"'
@@ -4710,6 +4699,7 @@ function vYon(){
   }
   var qid=ids[i],q=YB.q(qid),opts=YB.opts(qid),head=RAWBY[qid+'-1']||RAWBY[qid+'-ア']||{};
   if(!q)return '<div class="pad'+stag()+'">'+back+'</div>';
+  var kosu=(q&&(q.type==='個数'||q.type==='組合せ'));   /* 印はア〜エの側に出す */
   var pick=S.yonPick||(S.yonAgain?null:(S.yonSeen?S.yonSeen[qid]:null))||null;
   var done=!!pick,was=(!S.yonPick&&done),good=done&&(pick===q.a);
   var ng=YB.ngList(ids).length,sq=yonSeq(),pos=yonPos(i),tot=yonTotal();
@@ -4721,7 +4711,7 @@ function vYon(){
         +esc(YB.catOf(qid))+'</span>':'')+'</div>'
     /* リード（過去問そのまま。一字も変えない）。個数・組合せはア〜エが続いて読みにくいので、
        **行を折って1つずつ離すだけ**（文字は足さない・消さない。2026-09-22 本人指示）。 */
-    +'<div class="yq">'+yonLead(q.lead)+'</div>'
+    +'<div class="yq">'+yonLead(q.lead,kosu?qid:null,done)+'</div>'
     /* 出典と進み具合は右寄せの小さい字（本人が送ってくれた画面と同じ置き方） */
     +'<div class="ymeta">'+(src?esc(src)+'<br>':'')
       +(pos+1)+'問目／'+(sq?'まちがえた問題':esc(ttl))+' '+tot+'問</div>';
@@ -4733,14 +4723,22 @@ function vYon(){
       if(n===q.a)cls+=' ok';
       else if(n===pick)cls+=' ng';
     }
+    /* 印（2026-09-27）。個数・組合せは選択肢が「一つ〜四つ」なので、印はア〜エの側に出す。 */
+    var mkey=qid+'-'+n,mv=kosu?'':yonMkGet(mkey);
+    if(mv)cls+=' m-'+mv;
     h+='<button class="'+cls+'"'+(done?' disabled':' data-act="yonans" data-v="'+n+'"')+'>'
-      +'<span class="no">'+n+'</span>'
+      +'<span class="col"><span class="no">'+n+'</span>'
+      +(kosu?'':'<span class="mk'+(done?' flat':'')+'"'
+        +(done?'':' data-act="yonmk" data-v="'+n+'"')+'>'+YMK[mv]+'</span>')
+      +'</span>'
       +'<span class="tx">'+esc(opts[n-1])+'</span></button>';
   }
   h+='</div>';
   if(done){
     h+='<div class="oxjudge'+(good?' ok':' ng')+'" style="margin-top:14px">'+(good?'正解':'まちがい')
       +'　<span>答えは '+q.a+''+(was?'（'+pick+' を選びました）':(good?'':'　選んだのは '+pick))+'</span></div>'
+      /* 付けた印が合っていたか（2026-09-27 本人指示）。1問1答の記録にも入っている。 */
+      +yonMkResHtml(qid)
       +yonExpHtml(qid,q)
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
       +'<button class="btn sm" data-act="yonagain">もう一度答える</button>'
@@ -4766,7 +4764,7 @@ function vYon(){
 /* リードの ア〜オ を**選択肢と同じ組み方**（札＋本文）で出す
    （2026-09-22 本人が案1を選択。「これ見にくいよね？選択問題と同じようにできないの？」）。
    文字は足さない・消さない＝組み方だけ変える。 */
-function yonLead(t){
+function yonLead(t,qid,done){
   /* 印は**ア→イ→ウ→エ→オ の順に、うしろに空白が続くもの**だけを拾う。
      2026-09-24 本人「この問題アイウ入ってないね」＝前は「。の直後」だけを見ていたので、
      「…3,000平方メートルの開発行為イ 準都市計画区域において、」のように
@@ -4784,8 +4782,15 @@ function yonLead(t){
   var h='<p class="ylead">'+s.slice(0,ix[0][0])+'</p><div class="aewrap">';
   for(var j=0;j<ix.length;j++){
     var en=(j+1<ix.length)?ix[j+1][0]:s.length;
-    h+='<div class="ae"><span class="m">'+ix[j][2]+'</span>'
-      +'<span class="tx">'+s.slice(ix[j][1],en)+'</span></div>';
+    /* 個数・組合せは、ア〜エの1つずつに○×？を付ける（2026-09-27 本人指示）。
+       印の所をたたくとまわる。ここには「答える」ボタンは無いので取り違えない。 */
+    var mk2=qid?yonMkGet(qid+'-'+ix[j][2]):'';
+    h+='<div class="ae'+(mk2?' m-'+mk2:'')+'"><span class="col" style="display:flex;'
+      +'flex-direction:column;align-items:center">'
+      +'<span class="m">'+ix[j][2]+'</span>'
+      +(qid?('<span class="mk'+(done?' flat':'')+'"'
+        +(done?'':' data-act="yonmk" data-v="'+ix[j][2]+'"')+'>'+YMK[mk2]+'</span>'):'')
+      +'</span><span class="tx">'+s.slice(ix[j][1],en)+'</span></div>';
   }
   return h+'</div>';
 }
@@ -8789,6 +8794,14 @@ document.addEventListener('click',function(e){
     S.yonPick=yv;S.yonAgain=false;
     S.yonSeen=S.yonSeen||{};S.yonSeen[yid]=yv;
     YB.put(yid,yv===yq.a,yv);
+    /* 付けた印を1問1答の記録にも入れる（2026-09-27 本人指示）。画面に結果も出す。 */
+    S.yonMkRes=yonMarkSave(yid);
+    render();return}
+  /* 印をたたく＝○×？がまわる（2026-09-27 本人指示・案E1）。答えにはならない。 */
+  if(a==='yonmk'){
+    if(S.yonPick)return;                       /* 答えたあとは変えない */
+    var mq=yonIds()[S.yonI|0];
+    if(mq)yonMkNext(mq+'-'+t.getAttribute('data-v'));
     render();return}
   if(a==='yonagain'){S.yonPick=null;S.yonAgain=true;render();return}
   if(a==='yongrid'){S.yonGrid=!S.yonGrid;render();return}

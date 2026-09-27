@@ -358,6 +358,24 @@ a{color:var(--chipfg)}
   font-family:var(--num);font-size:12px;display:flex;align-items:center;justify-content:center;
   margin-top:5px}
 .yo .tx{flex:1;min-width:0}
+/* 選択肢に○×？を付ける（2026-09-27 本人指示・案E1＋D4）。番号の下に出す。
+   **印の所をたたくと印がまわる／番号と本文をたたくのは今までどおり「答える」**。
+   本人「実際には問題のタップで正解とかを出してほしい。答え合わせで正解にして欲しくはない」。 */
+.yo .col{flex:0 0 26px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.yo .col .no{margin-top:0}
+.yo .mk{font-size:17px;font-weight:700;line-height:1.05;color:#c7bfb5;
+  padding:3px 6px;border-radius:8px;background:#f1ebe3}
+.yo .mk.flat{background:none;padding:3px 0}
+.yo.m-o{background:#eef4ef}.yo.m-x{background:#faeef0}.yo.m-q{background:#faf4e6}
+.yo.m-o .mk{color:#4a7c59}.yo.m-x .mk{color:#c0455f}.yo.m-q .mk{color:#b58b2a}
+.ae .mk{font-size:16px;font-weight:700;line-height:1.05;color:#c7bfb5;
+  padding:3px 6px;border-radius:8px;background:#f1ebe3;margin-top:3px}
+.ae.m-o{background:#eef4ef}.ae.m-x{background:#faeef0}.ae.m-q{background:#faf4e6}
+.ae.m-o .mk{color:#4a7c59}.ae.m-x .mk{color:#c0455f}.ae.m-q .mk{color:#b58b2a}
+.ae{border-radius:10px}
+.mkres{margin-top:10px;font-size:13px;line-height:1.95;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:9px 11px}
+.mkres b{color:var(--ngdeep)}
 .yo[disabled]{cursor:default;opacity:1}
 /* 答えたあと＝**線だけ**（本人が案Bを選択）。塗りつぶさない */
 .yo.ok{box-shadow:inset 0 0 0 1.5px #9ccdb5}
@@ -1751,7 +1769,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='d3598e3d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b8e1ef24';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
