@@ -4243,6 +4243,32 @@ function vNProg(){
      動画学習と単元学習の並びに入れてほしい」「論点が多いなら問題増やしてくれたら もっと嬉しいな」
    元＝work_figs/ox/<単元>.json（論点1,982件を覆う2,173問）→ tools/build_ox_js.py → data/ox.js。
    **記録は ST.ox に別で持つ**＝過去問5,241問の正答率・到達度には混ぜない（本人の成績を汚さない）。 */
+/* ○×を分かりやすくした中身（2026-09-28）。OXPLUS[単元][並び順i]＝{q,one,why,table,trap,law}。
+   ・問題文の差し替え（q）は、○×の文が過去問ではなく Claude が書いた文なので許される
+     （過去問の肢は一字も変えない＝CLAUDE.md 絶対ルール③ とは別）。答え（○×）は変えない。
+   ・中身が無い問には何も足さない。並びがずれていないかは check_spec の L13 が見る。 */
+function oxPlus(d,i){var m=window.OXPLUS;return (m&&m[d]&&m[d][String(i)])||null}
+function oxQText(d,i,row){var x=oxPlus(d,i);return (x&&x.q)?x.q:row[2]}
+function oxPlusHtml(d,i){
+  var x=oxPlus(d,i);if(!x)return '';
+  var h='<div class="oxp">';
+  if(x.one)h+='<div class="oxs"><div class="oxh">ひとことで</div><div class="one">'+x.one+'</div></div>';
+  if(x.why)h+='<div class="oxs"><div class="oxh">なぜ</div>'+x.why+'</div>';
+  if(x.table&&x.table.rows){
+    h+='<div class="oxs"><div class="oxh">並べて覚える</div><table><tr>';
+    (x.table.head||[]).forEach(function(c){h+='<th>'+c+'</th>'});
+    h+='</tr>';
+    x.table.rows.forEach(function(r){h+='<tr>'+r.map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>'});
+    h+='</table></div>';
+  }
+  if((x.trap||[]).length){
+    h+='<div class="oxs"><div class="oxh">ひっかけで入れ替えてくる所</div><div class="chips">';
+    x.trap.forEach(function(t){h+='<span>'+t+'</span>'});
+    h+='</div></div>';
+  }
+  if(x.law)h+='<div class="law">'+esc(x.law)+'</div>';
+  return h+'</div>';
+}
 var OXB={
   ok:function(){return typeof OXQ!=='undefined'&&!!OXQ},
   list:function(d){return (this.ok()&&OXQ[d])?OXQ[d]:[]},
@@ -4418,7 +4444,7 @@ function vOx(){
       +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
     +'</div>'
     +(S.oxGrid?oxGridHtml(d,i):'')
-    +'<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(row[2])+'</div></div>';
+    +'<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(oxQText(d,i,row))+'</div></div>';
   if(!done){
     /* ボタンは過去問の画面と**同じ形**（.ans .b＝○は accent、×は ng の塗り）。
        ここだけ別の見た目にすると、同じ○×なのに指が迷う。 */
@@ -4431,6 +4457,8 @@ function vOx(){
       +'　<span>答えは '+esc(ans)+(was?'（'+esc(pick)+' と答えました）':'')+'</span></div>'
       +'<div class="panel" style="margin-top:10px"><div class="sub" style="margin:0 0 6px">解説</div>'
       +'<div style="font-size:14px;line-height:1.75">'+esc(row[3])+'</div></div>'
+      /* 足した解説（2026-09-28）。中身が無い問には何も出ない */
+      +oxPlusHtml(d,i)
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
       +(sec?('<button class="btn sm" data-act="oxnote" data-d="'+esc(d)+'" data-s="'+sec+'">'
         +'ノートのこの節を読む</button>'):'')

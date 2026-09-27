@@ -410,6 +410,22 @@ a{color:var(--chipfg)}
 .oxjudge span{font-size:13px;font-weight:400}
 .oxjudge.ok{background:var(--chipbg);color:var(--chipfg)}
 .oxjudge.ng{background:#fdecec;color:#a4262c}
+/* ○×の足した解説（2026-09-28 本人「〇×問題の解説をもう少しわかりやすく増やす」）。
+   今の1行の解説の下に、ひとことで／なぜ／並べて覚える（表）／ひっかけ を足す。
+   名前は .oxs/.oxh（既存の .hd＝上のヘッダーは sticky、.sec＝数字の字体。同じ名前にすると
+   見出しがスクロールに張り付いて本文に重なった＝2026-09-28 自分で撮って見つけた）。 */
+.oxp{margin-top:10px}
+.oxp .oxs{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:11px 14px;margin:0 0 8px;font-size:15px;line-height:1.85}
+.oxp .oxs b{color:#8d2f3f}
+.oxp .oxh{font-size:12.5px;font-weight:700;color:var(--sub,#6e675f);margin:0 0 3px;letter-spacing:.04em}
+.oxp .one{font-weight:700}
+.oxp table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.6}
+.oxp th,.oxp td{border:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.oxp th{background:#f2ece4;font-size:13px}
+.oxp td:first-child{font-weight:700;background:#faf7f2;width:42%}
+.oxp .chips{display:flex;flex-wrap:wrap;gap:6px}
+.oxp .chips span{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:14px;background:#fff}
+.oxp .law{font-size:12.5px;color:#8a8074;margin-top:2px}
 .bigrow{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:8px 11px;margin-bottom:6px}
 .bigrow .t{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
@@ -1743,6 +1759,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 宅建ノート48冊（節・論点・問題idの対応表＋本体HTML＋アイコン＋CSS）。
      tools/build_notes_data.py → tools/build_notes_js.py が作る。2026-09-14 -->
 <!-- 試験前の○×（解説付き。ノートの論点ごと）。tools/build_ox_js.py が作る。2026-09-20 -->
+<!-- ○×を分かりやすくした中身（問題文の直し・ひとことで・なぜ・表・ひっかけ）。2026-09-28
+     元＝work_figs/ox_plus/<単元>.py → data/ox_plus.json → tools/build_ox_plus_js.py → data/ox_plus.js -->
 <!-- 過去問を4択のまま出すためのデータ。tools/build_yon_js.py が作る。2026-09-21 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
@@ -1777,7 +1795,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='0621449d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='1d2d3b47';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -2011,6 +2029,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             notes:rec.parts['notes.json']||null,          /* 宅建ノート（対応表。2026-09-14） */
             notebody:rec.parts['notes_body.json']||null,  /* 同（本体HTML・アイコン・見た目） */
             ox:rec.parts['ox.json']||null,                /* 試験前の○×（2026-09-20） */
+            oxplus:rec.parts['ox_plus.json']||null,       /* ○×の足した解説（2026-09-28） */
             yon:rec.parts['yon.json']||null,              /* 4択の過去問（2026-09-21） */
             hosokuTiming:rec.parts['hosoku_timing.json']||null};
   }
@@ -2177,6 +2196,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.NOTEHTML=nb.html||{};window.NOTESVG=nb.svg||'';window.NOTECSS=nb.css||'';
     /* 試験前の○×（2026-09-20）。app.html は OXQ を見る。 */
     window.OXQ=d.ox||null;
+    /* ○×を分かりやすくした中身（2026-09-28）。app.html は OXPLUS を見る。無ければ何も足さない。 */
+    window.OXPLUS=d.oxplus||{};
     /* 過去問を4択のまま（2026-09-21）。app.html は YONQ を見る。 */
     window.YONQ=d.yon||null;
     /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
