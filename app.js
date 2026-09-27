@@ -4711,9 +4711,11 @@ function vYon(){
     var mkey=qid+'-'+n,mv=kosu?'':yonMkGet(mkey);
     if(mv)cls+=' m-'+mv;
     h+='<button class="'+cls+'"'+(done?' disabled':' data-act="yonans" data-v="'+n+'"')+'>'
-      +'<span class="col"><span class="no">'+n+'</span>'
-      +(kosu?'':'<span class="mk'+(done?' flat':'')+'"'
-        +(done?'':' data-act="yonmk" data-v="'+n+'"')+'>'+YMK[mv]+'</span>')
+      /* 帯（番号＋印）ぜんぶが「印をたたく所」（2026-09-27 本人指示・案1）。
+         問題文をたたくと答える。番号をたたいても答えにはならない。 */
+      +'<span class="col"'+((kosu||done)?'':' data-act="yonmk" data-v="'+n+'"')+'>'
+      +'<span class="no">'+n+'</span>'
+      +(kosu?'':'<span class="mk'+(done?' flat':'')+'">'+YMK[mv]+'</span>')
       +'</span>'
       +'<span class="tx">'+esc(opts[n-1])+'</span></button>';
   }
@@ -4768,11 +4770,10 @@ function yonLead(t,qid,done){
     /* 個数・組合せは、ア〜エの1つずつに○×？を付ける（2026-09-27 本人指示）。
        印の所をたたくとまわる。ここには「答える」ボタンは無いので取り違えない。 */
     var mk2=qid?yonMkGet(qid+'-'+ix[j][2]):'';
-    h+='<div class="ae'+(mk2?' m-'+mk2:'')+'"><span class="col" style="display:flex;'
-      +'flex-direction:column;align-items:center">'
+    h+='<div class="ae'+(mk2?' m-'+mk2:'')+'">'
+      +'<span class="col"'+((qid&&!done)?' data-act="yonmk" data-v="'+ix[j][2]+'"':'')+'>'
       +'<span class="m">'+ix[j][2]+'</span>'
-      +(qid?('<span class="mk'+(done?' flat':'')+'"'
-        +(done?'':' data-act="yonmk" data-v="'+ix[j][2]+'"')+'>'+YMK[mk2]+'</span>'):'')
+      +(qid?('<span class="mk'+(done?' flat':'')+'">'+YMK[mk2]+'</span>'):'')
       +'</span><span class="tx">'+s.slice(ix[j][1],en)+'</span></div>';
   }
   return h+'</div>';
