@@ -858,24 +858,8 @@ function yonMkNext(k){
   S.yonMk[k]=YMKSEQ[(YMKSEQ.indexOf(yonMkGet(k))+1)%YMKSEQ.length];
   return S.yonMk[k];
 }
-/* 答えたあとに「付けた印が合っていたか」を出す（画面用）。記録は yonMarkSave が入れる。 */
-function yonMkResHtml(qid){
-  var mk=S.yonMk||{},rows=[];
-  Object.keys(mk).forEach(function(k){
-    if(k.indexOf(qid+'-')!==0||!mk[k])return;
-    var m=mk[k],it=BY[k],lab=k.slice(qid.length+1);
-    if(m==='q'){rows.push([lab,'？','自信なし']);return}
-    if(!it){rows.push([lab,YMK[m],'（1問1答に無い記述）']);return}
-    var ok=((m==='o')===!!it.ox);
-    rows.push([lab,YMK[m],ok?'合っていた':'ちがった（正しくは'+(it.ox?'○':'×')+'）']);
-  });
-  if(!rows.length)return '';
-  rows.sort(function(x,y){return x[0]<y[0]?-1:1});
-  var n=0;rows.forEach(function(r){if(r[2]==='合っていた')n++});
-  return '<div class="mkres">付けた印<br>'
-    +rows.map(function(r){return r[0]+'　'+r[1]+'　'+r[2]}).join('<br>')
-    +'<br>合っていた印 <b>'+n+'</b> / '+rows.length+'　（1問1答の記録にも入れました）</div>';
-}
+/* 答えたあとに印の合否は**出さない**（2026-09-27 本人「付けた印の部分は表記しなくていいよ」）。
+   記録には今までどおり入れる（下の yonMarkSave）。 */
 /* 付けた印を記録に入れる。戻り＝[[肢id,印,合っていたか(null＝？や1問1答に無い肢)],…] */
 function yonMarkSave(qid){
   var out=[],mk=S.yonMk||{},any=false;
@@ -4737,8 +4721,7 @@ function vYon(){
   if(done){
     h+='<div class="oxjudge'+(good?' ok':' ng')+'" style="margin-top:14px">'+(good?'正解':'まちがい')
       +'　<span>答えは '+q.a+''+(was?'（'+pick+' を選びました）':(good?'':'　選んだのは '+pick))+'</span></div>'
-      /* 付けた印が合っていたか（2026-09-27 本人指示）。1問1答の記録にも入っている。 */
-      +yonMkResHtml(qid)
+
       +yonExpHtml(qid,q)
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
       +'<button class="btn sm" data-act="yonagain">もう一度答える</button>'
