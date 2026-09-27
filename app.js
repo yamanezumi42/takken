@@ -853,6 +853,13 @@ function vurl(vid,sec){return 'https://youtu.be/'+vid+'?t='+(sec||0)}
    ？は成績に混ぜず、別に持つ（ST.qm）。 */
 var YMK={'':'・','o':'○','x':'×','q':'？'},YMKSEQ=['','o','x','q'];
 function yonMkGet(k){return (S.yonMk&&S.yonMk[k])||''}
+/* 印を1つ進める（選択肢の番号＝'1'〜'4'／個数・組合せ＝'ア'〜'オ'）。答えたあとは動かさない。 */
+function yonMkTap(v){
+  if(S.yonPick||!v)return;
+  var q=yonIds()[S.yonI|0];
+  if(!q)return;
+  yonMkNext(q+'-'+v);render();
+}
 function yonMkNext(k){
   if(!S.yonMk)S.yonMk={};
   S.yonMk[k]=YMKSEQ[(YMKSEQ.indexOf(yonMkGet(k))+1)%YMKSEQ.length];
@@ -8776,6 +8783,12 @@ document.addEventListener('click',function(e){
     S.dir=null;go('yon');return}
   if(a==='yonans'){
     if(S.yonPick)return;
+    /* ★問題文より**左**をたたいたときは「答える」ではなく「印」にする（2026-09-27 本人指摘）。
+       帯と本文のすき間や行の余白をたたくと答えになってしまい、解く前に答えが出ていた。
+       DOMのどこに当たったかではなく、**本文の左端との位置**で決める＝すき間が無くなる。 */
+    var ytx=t.querySelector?t.querySelector('.tx'):null,ytr=ytx?ytx.getBoundingClientRect():null;
+    if(ytr&&typeof e.clientX==='number'&&e.clientX<ytr.left){
+      yonMkTap(t.getAttribute('data-v'));return}
     var yv=+t.getAttribute('data-v'),yid=yonIds()[S.yonI|0],yq=YB.q(yid);
     if(!yq)return;
     S.yonPick=yv;S.yonAgain=false;
@@ -8785,11 +8798,7 @@ document.addEventListener('click',function(e){
     S.yonMkRes=yonMarkSave(yid);
     render();return}
   /* 印をたたく＝○×？がまわる（2026-09-27 本人指示・案E1）。答えにはならない。 */
-  if(a==='yonmk'){
-    if(S.yonPick)return;                       /* 答えたあとは変えない */
-    var mq=yonIds()[S.yonI|0];
-    if(mq)yonMkNext(mq+'-'+t.getAttribute('data-v'));
-    render();return}
+  if(a==='yonmk'){yonMkTap(t.getAttribute('data-v'));return}
   if(a==='yonagain'){S.yonPick=null;S.yonAgain=true;render();return}
   if(a==='yongrid'){S.yonGrid=!S.yonGrid;render();return}
   if(a==='yononly'){
