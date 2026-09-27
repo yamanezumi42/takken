@@ -362,22 +362,24 @@ a{color:var(--chipfg)}
    **印の所をたたくと印がまわる／番号と本文をたたくのは今までどおり「答える」**。
    本人「実際には問題のタップで正解とかを出してほしい。答え合わせで正解にして欲しくはない」。 */
 .yo .col{flex:0 0 40px;align-self:stretch;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:4px;border-radius:10px;background:#f1ebe3;
-  cursor:pointer}
-.yo[disabled] .col{background:#f5f1ea;cursor:default}
+  /* ★中身は**左上**に置く＝番号と印の位置は広げる前と同じ（2026-09-27 本人指示）。
+     たたける広さ（幅40px・行の高さいっぱい）はそのまま。色は敷かない。 */
+  align-items:flex-start;justify-content:flex-start;gap:3px;cursor:pointer}
+.yo[disabled] .col{cursor:default}
 /* ★縦の列に入れると flex:0 0 22px が「高さ」の指定になり、番号の**横幅が中身まで縮む**
    （2026-09-27 本人「問題番号がモックと違ってスリムになりすぎじゃない？」）。
    列の中では幅と高さを明に決める。モックと同じ 24×24。 */
 .yo .col .no{flex:none;width:24px;height:24px;border-radius:6px;font-size:12.5px;margin-top:0}
 .ae .col{flex:0 0 40px;align-self:stretch;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:4px;border-radius:10px;background:#f1ebe3;
-  cursor:pointer}
+  align-items:flex-start;justify-content:flex-start;gap:3px;cursor:pointer}
 .ae .col .m{flex:none;width:24px;height:24px;border-radius:6px;font-size:12.5px;margin-top:0}
-.yo .mk{font-size:18px;font-weight:700;line-height:1.05;color:#b3aaa0}
+.yo .mk{font-size:17px;font-weight:700;line-height:1.05;color:#c7bfb5;
+  padding:3px 6px;border-radius:8px;background:#f1ebe3}
 .yo .mk.flat{background:none;padding:3px 0}
 .yo.m-o{background:#eef4ef}.yo.m-x{background:#faeef0}.yo.m-q{background:#faf4e6}
 .yo.m-o .mk{color:#4a7c59}.yo.m-x .mk{color:#c0455f}.yo.m-q .mk{color:#b58b2a}
-.ae .mk{font-size:18px;font-weight:700;line-height:1.05;color:#b3aaa0}
+.ae .mk{font-size:16px;font-weight:700;line-height:1.05;color:#c7bfb5;
+  padding:3px 6px;border-radius:8px;background:#f1ebe3}
 .ae.m-o{background:#eef4ef}.ae.m-x{background:#faeef0}.ae.m-q{background:#faf4e6}
 .ae.m-o .mk{color:#4a7c59}.ae.m-x .mk{color:#c0455f}.ae.m-q .mk{color:#b58b2a}
 .ae{border-radius:10px}
@@ -1775,7 +1777,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='77594034';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='e9448089';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
