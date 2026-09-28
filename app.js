@@ -2719,6 +2719,7 @@ function render(){
      bindTilt() は残してあるので、戻すときはこの行を元に戻すだけでよい。 */
   /* if(S.view==='quiz')bindTilt(); */
   syncNextBar();                       /* 解説中だけ下に「次の問題」を出す（描画のたびに合わせる） */
+  syncOxBar();                         /* ○×で答えたあとだけ下に「前の問題／次の問題」（2026-09-28） */
   /* 入場アニメーションが終わったらクラスを外す。終わった時点の見た目は最終状態と同じなので
      見た目は変わらず、あとで再描画されても座標が飛ばない。 */
   Array.prototype.forEach.call(v.querySelectorAll('.qin'),function(el){
@@ -4557,10 +4558,14 @@ function vOx(){
   }
   /* 前へ／次へは**答える前でも後でも**出す（2026-09-20）。前へは先頭では出さない。 */
   var pos=oxPos(i),tot=oxTotal(d);
-  h+='<div class="oxnav">'
+  var nav='<div class="oxnav">'
     +(pos>0?'<button class="btn" data-act="oxprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
-    +'<button class="btn" data-act="oxnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
+    +'<button class="btn'+(done?' pri':'')+'" data-act="oxnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
     +'</div>';
+  /* 答えたあとは画面の下に固定する（2026-09-28）。解説が長いと下までスクロールしないと押せなかった。
+     一問一答の「次の問題」と同じく、次へは塗りのボタン。末尾は固定ボタンのぶん空ける。 */
+  if(done){OXBAR=nav;h+='<div style="height:76px"></div>'}
+  else{OXBAR='';h+=nav}
   return h+'</div>';
 }
 /* 番号で飛ぶ（2026-09-20 本人「途中から出来ないんだ」）。
@@ -5447,6 +5452,15 @@ function vQuiz(){
 }
 /* 解説の間だけ、画面の下に固定した「次の問題」を出す。
    完走の演出（M5）は z-index 45 で上に乗るので、そのときは queue の終わりで自動的に消える。 */
+/* ○×問題の下の固定ボタン。中身は vOx() が OXBAR に入れる（答えたあとだけ）。 */
+var OXBAR='';
+function syncOxBar(){
+  var b=document.getElementById('oxbar');
+  if(!b)return;
+  var show=(S.view==='ox'&&!!OXBAR);
+  if(show&&b.innerHTML!==OXBAR)b.innerHTML=OXBAR;
+  b.hidden=!show;
+}
 function syncNextBar(){
   var b=document.getElementById('nextbar');
   if(!b)return;

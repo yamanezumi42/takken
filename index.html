@@ -328,6 +328,13 @@ a{color:var(--chipfg)}
    判定は色の帯で出す。 */
 /* 前へ／次へ（2026-09-20 本人「前の問題に戻れないの悲しいね」）。左右に離して置く。 */
 .oxnav{display:flex;gap:10px;margin-top:14px}
+/* 答えたあとの「前の問題／次の問題」を下に固定（2026-09-28 本人「下までスクロールしないと次の問題へいけない」）。
+   位置・ぼかしは一問一答の #nextbar と同じ。タブ（z-index 20）は隠さない。 */
+#oxbar{position:fixed;left:0;right:0;bottom:calc(53px + env(safe-area-inset-bottom));z-index:19;
+  padding:10px 14px 12px;pointer-events:none;
+  background:linear-gradient(to top,var(--bg) 58%,rgba(255,255,255,0))}
+#oxbar[hidden]{display:none}
+#oxbar .oxnav{margin:0 auto;max-width:520px;pointer-events:auto}
 .oxnav .btn{flex:1}
 .oxnav>span{flex:1}
 /* 「12 / 35」を押すと番号の一覧が開く（途中から始める） */
@@ -1676,6 +1683,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 解説の間だけ出す「次の問題」。#view の外に置く＝#view は入場で transform（scale）するので、
      中に置くと position:fixed が効かなくなる。タブ（z-index 20）より下の層に置いてタブを隠さない。 -->
 <div id="nextbar" hidden><button class="btn pri" data-act="next">次の問題</button></div>
+<!-- ○×問題で答えたあとの「前の問題／次の問題」（2026-09-28）。#nextbar と同じ理由で #view の外に置く -->
+<div id="oxbar" hidden></div>
 <nav id="tabs"></nav>
 <!-- 演出オーバーレイ。#view の外に置く（＝彩度変化のフィルタ対象外・レイアウトに影響しない） -->
 <div id="fx" hidden></div>
@@ -1797,7 +1806,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b77cc0ba';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='02294726';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
