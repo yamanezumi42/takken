@@ -1448,6 +1448,8 @@ function normST(o){
   /* 「単元で進む」の大分類パネルの開閉（{大分類:true/false}）。null＝まだ一度も触っていない
      ＝そのときは既定（残りがある最初の大分類だけ開く）を使う＝ubOpenMap() 参照。 */
   if(!o.settings.ubOpen||typeof o.settings.ubOpen!=='object')o.settings.ubOpen=null;
+  /* ○×で確認の大分類パネルの開閉（2026-09-28）。null＝まだ一度も触っていない＝oxOpenMap() の既定 */
+  if(!o.settings.oxOpen||typeof o.settings.oxOpen!=='object')o.settings.oxOpen=null;
   /* 記録を失わないための3つ。lastExport＝最後に書き出した日／a2hs＝ホーム画面の案内を閉じたか
      ／persist＝navigator.storage.persist() の結果（記録用・null＝未対応か未応答） */
   if(typeof o.settings.lastExport!=='string')o.settings.lastExport=null;
@@ -2400,6 +2402,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
                ?ST.settings.nbFit:null),
         ubOpen:null,          /* 単元一覧で開いている大分類（ubOpenMap() が作る／記録にも残す） */
+        oxOpen:null,oxrest:false, /* ○×の一覧で開いている大分類／「残り」で絞っているか（2026-09-28） */
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
         enter:true,dir:null,tier:null,ev:null,broke:false};
 
@@ -3816,6 +3819,12 @@ function vFields(){
       +' data-act="ufilt" data-v="">すべて</button>'
       +'<button class="tog'+(S.urest?' on':'')+'" style="margin:0 6px 6px 0"'
       +' data-act="ufilt" data-v="rest">残り</button>'):'')
+    /* ○×で確認にも同じ絞り込み（2026-09-28 本人「単元学習と一緒に」）。残り＝全部正解した単元を隠す */
+    +(om?('<span class="togsep">/</span>'
+      +'<button class="tog'+(S.oxrest?'':' on')+'" style="margin:0 6px 6px 0"'
+      +' data-act="oxfilt" data-v="">すべて</button>'
+      +'<button class="tog'+(S.oxrest?' on':'')+'" style="margin:0 6px 6px 0"'
+      +' data-act="oxfilt" data-v="rest">残り</button>'):'')
     /* ノートの検索（2026-09-14）。論点1,982件から語で節に着く */
     +(NB.ok()?('<button class="tog" style="margin:0 0 6px auto;float:right"'
       +' data-act="nsearch">ノートを検索</button>'):'')
@@ -4403,23 +4412,50 @@ function vFieldsOx(){
   var h='<div class="sub" style="margin:0 0 10px">ノートの「試験の直前に」の○×を、解説を付けて問題にしたもの。'
     +'　全'+n3(tot.n)+'問（論点ごと）／一度でも正解 '+n3(tot.o)+'問。'
     +'<br>ここの記録は<b>過去問の成績・到達度には入れない</b>（正答率を混ぜないため）。</div>';
-  h+='<div class="m3-heat">';
-  bigsOrdered().forEach(function(b){
-    if(!byBig[b])return;
-    h+='<div class="bigrow"><button class="t" disabled style="cursor:default">'
-      +'<span>'+esc(b)+'</span><span class="cnt">'+n3(byBig[b].length)+'単元</span></button></div>';
-    byBig[b].forEach(function(d){h+=oxRowHtml(d)});
-    delete byBig[b];
+  /* 2026-09-28 本人「〇×で確認のタブのデザインもこれと一緒にできる？」＝単元学習（vFieldsCat）と同じ骨格。
+     大分類ごとの畳める枠・見出しに「単元／毎年／残り」・中は単元の行。 */
+  var om=oxOpenMap(byBig),order=bigsOrdered().filter(function(b){return byBig[b]});
+  Object.keys(byBig).forEach(function(b){if(order.indexOf(b)<0)order.push(b)});
+  order.forEach(function(b){
+    /* 並びも単元学習と同じ＝講義で習う順（catsSorted）。並びに無い単元は元の順で末尾 */
+    var so=catsSorted(b),ds=byBig[b].slice().sort(function(x,y){
+      var i=so.indexOf(OXB.cat(x)),j=so.indexOf(OXB.cat(y));
+      if(i<0)i=9999;if(j<0)j=9999;
+      return i-j||byBig[b].indexOf(x)-byBig[b].indexOf(y);
+    }),bq=0,br=0;
+    ds.forEach(function(d){var st=OXB.stat(d);bq+=CATQ[OXB.cat(d)]||0;br+=st.n-st.o});
+    if(S.oxrest){
+      ds=ds.filter(function(d){var st=OXB.stat(d);return !(st.n>0&&st.o>=st.n)});
+      if(!ds.length)return;
+    }
+    var bk='X:'+b,bo=!!om[b];
+    h+='<details class="panel ub m6-det" data-k="'+esc(bk)+'"'+(bo?' open':'')+'>'
+      +'<summary><span class="nm">'+esc(b)+'</span>'
+      +'<span class="m6-mk">'+IC.chev+'</span>'
+      +'<span class="sm">単元 '+ds.length+' ／ 毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'問</span>'
+      +'</summary><div class="vlist">';
+    ds.forEach(function(d){h+=oxRowHtml(d)});
+    h+='</div></details>';
   });
-  Object.keys(byBig).forEach(function(b){
-    h+='<div class="bigrow"><button class="t"><span>'+esc(b)+'</span></button></div>';
-    byBig[b].forEach(function(d){h+=oxRowHtml(d)});
-  });
-  h+='</div>';
   /* ○×の記録をすべてリセット（2026-09-28）。答えた記録が無ければ出さない */
   if(tot.a)h+='<div style="margin:14px 0 4px"><button class="btn sm" style="width:auto" data-act="oxreset" data-d="">'
     +IC.again+'<span style="margin-left:6px">○×の記録をすべてリセット（'+n3(tot.a)+'問）</span></button></div>';
   return h;
+}
+/* ○×で確認で開いている大分類。記録（settings.oxOpen）に残す。既定は ubOpenMap() と同じ考え方
+   ＝残り（まだ正解していない問）がある最初の大分類だけ開く。 */
+function oxOpenMap(byBig){
+  if(S.oxOpen)return S.oxOpen;
+  var saved=ST.settings&&ST.settings.oxOpen;
+  if(saved&&typeof saved==='object'){S.oxOpen=saved;return saved}
+  var m={},hit=false;
+  bigsOrdered().forEach(function(b){
+    if(!byBig||!byBig[b])return;
+    var r=0;byBig[b].forEach(function(d){var st=OXB.stat(d);r+=st.n-st.o});
+    m[b]=(!hit&&r>0);if(m[b])hit=true;
+  });
+  if(!hit){var f=bigsOrdered().filter(function(b){return byBig&&byBig[b]})[0];if(f)m[f]=true}
+  S.oxOpen=m;return m;
 }
 function oxRowHtml(d){
   var st=OXB.stat(d),pc=st.pct,po=OXB.pos(d);
@@ -4427,6 +4463,8 @@ function oxRowHtml(d){
     +(pc>0&&pc<100?'<span class="fill"></span>':'')
     +'<span class="rc">'
     +'<span class="nm">'+esc(OXB.cat(d))+'</span>'
+    /* 毎年N問（単元学習の行と同じ欄。2026-09-28） */
+    +(function(c){var off=CATQ_OFF[c];return '<span class="n2">'+(off?esc(off):'毎年 '+(CATQ[c]||0).toFixed(1)+'問')+'</span>'})(OXB.cat(d))
     /* やめた場所を出す（2026-09-20）。押せば**その続きから**始まる。
        正解数と並べると「続き 21/35」のように読めてしまうので、1つの欄にまとめる。 */
     +'<span class="n2">'+st.o+'/'+st.n
@@ -9009,6 +9047,7 @@ document.addEventListener('click',function(e){
     S.studyVid=null;S.ucat=true;m1ToStudy(t,uc);return;
   }
   if(a==='ufilt'){S.urest=(t.getAttribute('data-v')==='rest');S.fieldsY=0;render();return}
+  if(a==='oxfilt'){S.oxrest=(t.getAttribute('data-v')==='rest');S.fieldsY=0;render();return}
   /* 0問の章の開閉（動画ページ）。開くとタイムスタンプの順のその場に戻る。 */
   if(a==='zerochap'){var zv=t.getAttribute('data-v');
     m6FlipRender(function(){S.openZero[zv]=!S.openZero[zv];S.enter=false;render()});return}
@@ -11315,6 +11354,12 @@ document.addEventListener('toggle',function(e){
   if(!d||!d.classList||!d.classList.contains('m6-det'))return;
   var k=d.getAttribute('data-k');
   if(!k)return;
+  if(k.slice(0,2)==='X:'){
+    var mx=S.oxOpen||{};
+    mx[k.slice(2)]=d.open;S.oxOpen=mx;
+    ST.settings.oxOpen=mx;saveST();
+    return;
+  }
   if(k.slice(0,2)==='B:'){
     var m=ubOpenMap();
     m[k.slice(2)]=d.open;
