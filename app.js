@@ -4290,7 +4290,9 @@ function oxPlusHtml(d,i){
   var x=oxPlus(d,i);if(!x)return '';
   var h='<div class="oxp">';
   if(x.one)h+='<div class="oxs"><div class="oxh">ひとことで</div><div class="one">'+x.one+'</div></div>';
-  if(x.why)h+='<div class="oxs"><div class="oxh">なぜ</div>'+x.why+'</div>';
+  /* なぜ＝背景の理由（2026-09-28 本人「本来のなぜは違う」）。くわしく＝これまでの「なぜ」の中身（補足） */
+  if(x.naze)h+='<div class="oxs"><div class="oxh">なぜ</div>'+x.naze+'</div>';
+  if(x.why)h+='<div class="oxs"><div class="oxh">くわしく</div>'+x.why+'</div>';
   if(x.table&&x.table.rows){
     h+='<div class="oxs"><div class="oxh">並べて覚える</div><table><tr>';
     (x.table.head||[]).forEach(function(c){h+='<th>'+c+'</th>'});
