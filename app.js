@@ -1211,7 +1211,7 @@ function replay(log){
                 ホームの「過去問4択の続き」が出なくなっていた（本人が三度報告）。
                 これは成績ではなく居場所なので、土台にも出来事にも入っていない。 */
              yonRun:ST.yonRun,yonPos:ST.yonPos,yonLast:ST.yonLast,yonF:ST.yonF,
-             oxPos:ST.oxPos,oxSeq:ST.oxSeq};
+             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast};
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
   Object.keys(ST.items||{}).forEach(function(k){
@@ -1235,6 +1235,7 @@ function replay(log){
   if(keep.yonF)ST.yonF=keep.yonF;
   if(keep.oxPos)ST.oxPos=keep.oxPos;
   if(keep.oxSeq)ST.oxSeq=keep.oxSeq;
+  if(keep.oxLast)ST.oxLast=keep.oxLast;
   ST.logn=keep.logn||0;
   ST.gen=keep.gen||0;
   ST.log=L;
@@ -1437,6 +1438,8 @@ function normST(o){
   if(!o.yonPos||typeof o.yonPos!=='object')o.yonPos={};
   /* 最後に開いていた4択の一覧（ホームの「続き」に使う） */
   if(!o.yonLast||typeof o.yonLast!=='object'||!o.yonLast.key)delete o.yonLast;
+  /* 最後に解いていた○×の単元（2026-09-28）。単元フォルダ名の文字列だけ持つ */
+  if(typeof o.oxLast!=='string'||!o.oxLast)delete o.oxLast;
   /* 4択の範囲（2026-09-22）。形＝{bigs:[大分類],cats:[単元],difs:[易普難]} */
   if(!o.yonF||typeof o.yonF!=='object')o.yonF={bigs:[],cats:[],difs:[]};
   /* いま解いて回っている4択の一覧（2026-09-24）。形が違えば捨てる＝壊れた値で止まらない */
@@ -3393,6 +3396,17 @@ function startCheck(at){
   S.checkAt=c.dataAt||'';               /* この回を終えたときに印を付けるため */
   startQueue(c.ids.map(function(i){return BY[i]}),'チェック用問題',false,null,true,false);
 }
+/* ○×の続き。最後に解いていた単元（ST.oxLast）のやめた場所。無い／最後まで行った／
+   開いただけで1問も答えていない、のときは null＝行を出さない。 */
+function oxCont(){
+  if(!OXB.ok()||!NB.ok())return null;
+  var d=ST.oxLast;
+  if(!d||!OXB.list(d).length)return null;
+  var i=OXB.pos(d);
+  if(i===null)return null;
+  if(!OXB.stat(d).a)return null;
+  return {d:d,i:i,n:OXB.list(d).length,title:OXB.cat(d)};
+}
 function flowHtml(){
   /* 2026-09-27 本人指示でホームの行を**2つだけ**にした。
      > 「①HOME画面の通し演習はやらないから消してほしい。
@@ -3405,6 +3419,11 @@ function flowHtml(){
   var yc=YB.ok()?YB.cont():null;
   if(yc)rows.push({act:'yonhome',lab:'過去問4択の続き（'+yc.title+'）',
                    st:(yc.i+1)+' / '+n3(yc.n)+'問',done:false});
+  /* ○×の続き（2026-09-28 本人「〇×問題も途中から再開できるようにHOMEから飛べるようにして」）。
+     最後に解いていた単元の、やめた場所から。押す先は一覧から開くのと同じ入口（oxopen）。 */
+  var xc=oxCont();
+  if(xc)rows.push({act:'oxopen',dd:xc.d,lab:'○×の続き（'+xc.title+'）',
+                   st:(xc.i+1)+' / '+n3(xc.n)+'問',done:false});
 
   /* ②間違えた問題＝解いて間違えて、まだ正解し直していないもの。 */
   var wp=wrongPool().length;
@@ -3417,6 +3436,7 @@ function flowHtml(){
     var cls=(idx===nowAt)?' now':(r.done?' done':(r.yet?' yet':''));
     h+='<button class="frow'+cls+'" data-act="'+r.act+'"'
       +(r.vid?(' data-v="'+esc(r.vid)+'"'):'')
+      +(r.dd?(' data-d="'+esc(r.dd)+'"'):'')
       +(r.adata?(' data-n="'+r.adata+'"'):'')+'>'
       +'<span>'+esc(r.lab)+'</span><span class="fst">'+esc(r.st)
       +((idx===nowAt)?IC.chev:'')+'</span></button>';
@@ -4340,7 +4360,7 @@ var OXB={
   },
   setPos:function(d,i){
     if(!ST.oxPos||typeof ST.oxPos!=='object')ST.oxPos={};
-    ST.oxPos[d]=i;saveST();
+    ST.oxPos[d]=i;ST.oxLast=d;saveST();
   },
   stat:function(d){
     var n=this.list(d).length,r=(ST.ox&&ST.ox[d])?ST.ox[d]:null,a=0,o=0;
