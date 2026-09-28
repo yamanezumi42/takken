@@ -3401,6 +3401,11 @@ function startCheck(at){
 function oxCont(){
   if(!OXB.ok()||!NB.ok())return null;
   var d=ST.oxLast;
+  /* 更新前に解いた記録しか無いときは、最後に答えた○×の単元を記録の出来事から拾う（2026-09-28） */
+  if(!d&&Array.isArray(ST.log)){
+    for(var k=ST.log.length-1;k>=0;k--){var E=ST.log[k];
+      if(E&&E.e==='oxa'&&E.dir&&OXB.list(E.dir).length){d=E.dir;break}}
+  }
   if(!d||!OXB.list(d).length)return null;
   var i=OXB.pos(d);
   if(i===null)return null;
