@@ -4843,7 +4843,8 @@ var YB={
     var all=this.all(),out=[],me=this;
     all.forEach(function(q){
       var lv=me.lv(q);
-      if(!(kind==='ng'?(lv===1):(lv===0)))return;
+      /* 'all'＝範囲の問すべて（正解済みも入れる。2026-10-01） */
+      if(kind!=='all'&&!(kind==='ng'?(lv===1):(lv===0)))return;
       if(!me.inRange(q))return;
       out.push(q);
     });
@@ -7452,6 +7453,8 @@ function vReview(){
       +yonRangeHtml()
       +ryline('まちがえた4択',yng,'ng',true)
       +ryline('まだ解いていない4択',ynew,'new',false)
+      /* 範囲の4択をすべて（2026-10-01 本人「ランダムにしても…すべて含まれてない」＝正解した問はどの行にも無かった） */
+      +ryline('範囲の4択をすべて',YB.revList('all').length,'all',false)
       +'</div>';
   }
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
@@ -8901,7 +8904,7 @@ document.addEventListener('click',function(e){
          固定するので、答えて一覧が縮んでも場所はずれない＝ホームから続きに戻れる。 */
       var yk=t.getAttribute('data-r'),yl=YB.revList(yk);
       if(!yl.length){msg('いまは0問です');return}
-      var yr=YB.startRun('rev:'+yk,(yk==='ng')?'まちがえた4択':'まだ解いていない4択',
+      var yr=YB.startRun('rev:'+yk,(yk==='ng')?'まちがえた4択':((yk==='all')?'範囲の4択（'+YB.rangeLabel()+'）':'まだ解いていない4択'),
                          'review',null,yl,0,!!YB.f().rand);
       S.yonList=yr.ids;S.yonTitle=yr.title;S.yonKey=yr.key;S.yonFrom='review';S.yonCat=null;
       S.yonI=0;
