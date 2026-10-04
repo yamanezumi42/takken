@@ -425,6 +425,18 @@ a{color:var(--chipfg)}
 .oxp .oxs{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:11px 14px;margin:0 0 8px;font-size:15px;line-height:1.85}
 .oxp .oxs b{color:#8d2f3f}
 .oxp .oxh{font-size:12.5px;font-weight:700;color:var(--sub,#6e675f);margin:0 0 3px;letter-spacing:.04em}
+/* 例で見る（2026-10-03） */
+.oxp .oxex .exh{font-weight:700;margin:10px 0 2px;color:var(--ink,#332e28)}
+.oxp .oxex .exh:first-of-type{margin-top:2px}
+.oxp .oxex .exs{font-size:13.5px;font-weight:700;color:var(--sub,#6e675f);margin:6px 0 0}
+.oxp .oxex p{margin:0}
+.oxp details.oxex>summary{list-style:none;display:flex;align-items:center;gap:6px;cursor:pointer;min-height:24px}
+.oxp details.oxex>summary::-webkit-details-marker{display:none}
+.oxp details.oxex>summary .oxh{margin:0;flex:1}
+.oxp details.oxex>summary .mk{display:inline-flex;color:var(--muted);transition:transform .18s ease}
+.oxp details.oxex>summary .mk svg{width:16px;height:16px}
+.oxp details.oxex[open]>summary .mk{transform:rotate(90deg)}
+.oxp details.oxex[open]>summary{margin-bottom:3px}
 .oxp .one{font-weight:700}
 .oxp table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.6}
 .oxp th,.oxp td{border:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
@@ -1806,7 +1818,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b10bf2e2';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='ba64b9c5';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
