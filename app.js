@@ -1211,7 +1211,7 @@ function replay(log){
                 ホームの「過去問4択の続き」が出なくなっていた（本人が三度報告）。
                 これは成績ではなく居場所なので、土台にも出来事にも入っていない。 */
              yonRun:ST.yonRun,yonPos:ST.yonPos,yonLast:ST.yonLast,yonF:ST.yonF,
-             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast};
+             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast,oxF:ST.oxF,oxRun:ST.oxRun};
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
   Object.keys(ST.items||{}).forEach(function(k){
@@ -1236,6 +1236,8 @@ function replay(log){
   if(keep.oxPos)ST.oxPos=keep.oxPos;
   if(keep.oxSeq)ST.oxSeq=keep.oxSeq;
   if(keep.oxLast)ST.oxLast=keep.oxLast;
+  if(keep.oxF)ST.oxF=keep.oxF;
+  if(keep.oxRun)ST.oxRun=keep.oxRun;
   ST.logn=keep.logn||0;
   ST.gen=keep.gen||0;
   ST.log=L;
@@ -1442,6 +1444,9 @@ function normST(o){
   if(typeof o.oxLast!=='string'||!o.oxLast)delete o.oxLast;
   /* 4択の範囲（2026-09-22）。形＝{bigs:[大分類],cats:[単元],difs:[易普難]} */
   if(!o.yonF||typeof o.yonF!=='object')o.yonF={bigs:[],cats:[],difs:[]};
+  /* 復習タブの○×（2026-10-05）。範囲＝{cats,fq,ord}／いま解いて回っている一覧＝{key,title,list:[[単元,i]],i} */
+  if(!o.oxF||typeof o.oxF!=='object')delete o.oxF;
+  if(!o.oxRun||typeof o.oxRun!=='object'||!o.oxRun.list||!o.oxRun.list.slice)delete o.oxRun;
   /* いま解いて回っている4択の一覧（2026-09-24）。形が違えば捨てる＝壊れた値で止まらない */
   if(!o.yonRun||typeof o.yonRun!=='object'||!o.yonRun.ids||!o.yonRun.ids.slice)delete o.yonRun;
   /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
@@ -2400,6 +2405,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         yonCat:null,yonI:0,yonPick:null,yonAgain:false,yonGrid:false,yonSeen:{},yonSeq:null,
         yonList:null,yonTitle:'',yonKey:'',yonFrom:'unit',  /* いま解いて回っている一覧 */
         yonFOpen:false,yonFBig:{},yonFYear:false,  /* 範囲の開閉（面・大分類・年度） */
+        oxFOpen:false,oxFBig:{},oxFrom:null,oxRunEnd:false, /* 復習タブの○×（2026-10-05） */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -4348,6 +4354,20 @@ var OXB={
     });
     return no;
   },
+  /* その論点が何回分の試験で出たか（2026-10-05 本人「1を年度で数え直して5と組み合わせる形で」）。
+     ノートの論点に付いた過去問（ronten.ids）の年度（回）の種類を数える。年度が取れない過去問は数えない */
+  freq:function(d,rid){
+    if(!this._fq)this._fq={};
+    var k=d+'|'+rid;if(this._fq[k]!==undefined)return this._fq[k];
+    var u=NB.unit(this.cat(d)),seen={},n=0;
+    if(u)u.sections.forEach(function(s){(s.ronten||[]).forEach(function(r){
+      if(r.id!==rid)return;
+      (r.ids||[]).forEach(function(id){var it=RAWBY[id],sc=it?it.src:null;
+        if(!sc||!sc.era)return;var y=sc.era+(sc.month?(sc.month+'月'):'');
+        if(!seen[y]){seen[y]=1;n++}});
+    })});
+    this._fq[k]=n;return n;
+  },
   rec:function(d){
     if(!ST.ox)ST.ox={};
     if(!ST.ox[d]||typeof ST.ox[d]!=='object')ST.ox[d]={};
@@ -4537,7 +4557,8 @@ function oxNgList(d){
 }
 function vOx(){
   var d=S.oxDir,rows=OXB.list(d),i=S.oxI|0;
-  var back='<button class="btn sm" data-act="oxback" style="margin-bottom:10px">一覧へ戻る</button>';
+  var back='<button class="btn sm" data-act="oxback" style="margin-bottom:10px">'+(oxRunOn()?'復習へ戻る':'一覧へ戻る')+'</button>';
+  if(oxRunOn()&&S.oxRunEnd)return oxRunEndHtml(back);
   if(!rows.length)return '<div class="pad'+stag()+'">'+back+'</div>';
   var st=OXB.stat(d);
   if(i>=rows.length){
@@ -4560,12 +4581,20 @@ function vOx(){
      2026-09-21 本人「間違えた問題だけやろうと思ったら、答え出ちゃってて萎えた」＝
      前の回に答えた記録まで出していたので、解き直しに来たのに答えが先に見えていた。
      **前の回の答えは出さない**。同じ回の中で前へ戻ったときだけ、そのとき押した答えを出す。 */
-  var pick=S.oxPick||(S.oxAgain?null:(S.oxSeen?S.oxSeen[i]:null))||null,done=!!pick;
+  var pick=S.oxPick||(S.oxAgain?null:(S.oxSeen?S.oxSeen[oxSeenKey(i)]:null))||null,done=!!pick;
   var was=(!S.oxPick&&done);                  /* この回に答えたものを見直している */
   var good=done&&(pick===ans);
   var sec=done?OXB.sec(d,row[0]):null;
   var ng=oxNgList(d).length,sq=oxSeq();
-  var h='<div class="pad'+stag()+'">'+back
+  var h='<div class="pad'+stag()+'">'+back;
+  if(oxRunOn()){
+    /* 復習から（2026-10-05）。単元をまたいで解く */
+    var R0=OXR.run();
+    h+='<div class="sub" style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+      +'<span>'+esc(R0.title)+'</span><span>'+(R0.i+1)+' / '+R0.list.length+'</span>'
+      +'<span>'+esc(OXB.cat(d))+'</span><span>過去'+OXB.freq(d,row[0])+'回出た論点</span></div>';
+  }else{
+  h+=''
     +'<div class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
     +'<span>'+esc(OXB.cat(d))+'</span>'
     +'<button class="oxjump" data-act="oxgrid">'+(oxPos(i)+1)+' / '+oxTotal(d)
@@ -4581,7 +4610,9 @@ function vOx(){
     +(st.a?('<button class="tog oxrst" style="margin:0 6px 6px 0" data-act="oxreset" data-d="'+esc(d)+'">'
       +IC.again+'<span>記録をリセット</span></button>'):'')
     +'</div>'
-    +(S.oxGrid?oxGridHtml(d,i):'')
+    +(S.oxGrid?oxGridHtml(d,i):'');
+  }
+  h+=''
     +'<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(oxQText(d,i,row))+'</div></div>';
   if(!done){
     /* ボタンは過去問の画面と**同じ形**（.ans .b＝○は accent、×は ng の塗り）。
@@ -4607,7 +4638,7 @@ function vOx(){
       +'</div>';
   }
   /* 前へ／次へは**答える前でも後でも**出す（2026-09-20）。前へは先頭では出さない。 */
-  var pos=oxPos(i),tot=oxTotal(d);
+  var pos=oxRunOn()?OXR.run().i:oxPos(i),tot=oxRunOn()?OXR.run().list.length:oxTotal(d);
   var nav='<div class="oxnav">'
     +(pos>0?'<button class="btn" data-act="oxprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
     +'<button class="btn'+(done?' pri':'')+'" data-act="oxnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
@@ -4620,6 +4651,149 @@ function vOx(){
 }
 /* 番号で飛ぶ（2026-09-20 本人「途中から出来ないんだ」）。
    色＝●正解した／△答えたがまだ／・未回答。いまの問は枠を濃くする。 */
+/* ---------- 復習タブの○×（2026-10-05 本人「4択問題の復習タブと同じテンプレートを利用してほしい」） ---------- */
+var OXFQ=[['hi','よく出る','5回以上'],['mid','ときどき','3〜4回'],['lo','まれ','0〜2回']];
+function oxFqOf(n){return n>=5?'hi':(n>=3?'mid':'lo')}
+var OXR={
+  f:function(){
+    if(!ST.oxF||typeof ST.oxF!=='object')ST.oxF={cats:[],fq:[],ord:'seq'};
+    var f=ST.oxF;
+    if(!f.cats||!f.cats.slice)f.cats=[];
+    if(!f.fq||!f.fq.slice)f.fq=[];
+    if(f.ord!=='seq'&&f.ord!=='rand'&&f.ord!=='freq')f.ord='seq';
+    return f;
+  },
+  /* 単元名 → ○×の単元フォルダ */
+  dirOf:function(c){
+    if(!this._dc){this._dc={};var me=this;OXB.dirs().forEach(function(d){me._dc[OXB.cat(d)]=d})}
+    return this._dc[c]||null;
+  },
+  /* その大分類の、○×がある単元（単元学習と同じ並び） */
+  cats:function(b){var me=this;return catsSorted(b).filter(function(c){return !!me.dirOf(c)})},
+  inRange:function(d,i){
+    var f=this.f();
+    if(f.cats.length&&f.cats.indexOf(OXB.cat(d))<0)return false;
+    if(f.fq.length){var row=OXB.list(d)[i];if(!row||f.fq.indexOf(oxFqOf(OXB.freq(d,row[0])))<0)return false}
+    return true;
+  },
+  /* kind＝'ng'（まちがえたまま）／'new'（まだ解いていない）／'all'（範囲の問すべて）。並びは単元の並び */
+  list:function(kind){
+    var out=[],me=this;
+    OXB.dirs().forEach(function(d){OXB.vis(d).forEach(function(i){
+      var lv=OXB.lv(d,i);
+      if(kind==='ng'&&lv!==1)return;
+      if(kind==='new'&&lv!==0)return;
+      if(me.inRange(d,i))out.push([d,i]);
+    })});
+    return out;
+  },
+  label:function(){
+    var f=this.f(),a=[];
+    if(f.cats.length)a.push(f.cats.length===1?f.cats[0]:('単元'+f.cats.length));
+    if(f.fq.length)a.push(OXFQ.filter(function(x){return f.fq.indexOf(x[0])>=0}).map(function(x){return x[1]}).join('・'));
+    return a.length?a.join('／'):'すべて';
+  },
+  run:function(){var r=ST.oxRun;return (r&&r.list&&r.list.length)?r:null},
+  /* 押した時点の一覧を固定する（4択の startRun と同じ）。よく出る順＝出た回数の多い順・同じなら単元の並び */
+  start:function(kind){
+    var L=this.list(kind),f=this.f();
+    if(!L.length)return null;
+    if(f.ord==='rand')L=shuffle(L);
+    else if(f.ord==='freq'){
+      var w=L.map(function(p,k){return {p:p,k:k,n:OXB.freq(p[0],OXB.list(p[0])[p[1]][0])}});
+      w.sort(function(a,b){return (b.n-a.n)||(a.k-b.k)});L=w.map(function(x){return x.p});
+    }
+    var t=(kind==='ng'?'まちがえた○×':(kind==='new'?'まだ解いていない○×':'範囲の○×'))+'（'+this.label()+'）';
+    ST.oxRun={key:'rev:'+kind,title:t,list:L,i:0};
+    saveST();return ST.oxRun;
+  },
+  /* いまの位置の問を画面に出す（単元の「やめた場所」は動かさない） */
+  show:function(){
+    var r=this.run();if(!r)return;
+    if(r.i<0)r.i=0;if(r.i>=r.list.length)r.i=r.list.length-1;
+    S.oxDir=r.list[r.i][0];S.oxI=r.list[r.i][1];
+    S.oxPick=null;S.oxAgain=false;S.oxGrid=false;
+  },
+  step:function(dl){
+    var r=this.run();if(!r)return;
+    if(S.oxRunEnd){S.oxRunEnd=false;if(dl<0){this.show();return}}
+    if(dl>0&&r.i+1>=r.list.length){S.oxRunEnd=true;S.oxPick=null;saveST();return}
+    r.i+=dl;this.show();saveST();
+  },
+  leave:function(){S.oxFrom=null;S.oxRunEnd=false;S.oxSeen={}}
+};
+function oxRunOn(){return S.oxFrom==='review'&&!!OXR.run()}
+/* この回に押した答えの鍵。復習から＝並びの何番目か（単元をまたぐので i だけでは重なる） */
+function oxSeenKey(i){return oxRunOn()?('r'+OXR.run().i):i}
+/* 復習から解き終えたとき */
+function oxRunEndHtml(back){
+  var r=OXR.run(),o=0;
+  r.list.forEach(function(p){if(OXB.lv(p[0],p[1])===2)o++});
+  return '<div class="pad'+stag()+'">'+back
+    +'<div class="panel"><div class="h" style="margin:0">'+esc(r.title)+'　おしまい</div>'
+    +'<div class="sub" style="margin:8px 0 0">全'+r.list.length+'問中、一度でも正解したのは '+o+'問。</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+    +'<button class="btn" data-act="oxback">復習へ戻る</button>'
+    +'<button class="btn sm" data-act="oxprev">最後の問題へ戻る</button>'
+    +'</div></div></div>';
+}
+/* 復習タブの○×の範囲（4択の yonRangeHtml と同じ形） */
+function oxRangeHtml(){
+  var f=OXR.f();
+  var h='<button class="tapline" data-act="oxftog" style="min-height:38px">'
+    +'<span style="flex:1">範囲</span>'
+    +'<span class="badge">'+esc(OXR.label())+'</span>'
+    +(S.oxFOpen?IC.up:IC.down)+'</button>';
+  if(!S.oxFOpen)return h;
+  h+='<div class="hr"></div>';
+  bigsOrdered().forEach(function(b){
+    var cs=OXR.cats(b);
+    if(!cs.length)return;
+    var nsel=cs.filter(function(c){return f.cats.indexOf(c)>=0}).length;
+    var onb=(nsel===cs.length&&cs.length>0);
+    var nq=0;cs.forEach(function(c){nq+=OXB.vis(OXR.dirOf(c)).length});
+    h+='<div class="rowx" style="gap:0;align-items:stretch">'
+      +'<button class="tapline" data-act="oxfball" data-b="'+esc(b)+'" style="min-height:40px;flex:1">'
+      +'<span class="ck" style="width:20px;opacity:'+(onb?1:0.22)+'">'+IC.check+'</span>'
+      +'<span style="flex:1;font-weight:600">'+esc(b)+'</span>'
+      +((nsel&&!onb)?'<span class="chip">'+nsel+'</span>':'')
+      +'<span class="badge">'+n3(nq)+'問</span></button>'
+      +'<button class="tapline" data-act="oxfopen" data-b="'+esc(b)+'"'
+      +' style="min-height:40px;width:44px;justify-content:center;flex:none" aria-label="開く">'
+      +(S.oxFBig[b]?IC.up:IC.down)+'</button></div>';
+    if(!S.oxFBig[b])return;
+    cs.forEach(function(c){
+      var st=OXB.stat(OXR.dirOf(c)),on=(f.cats.indexOf(c)>=0);
+      h+='<button class="tapline" data-act="oxfcat" data-c="'+esc(c)+'"'
+        +' style="min-height:38px;padding-left:28px">'
+        +'<span class="ck" style="width:20px;opacity:'+(on?1:0.22)+'">'+IC.check+'</span>'
+        +'<span style="flex:1">'+esc(c)+'</span>'
+        +'<span class="badge">'+st.o+'/'+n3(st.n)+'問</span></button>';
+    });
+  });
+  /* 出る頻度（4択の「難易度」の位置）。何回分の試験で出た論点か */
+  h+='<div class="frow2" style="margin-top:6px"><span class="lb">出る頻度</span><span class="bs">'
+    +OXFQ.map(function(x){return '<button class="tog xs'+(f.fq.indexOf(x[0])>=0?' on':'')
+      +'" data-act="oxffq" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')
+    +'</span></div>'
+    +'<div class="mini" style="margin:-2px 0 6px">よく出る＝過去28回の試験のうち5回以上で出た論点／ときどき＝3〜4回／まれ＝0〜2回</div>'
+    +'<div class="frow2"><span class="lb">並び</span><span class="bs">'
+    +[['seq','順番'],['rand','ランダム'],['freq','よく出る順']].map(function(x){
+      return '<button class="tog xs'+(f.ord===x[0]?' on':'')+'" data-act="oxford" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')
+    +'</span></div>'
+    +'<div class="spread" style="margin-top:6px"><span class="mini">選んだ範囲 <b class="num">'
+      +n3(OXR.list('ng').length+OXR.list('new').length)+'</b> 問（まだ解いていない＋まちがえた）</span>'
+    +'<button class="btn sm" data-act="oxfclear">範囲をクリア</button></div>'
+    +'<div class="hr"></div>';
+  return h;
+}
+/* 復習タブの○×の行（4択の ryline と同じ形） */
+function oxryline(label,n,kind,strong){
+  return '<div class="li"><div class="nm">'+esc(label)+'</div>'
+    +'<b class="num" style="font-size:20px">'+n3(n)+'</b>'
+    +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="oxrev" data-r="'+kind+'">解く</button>'
+       :'<span class="mini">—</span>')+'</div>';
+}
 function oxGridHtml(d,cur){
   var vs=OXB.vis(d),h='<div class="oxgrid">';
   vs.forEach(function(i,k){
@@ -7460,6 +7634,16 @@ function vReview(){
       +ryline('範囲の4択をすべて',YB.revList('all').length,'all',false)
       +'</div>';
   }
+  /* ○×問題（2026-10-05 本人「復習タブに〇×問題が範囲で選択できるようにして欲しい」）。4択の面と同じ形 */
+  if(OXB.ok()&&NB.ok()){
+    h+='<div class="panel"><div class="h">○×問題</div>'
+      +'<div class="mini" style="margin:-4px 0 8px">ノートの論点ごとの○×。記録は「○×で確認」と同じです。</div>'
+      +oxRangeHtml()
+      +oxryline('まちがえた○×',OXR.list('ng').length,'ng',true)
+      +oxryline('まだ解いていない○×',OXR.list('new').length,'new',false)
+      +oxryline('範囲の○×をすべて',OXR.list('all').length,'all',false)
+      +'</div>';
+  }
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
   if(!sev.length)h+='<div class="mini">5問以上解いて誤答が35%以上の章、または誤答3回の問題が2つ以上ある章が出ます。今はありません。</div>';
   sev.forEach(function(x){
@@ -8843,6 +9027,7 @@ document.addEventListener('click',function(e){
   /* ---- ○×で確認（2026-09-20）。過去問の出題（startQueue）とは別の道を通す＝成績に混ぜない ---- */
   if(a==='oxopen'||a==='oxstart'){
     var od=t.getAttribute('data-d'),oi=t.getAttribute('data-i');
+    S.oxFrom=null;S.oxRunEnd=false;           /* 一覧から入ったら復習の並びは使わない */
     S.oxDir=od;S.oxPick=null;S.oxAgain=false;S.oxGrid=false;
     /* 一覧や終わりの画面から入り直したら、この回に押した答えは**捨てる**
        ＝解き直しに来たのに答えが先に見える、を起こさない（2026-09-21 本人の指摘）。
@@ -8862,7 +9047,7 @@ document.addEventListener('click',function(e){
     var ov=t.getAttribute('data-v'),orow=OXB.list(S.oxDir)[S.oxI|0];
     if(!orow)return;
     S.oxPick=ov;S.oxAgain=false;
-    S.oxSeen=S.oxSeen||{};S.oxSeen[S.oxI|0]=ov;   /* この回だけ覚える（前へ戻ったとき用） */
+    S.oxSeen=S.oxSeen||{};S.oxSeen[oxSeenKey(S.oxI|0)]=ov;   /* この回だけ覚える（前へ戻ったとき用） */
     OXB.put(S.oxDir,S.oxI|0,ov===orow[1],ov);
     render();return}
   /* すべて／まちがえた問題だけ（2026-09-21 本人「間違えた問題だけやろうと思ったら…」） */
@@ -8877,6 +9062,8 @@ document.addEventListener('click',function(e){
     S.oxSeen={};S.oxPick=null;S.oxAgain=false;S.oxGrid=false;
     OXB.setPos(S.oxDir,S.oxI);render();return}
   /* 前へ／次へ／番号で飛ぶ。どれも**やめた場所を更新する**＝閉じても同じ所に戻る。 */
+  /* 復習からの○×（2026-10-05）。並びの中で前へ／次へ。単元の「やめた場所」は動かさない */
+  if((a==='oxnext'||a==='oxprev')&&oxRunOn()){OXR.step(a==='oxnext'?1:-1);render();return}
   if(a==='oxnext'||a==='oxprev'||a==='oxgo'){
     var omax=OXB.list(S.oxDir).length,oq=oxSeq(),oni,obase=oq||OXB.vis(S.oxDir);
     if(a==='oxgo'){
@@ -8934,6 +9121,29 @@ document.addEventListener('click',function(e){
     YB.setPos(S.yonKey,S.yonI);
     S.dir=null;go('yon');return}
   /* 4択の範囲（2026-09-22）。押すたびに数え直して画面を描き直す */
+  /* ---- 復習タブの○×（2026-10-05） ---- */
+  if(a==='oxrev'){
+    var orr=OXR.start(t.getAttribute('data-r'));
+    if(!orr){msg('いまは0問です');return}
+    S.oxFrom='review';S.oxRunEnd=false;S.oxSeen={};S.oxSeq=null;
+    OXR.show();S.dir=null;go('ox');return}
+  if(a==='oxftog'){S.oxFOpen=!S.oxFOpen;render();return}
+  if(a==='oxfclear'){var g0=OXR.f();g0.cats=[];g0.fq=[];saveST();render();return}
+  if(a==='oxfball'){
+    var g1=OXR.f(),ob=t.getAttribute('data-b'),ocs=OXR.cats(ob);
+    var oall=ocs.every(function(c){return g1.cats.indexOf(c)>=0});
+    ocs.forEach(function(c){var k=g1.cats.indexOf(c);if(oall){if(k>=0)g1.cats.splice(k,1)}else if(k<0)g1.cats.push(c)});
+    saveST();render();return}
+  if(a==='oxfopen'){var ob2=t.getAttribute('data-b');S.oxFBig[ob2]=!S.oxFBig[ob2];render();return}
+  if(a==='oxfcat'){
+    var g2=OXR.f(),oc=t.getAttribute('data-c'),ok2=g2.cats.indexOf(oc);
+    if(ok2>=0)g2.cats.splice(ok2,1);else g2.cats.push(oc);
+    saveST();render();return}
+  if(a==='oxffq'){
+    var g3=OXR.f(),ov3=t.getAttribute('data-v'),ok3=g3.fq.indexOf(ov3);
+    if(ok3>=0)g3.fq.splice(ok3,1);else g3.fq.push(ov3);
+    saveST();render();return}
+  if(a==='oxford'){var g4=OXR.f();g4.ord=t.getAttribute('data-v');saveST();render();return}
   if(a==='yonftog'){S.yonFOpen=!S.yonFOpen;render();return}
   /* 「すべて」＝大分類・単元・難易度の**全部**を外す（言葉どおりに戻す） */
   if(a==='yonfclear'){var f0=YB.f();f0.bigs=[];f0.cats=[];f0.difs=[];f0.years=[];saveST();render();return}
@@ -9038,7 +9248,9 @@ document.addEventListener('click',function(e){
   if(a==='oxnote'){
     S.noteCat=OXB.cat(t.getAttribute('data-d'));S.noteSec=+t.getAttribute('data-s');
     S.noteFrom='ox';S.dir=null;go('note');return}
-  if(a==='oxback'){S.dir=null;S.fmode='ox';go('fields');return}
+  if(a==='oxback'){
+    if(oxRunOn()){OXR.leave();S.dir=null;go('review');return}   /* 復習から来たら復習へ */
+    S.dir=null;S.fmode='ox';go('fields');return}
   if(a==='fmode'){
     var fm=t.getAttribute('data-v');
     if(fm!=='cat'&&fm!=='video'&&fm!=='ox')return;
