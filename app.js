@@ -3439,7 +3439,8 @@ function oxCont(){
 /* ============ 模試（4人で一緒に解く過去問4択。2026-10-07 本人） ============
    正本＝docs/MOCK_1007_PROGRESS.md。色の順＝本人の挙げた順（赤・緑・ピンク・黄）。
    名前はネットのハンドルネーム（本人「大丈夫」）。始める画面で書き換えられる（端末の設定に残す）。 */
-var MSP=[['r','#d64545','すずき'],['g','#3a9a5b','えのもと'],['p','#e07aa8','ゆうたい'],['y','#e0b400','さとう']];
+/* 色＝くすみ色（2026-10-07 本人「原色はダサい」→ 案5） */
+var MSP=[['r','#c4766f','すずき'],['g','#7ea58b','えのもと'],['p','#d79db0','ゆうたい'],['y','#d2b064','さとう']];
 var MS_ME='y';          /* 本人＝黄。黄の答えは4択の記録（ST.yon）にも入れる（本人④） */
 var MS_LIM=7200;        /* 2時間。超えたら「時間超過」を出すだけで止めない（本人⑥） */
 /* 問1〜50。統計（問48）は過去問の数字が古く今の正解と合わないので外す＝49問・49点満点（本人⑤） */
@@ -3465,7 +3466,8 @@ var MS={
     MS_NOS.forEach(function(no){var p=MS.pool(no);if(p.length){qs.push(p[Math.floor(Math.random()*p.length)]);nos.push(no)}});
     players.forEach(function(k){sel[k]={}});
     ST.msRun={id:'ms'+Date.now(),at:nowStamp(),players:players.slice(),names:this.names(),
-              qs:qs,nos:nos,sel:sel,i:0,acc:0};
+              qs:qs,nos:nos,sel:sel,i:0,acc:0,mid:msMidOn()};
+    S.msMid=null;S.msGrid=false;
     S.yonMk={};S.msT0=0;saveST();return ST.msRun;
   },
   sec:function(){var r=this.run();if(!r)return 0;return (r.acc||0)+(S.msT0?Math.round((Date.now()-S.msT0)/1000):0)},
@@ -3525,6 +3527,11 @@ function vMoshi(){
       +'<span class="msd'+(on[p[0]]?' on':'')+'" style="--c:'+p[1]+'"></span></button>'
       +'<input class="msname" data-k="'+p[0]+'" value="'+esc(nm[p[0]])+'" maxlength="12"></div>';
   });
+  /* 10問ごとの途中経過（2026-10-07 本人「入切も付けて」） */
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">'
+    +'<span style="font-size:14px">10問ごとの途中経過</span>'
+    +'<button class="tog xs'+(msMidOn()?' on':'')+'" data-act="msmidset" data-v="1">入</button>'
+    +'<button class="tog xs'+(msMidOn()?'':' on')+'" data-act="msmidset" data-v="0">切</button></div>';
   h+='<button class="btn pri" style="margin-top:12px" data-act="msstart">'
     +(r?'新しく始める（途中の模試は捨てる）':'始める（49問・2時間）')+'</button></div>';
   var L=MS.log();
@@ -3550,6 +3557,7 @@ function vMsq(){
   var back='<button class="btn sm" data-act="msback" style="margin-bottom:10px">模試のタブへ戻る（時計は止まります）</button>';
   if(!q)return '<div class="pad'+stag()+'">'+back+'<div class="warn">'+IC.warn+' この問題が読み込めません。</div></div>';
   var kosu=(q.type==='個数'||q.type==='組合せ');
+  if(S.msMid!==null&&S.msMid!==undefined&&r.mid)return msMidHtml(r,S.msMid,back);
   var h='<div class="pad'+stag()+'">'+back
     +'<div class="mshead"><b style="font-size:17px">問'+r.nos[i]+'</b>'
     +'<span class="mini">'+(i+1)+' / '+r.qs.length+'</span><span style="flex:1"></span>'
@@ -3572,11 +3580,36 @@ function vMsq(){
     +(i>0?'<button class="btn" data-act="msnav" data-v="-1">'+IC.chevL+'　前の問題</button>':'<span></span>')
     +(last?'<button class="btn pri" data-act="msend">採点する</button>'
           :'<button class="btn" data-act="msnav" data-v="1">次の問題　'+IC.chev+'</button>')+'</div>';
-  /* 番号で飛ぶ。全員が答えた問は濃く、一部だけは枠を濃く */
-  h+='<div class="msgrid">'+r.qs.map(function(x,k){var a=MS.answered(r,k);
+  /* 番号で飛ぶ。全員が答えた問は濃く、一部だけは枠を濃く。
+     最初は閉じる（2026-10-07 本人「問題番号はトグルで閉まっておいて」） */
+  h+='<button class="tapline" data-act="msgrid" style="min-height:38px;margin-top:14px">'
+    +'<span style="flex:1">問題番号</span>'+(S.msGrid?IC.up:IC.down)+'</button>';
+  if(S.msGrid)h+='<div class="msgrid">'+r.qs.map(function(x,k){var a=MS.answered(r,k);
       var c=(a===r.players.length?'all':(a?'part':''))+(k===i?' cur':'');
-      return '<button class="'+c+'" data-act="msgoto" data-v="'+k+'">'+r.nos[k]+'</button>'}).join('')+'</div>'
-    +'<div style="margin-top:14px"><button class="btn sm" data-act="msend">採点する</button></div>';
+      return '<button class="'+c+'" data-act="msgoto" data-v="'+k+'">'+r.nos[k]+'</button>'}).join('')+'</div>';
+  h+='<div style="margin-top:14px"><button class="btn sm" data-act="msend">採点する</button></div>';
+  return h+'</div>';
+}
+/* 10問ごとの途中経過を出すか（端末の設定。既定は入） */
+function msMidOn(){var v=ST.settings&&ST.settings.msMid;return v===undefined?true:!!v}
+/* 途中経過（2026-10-07）。区切り b＝0なら問1〜10（並びの0〜9番目）。
+   出すのは各自の「この10問の点数」と「ここまでの合計」だけ。どの問が正解かは出さない。時計は止めない。 */
+function msMidHtml(r,b,back){
+  var a=b*10,z=Math.min(r.qs.length,a+10)-1;
+  function sc(k,from,to){var n=0;for(var i=from;i<=to;i++){var x=YB.q(r.qs[i]);if(x&&r.sel[k]&&r.sel[k][i]===x.a)n++}return n}
+  var h='<div class="pad'+stag()+'">'+back
+    +'<div class="mshead"><b style="font-size:17px">途中経過</b>'
+    +'<span class="mini">問'+r.nos[a]+'〜問'+r.nos[z]+'</span><span style="flex:1"></span>'
+    +'<span id="mstime" class="mstime'+(MS.sec()>MS_LIM?' over':'')+'">'+msTimeTxt(MS.sec())+'</span></div>'
+    +'<div class="panel"><div style="display:grid;grid-template-columns:repeat('+r.players.length+',1fr);gap:8px">';
+  r.players.forEach(function(k){
+    h+='<div class="mscard" style="--c:'+MS.col(k)+'"><div class="nm">'+esc((r.names&&r.names[k])||'')+'</div>'
+      +'<div class="mini" style="margin-top:4px">この'+(z-a+1)+'問</div>'
+      +'<div class="sc">'+sc(k,a,z)+'<span style="font-size:13px"> / '+(z-a+1)+'</span></div>'
+      +'<div class="mini" style="margin-top:4px">ここまで '+sc(k,0,z)+' / '+(z+1)+'</div></div>';
+  });
+  h+='</div><div class="mini" style="margin-top:10px">どの問題が正解だったかは、最後の採点で出ます。時計は止まっていません。</div></div>'
+    +'<div class="oxnav"><span></span><button class="btn pri" data-act="msmidgo">問'+(r.nos[z+1]||'')+'から続ける　'+IC.chev+'</button></div>';
   return h+'</div>';
 }
 /* 結果の画面＝点数・分野別・問題ごとの一覧（間違えた欄は赤く。本人「×は書かなくていいから赤くしておいて」） */
@@ -9355,15 +9388,23 @@ document.addEventListener('click',function(e){
     mr1.sel[mpk]=mr1.sel[mpk]||{};
     if(mr1.sel[mpk][mii]===mpv)delete mr1.sel[mpk][mii];else mr1.sel[mpk][mii]=mpv;
     saveST();render();return}
+  if(a==='msnav'&&+t.getAttribute('data-v')>0){
+    var mrm=MS.run(),mim=mrm?(mrm.i|0):0;
+    if(mrm&&mrm.mid&&(mim+1)%10===0&&mim+1<mrm.qs.length){S.msMid=Math.floor(mim/10);go('msq');return}
+  }
+  if(a==='msmidgo'){var mr5=MS.run();S.msMid=null;if(!mr5)return;
+    mr5.i=Math.min(mr5.qs.length-1,(mr5.i|0)+1);saveST();go('msq');return}
+  if(a==='msmidset'){if(!ST.settings)ST.settings={};ST.settings.msMid=(t.getAttribute('data-v')==='1');saveST();render();return}
+  if(a==='msgrid'){S.msGrid=!S.msGrid;render();return}
   if(a==='msnav'){var mr2=MS.run();if(!mr2)return;
     mr2.i=Math.max(0,Math.min(mr2.qs.length-1,(mr2.i|0)+(+t.getAttribute('data-v'))));saveST();go('msq');return}
-  if(a==='msgoto'){var mr3=MS.run();if(!mr3)return;mr3.i=+t.getAttribute('data-v');saveST();go('msq');return}
+  if(a==='msgoto'){var mr3=MS.run();if(!mr3)return;S.msMid=null;mr3.i=+t.getAttribute('data-v');saveST();go('msq');return}
   if(a==='msend'){
     var mr4=MS.run();if(!mr4)return;
     var mun=0;mr4.qs.forEach(function(x,k){if(MS.answered(mr4,k)<mr4.players.length)mun++});
     if(!confirm((mun?'まだ全員が答えていない問題が '+mun+'問あります。\n':'')+'採点しますか？（採点したら答えは変えられません）'))return;
     var mres=MS.finish();if(!mres)return;S.msResId=mres.id;S.dir=null;go('msr');return}
-  if(a==='msback'){S.dir=null;go('moshi');return}
+  if(a==='msback'){S.msMid=null;S.dir=null;go('moshi');return}
   if(a==='msres'){S.msResId=t.getAttribute('data-v');S.dir=null;go('msr');return}
   if(a==='msx'){S.msXi=+t.getAttribute('data-v');S.dir=null;go('msx');return}
   if(a==='msrback'){S.dir=null;go('msr');return}

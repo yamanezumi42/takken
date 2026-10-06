@@ -397,9 +397,10 @@ a{color:var(--chipfg)}
 /* 模試（2026-10-07）。右に4人の色の丸を縦に（本人「人のやつは色だけでいいよ」） */
 .yo.ms{cursor:default}
 .mscol{display:flex;flex-direction:column;gap:5px;margin-left:6px;flex:none;align-self:center}
-.msd{width:26px;height:26px;border-radius:50%;border:2px solid var(--c);background:transparent;
-  opacity:.38;cursor:pointer;padding:0;display:block}
-.msd.on{background:var(--c);opacity:1}
+/* 角の丸い四角。選んだら塗って白いチェック（2026-10-07 本人「四角のアールがついたもの」→ 案5） */
+.msd{width:24px;height:24px;border-radius:7px;border:2px solid var(--c);background:transparent;
+  opacity:.5;cursor:pointer;padding:0;display:block}
+.msd.on{opacity:1;background:var(--c) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/18px no-repeat}
 span.msd{cursor:default}
 .mshead{display:flex;align-items:baseline;gap:10px;margin:0 0 12px}
 .mstime{font-family:var(--num);font-size:14px}
@@ -1847,7 +1848,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='92adb02a';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2d9e4f0a';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
