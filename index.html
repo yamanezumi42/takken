@@ -394,6 +394,35 @@ a{color:var(--chipfg)}
 .yo[disabled]{cursor:default;opacity:1}
 /* 答えたあと＝**線だけ**（本人が案Bを選択）。塗りつぶさない */
 .yo.ok{box-shadow:inset 0 0 0 1.5px #9ccdb5}
+/* 模試（2026-10-07）。右に4人の色の丸を縦に（本人「人のやつは色だけでいいよ」） */
+.yo.ms{cursor:default}
+.mscol{display:flex;flex-direction:column;gap:5px;margin-left:6px;flex:none;align-self:center}
+.msd{width:26px;height:26px;border-radius:50%;border:2px solid var(--c);background:transparent;
+  opacity:.38;cursor:pointer;padding:0;display:block}
+.msd.on{background:var(--c);opacity:1}
+span.msd{cursor:default}
+.mshead{display:flex;align-items:baseline;gap:10px;margin:0 0 12px}
+.mstime{font-family:var(--num);font-size:14px}
+.mstime.over{color:#c0392b;font-weight:700}
+.msgrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.msgrid button{min-width:38px;height:32px;border-radius:8px;border:1px solid #d9d0c5;background:var(--panel);
+  font-family:var(--num);font-size:12.5px;color:var(--fg);cursor:pointer}
+.msgrid button.part{border-color:#9b8f80}
+.msgrid button.all{background:#5c564e;border-color:#5c564e;color:#fff}
+.msgrid button.cur{box-shadow:0 0 0 2px #c0455f}
+.msp{display:flex;align-items:center;gap:10px;margin:6px 0}
+.mspon{background:none;border:0;padding:0;cursor:pointer}
+.msname{flex:1;max-width:220px;border:1px solid #d9d0c5;border-radius:8px;padding:6px 10px;
+  font-family:var(--font);font-size:14px;background:var(--panel);color:var(--fg)}
+.mscard{border:2px solid var(--c);border-radius:14px;padding:10px;text-align:center}
+.mscard .nm{color:var(--c);font-weight:700}
+.mscard .sc{font-family:var(--num);font-size:26px;font-weight:700}
+.mstab{width:100%;border-collapse:collapse;font-size:12.5px}
+.mstab th{font-weight:600;padding:4px 2px}
+.mstab td{padding:4px 2px;border-bottom:1px solid #eee6dc;text-align:center}
+.mstab td.l{text-align:left}
+.mstab td.ng{background:#f6d4d4;color:#b23}
+.mstab td.na{background:#f6d4d4;color:#b23}
 .yo.ok .no{background:#2f8b6d}
 .yo.ng{box-shadow:inset 0 0 0 1.5px #e0a8a4}
 .yo.ng .no{background:#a8534b}
@@ -1818,7 +1847,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='384c079b';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='b81fcd8a';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

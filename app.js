@@ -369,7 +369,9 @@ var IC={
  io:svg('<path d="M12 3.5v11"/><path d="M8 11l4 4 4-4"/><path d="M4.5 19.5h15"/>'),
  close:svg('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
  clock:svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
- lock:svg('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>')
+ lock:svg('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'),
+ /* 模試のタブ＝答案用紙にチェック（2026-10-07 自作） */
+ exam:svg('<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 9.5l2 2 4-4"/><path d="M8.5 15h7"/><path d="M8.5 17.8h4.5"/>')
 };
 /* YouTube を開くボタン・リンク用。線画の自作近似ではなく、YouTube のマークそのものの形を使う
    （出典：Simple Icons の youtube.svg／viewBox 0 0 24 24。輪郭・角の曲率・三角の位置と大きさは原寸のまま）。
@@ -1145,6 +1147,7 @@ function baseSt(){
   var st=JSON.parse(JSON.stringify(ST));
   delete st.settings;delete st.run;delete st.wpend;delete st.lastChap;
   delete st.mockRun;                 /* 途中の模試は端末ごと（焼き付くと生き返る） */
+  delete st.msRun;                   /* 4人の模試の途中も同じ（2026-10-07） */
   delete st.log;delete st.logn;delete st.gen;
   /* ★軽くする（2026-08-29 実機で 0.76MB＝GitHubがそのまま返す上限1MBに近いと判明）。
      一時的な値・再計算できる欄・空の欄は持たない。実データで 220→94バイト/問。 */
@@ -1211,7 +1214,7 @@ function replay(log){
                 ホームの「過去問4択の続き」が出なくなっていた（本人が三度報告）。
                 これは成績ではなく居場所なので、土台にも出来事にも入っていない。 */
              yonRun:ST.yonRun,yonPos:ST.yonPos,yonLast:ST.yonLast,yonF:ST.yonF,
-             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast,oxF:ST.oxF,oxRun:ST.oxRun};
+             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast,oxF:ST.oxF,oxRun:ST.oxRun,msRun:ST.msRun};
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
   Object.keys(ST.items||{}).forEach(function(k){
@@ -1238,6 +1241,7 @@ function replay(log){
   if(keep.oxLast)ST.oxLast=keep.oxLast;
   if(keep.oxF)ST.oxF=keep.oxF;
   if(keep.oxRun)ST.oxRun=keep.oxRun;
+  if(keep.msRun)ST.msRun=keep.msRun;
   ST.logn=keep.logn||0;
   ST.gen=keep.gen||0;
   ST.log=L;
@@ -1289,6 +1293,9 @@ function applyEvent(E,live){
   /* ○×の記録リセット（2026-09-28 本人「〇×問題はリセットできるようにしておいて」） */
   if(E.e==='oxreset'){try{OXB.reset(E)}catch(e){}return}
   if(E.e==='yona'){try{YB.apply(E)}catch(e){}return}
+  /* 模試の結果（2026-10-07）。同じ回を二重に入れない（土台と出来事の両方にあっても1つ） */
+  if(E.e==='ms'){if(!Array.isArray(ST.msLog))ST.msLog=[];
+    if(E.r&&!ST.msLog.some(function(x){return x&&x.id===E.r.id}))ST.msLog.push(E.r);return}
   if(E.e==='closed'){if(E.cat)ST.closedSeen[E.cat]=E.day;return}
 }
 
@@ -1447,6 +1454,9 @@ function normST(o){
   /* 復習タブの○×（2026-10-05）。範囲＝{cats,fq,ord}／いま解いて回っている一覧＝{key,title,list:[[単元,i]],i} */
   if(!o.oxF||typeof o.oxF!=='object')delete o.oxF;
   if(!o.oxRun||typeof o.oxRun!=='object'||!o.oxRun.list||!o.oxRun.list.slice)delete o.oxRun;
+  /* 模試（2026-10-07）。途中＝{id,at,players,names,qs,nos,sel,i,acc}／結果＝出来事 'ms' から作る一覧 */
+  if(!o.msRun||typeof o.msRun!=='object'||!o.msRun.qs||!o.msRun.qs.slice||!o.msRun.sel)delete o.msRun;
+  if(!Array.isArray(o.msLog))o.msLog=[];
   /* いま解いて回っている4択の一覧（2026-09-24）。形が違えば捨てる＝壊れた値で止まらない */
   if(!o.yonRun||typeof o.yonRun!=='object'||!o.yonRun.ids||!o.yonRun.ids.slice)delete o.yonRun;
   /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
@@ -2628,6 +2638,7 @@ function clockSync(){
   var vis=(typeof document.visibilityState==='undefined'||document.visibilityState!=='hidden');
   if(S.view==='quiz'&&vis)runResume();else runPause();
   if(S.view==='mock'&&vis)mockResume();else mockPause();
+  if(S.view==='msq'&&vis){msResume();msTickStart()}else{msPause();msTickStop()}
   if((S.view==='quiz'||S.view==='mock')&&vis)qtStart();else qtStop();
 }
 function render(){
@@ -2656,6 +2667,10 @@ function render(){
   else if(S.view==='nprog')h=vNProg();
   else if(S.view==='ox')h=vOx();
   else if(S.view==='yon')h=vYon();
+  else if(S.view==='moshi')h=vMoshi();      /* 模試（2026-10-07） */
+  else if(S.view==='msq')h=vMsq();
+  else if(S.view==='msr')h=vMsr();
+  else if(S.view==='msx')h=vMsx();
   else if(S.view==='analysis')h=vAnalysis();
   v.innerHTML=h;renderTabs();
   /* ★ホームの見た目を控える（2026-08-25 本人「一瞬でも表示されるのが嫌」）。
@@ -2754,12 +2769,15 @@ function stag(){return ANIMON?' stag':''}
 /* タブは5つ。ゲームは**復習と分析の間**（2026-08-23 本人指示）。 */
 /* ゲームタブは外した（2026-08-25 本人指示。線つなぎ3件・早見表2件・オリジナル4択3件・聞き取り2択は使わない）。
    関数の本体は残してある＝kkRate・kkVoice・kkVol などを過去問の読み上げが使っているため。 */
-var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],['analysis','分析',IC.chart]];
+var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],
+          ['moshi','模試',IC.exam],   /* 2026-10-07 本人「模擬試験としてタブを作成してね。復習の右側に」 */
+          ['analysis','分析',IC.chart]];
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
 function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':(S.fmode==='ox'?'○×で確認':'動画学習')):x[1]}
 function renderTabs(){
   var cur=(S.view==='study'||S.view==='fields')?'fields':(S.view==='quiz'?'':S.view);
+  if(S.view==='msq'||S.view==='msr'||S.view==='msx')cur='moshi';
   /* アイコンのみ（文字ラベルなし）。読み上げ用に aria-label と title を残す */
   document.getElementById('tabs').innerHTML=TABS.map(function(x){
     var lb=tabLabel(x);
@@ -3418,6 +3436,203 @@ function oxCont(){
   if(!OXB.stat(d).a)return null;
   return {d:d,i:OXB.vis(d).indexOf(i),n:OXB.vis(d).length,title:OXB.cat(d)};
 }
+/* ============ 模試（4人で一緒に解く過去問4択。2026-10-07 本人） ============
+   正本＝docs/MOCK_1007_PROGRESS.md。色の順＝本人の挙げた順（赤・緑・ピンク・黄）。
+   名前はネットのハンドルネーム（本人「大丈夫」）。始める画面で書き換えられる（端末の設定に残す）。 */
+var MSP=[['r','#d64545','すずき'],['g','#3a9a5b','えのもと'],['p','#e07aa8','ゆうたい'],['y','#e0b400','さとう']];
+var MS_ME='y';          /* 本人＝黄。黄の答えは4択の記録（ST.yon）にも入れる（本人④） */
+var MS_LIM=7200;        /* 2時間。超えたら「時間超過」を出すだけで止めない（本人⑥） */
+/* 問1〜50。統計（問48）は過去問の数字が古く今の正解と合わないので外す＝49問・49点満点（本人⑤） */
+var MS_NOS=(function(){var a=[];for(var i=1;i<=50;i++)if(i!==48)a.push(i);return a})();
+/* 結果の分野（問番号で分ける） */
+var MS_SEC=[['権利関係',1,14],['法令上の制限',15,22],['税・価格',23,25],['宅建業法',26,45],['5問免除科目',46,50]];
+var MS={
+  names:function(){
+    var s=(ST.settings&&ST.settings.msNames)||{},o={};
+    MSP.forEach(function(p){o[p[0]]=s[p[0]]||p[2]});return o;
+  },
+  col:function(k){for(var i=0;i<MSP.length;i++)if(MSP[i][0]===k)return MSP[i][1];return '#999'},
+  /* その4択が本試験の何問目だったか */
+  noOf:function(qid){var r=RAWBY[qid+'-1']||RAWBY[qid+'-ア'];return (r&&r.src)?(+r.src.q||0):0},
+  /* 問番号ごとの候補（過去28回でその問番号だった4択） */
+  pool:function(no){
+    if(!this._p){var me=this;this._p={};YB.all().forEach(function(q){var n=me.noOf(q);if(n)(me._p[n]=me._p[n]||[]).push(q)})}
+    return this._p[no]||[];
+  },
+  run:function(){var r=ST.msRun;return (r&&r.qs&&r.qs.length&&r.sel)?r:null},
+  start:function(players){
+    var qs=[],nos=[],sel={};
+    MS_NOS.forEach(function(no){var p=MS.pool(no);if(p.length){qs.push(p[Math.floor(Math.random()*p.length)]);nos.push(no)}});
+    players.forEach(function(k){sel[k]={}});
+    ST.msRun={id:'ms'+Date.now(),at:nowStamp(),players:players.slice(),names:this.names(),
+              qs:qs,nos:nos,sel:sel,i:0,acc:0};
+    S.yonMk={};S.msT0=0;saveST();return ST.msRun;
+  },
+  sec:function(){var r=this.run();if(!r)return 0;return (r.acc||0)+(S.msT0?Math.round((Date.now()-S.msT0)/1000):0)},
+  /* その問に答えた人の数 */
+  answered:function(r,i){var n=0;r.players.forEach(function(k){if(r.sel[k]&&r.sel[k][i])n++});return n},
+  finish:function(){
+    msPause();
+    var r=this.run();if(!r)return null;
+    var res={id:r.id,at:r.at,end:nowStamp(),sec:r.acc||0,players:r.players.slice(),names:r.names,
+             qs:r.qs.slice(),nos:r.nos.slice(),ans:r.qs.map(function(q){var x=YB.q(q);return x?x.a:0}),sel:r.sel};
+    applyEvent(logEv('ms',{r:res}),true);
+    /* 本人（黄）の答えは4択の記録にも入れる（本人④）。答えていない問は入れない */
+    if(res.players.indexOf(MS_ME)>=0)res.qs.forEach(function(q,i){
+      var pk=res.sel[MS_ME]&&res.sel[MS_ME][i];if(pk)YB.put(q,pk===res.ans[i],pk)});
+    ST.msRun=null;saveST();try{syncSoon()}catch(e){}
+    return res;
+  },
+  log:function(){return Array.isArray(ST.msLog)?ST.msLog:[]},
+  get:function(id){var L=this.log();for(var i=L.length-1;i>=0;i--)if(L[i]&&L[i].id===id)return L[i];return null},
+  score:function(res,k,a,b){var n=0;res.qs.forEach(function(q,i){var no=res.nos[i];
+    if(a&&(no<a||no>b))return;if(res.sel[k]&&res.sel[k][i]===res.ans[i])n++});return n},
+  count:function(res,a,b){var n=0;res.nos.forEach(function(no){if(no>=a&&no<=b)n++});return n}
+};
+/* 時計＝問題の画面にいる間だけ進める（acc＝積み上げ秒・S.msT0＝いまの区間の開始） */
+function msPause(){var r=MS.run();if(!r||!S.msT0)return;r.acc=(r.acc||0)+Math.round((Date.now()-S.msT0)/1000);S.msT0=0;saveST()}
+function msResume(){if(!MS.run()||S.msT0)return;S.msT0=Date.now()}
+function hmmss(s){s=Math.max(0,Math.round(s||0));return Math.floor(s/3600)+':'+pad(Math.floor(s%3600/60))+':'+pad(s%60)}
+function msTimeTxt(e){return e>MS_LIM?('時間超過 '+hmmss(e-MS_LIM)):('残り '+hmmss(MS_LIM-e))}
+var MSTID=null;
+function msTick(){var e=document.getElementById('mstime');if(!e){msTickStop();return}
+  var s=MS.sec();e.textContent=msTimeTxt(s);e.className='mstime'+(s>MS_LIM?' over':'')}
+function msTickStart(){if(MSTID)return;msTick();MSTID=setInterval(msTick,1000)}
+function msTickStop(){if(MSTID){clearInterval(MSTID);MSTID=null}}
+/* 名前の書き換え（始める画面）。端末の設定に残す */
+document.addEventListener('change',function(e){
+  var t=e.target;if(!t||!t.classList||!t.classList.contains('msname'))return;
+  if(!ST.settings)ST.settings={};if(!ST.settings.msNames)ST.settings.msNames={};
+  ST.settings.msNames[t.getAttribute('data-k')]=String(t.value||'').trim().slice(0,12);saveST();
+});
+/* 模試のタブ＝途中の続き・始める・これまでの結果 */
+function vMoshi(){
+  var h='<div class="pad'+stag()+'">',r=MS.run(),nm=MS.names();
+  if(r){
+    var na=0;r.qs.forEach(function(q,i){if(MS.answered(r,i)===r.players.length)na++});
+    h+='<div class="panel"><div class="h" style="margin:0 0 6px">途中の模試</div>'
+      +'<div class="mini">'+esc(String(r.at).slice(0,16))+' に開始　問'+r.nos[r.i|0]+'まで進行　全員が答えた問題 '+na+' / '+r.qs.length+'　'+msTimeTxt(MS.sec())+'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button class="btn pri" data-act="msgo">続きから解く</button>'
+      +'<button class="btn sm" data-act="msquit">やめて捨てる</button></div></div>';
+  }
+  var on=S.msOn||(S.msOn={r:1,g:1,p:1,y:1});
+  h+='<div class="panel"><div class="h" style="margin:0 0 4px">模試を始める</div>'
+    +'<div class="mini" style="margin-bottom:10px">本試験と同じ順番で、過去28回の同じ問番号から1問ずつ選んだ49問'
+    +'（統計の問48は除く・49点満点）。2時間を計り、最後にまとめて採点します。参加する人の丸を押して選びます。</div>';
+  MSP.forEach(function(p){
+    h+='<div class="msp"><button class="mspon" data-act="mson" data-v="'+p[0]+'" aria-label="参加">'
+      +'<span class="msd'+(on[p[0]]?' on':'')+'" style="--c:'+p[1]+'"></span></button>'
+      +'<input class="msname" data-k="'+p[0]+'" value="'+esc(nm[p[0]])+'" maxlength="12"></div>';
+  });
+  h+='<button class="btn pri" style="margin-top:12px" data-act="msstart">'
+    +(r?'新しく始める（途中の模試は捨てる）':'始める（49問・2時間）')+'</button></div>';
+  var L=MS.log();
+  if(L.length){
+    h+='<div class="panel"><div class="h" style="margin:0 0 6px">これまでの結果</div>';
+    L.slice().reverse().forEach(function(res){
+      h+='<button class="tapline" data-act="msres" data-v="'+esc(res.id)+'" style="min-height:40px">'
+        +'<span style="flex:1">'+esc(String(res.end||res.at).slice(0,16))+'</span>'
+        +res.players.map(function(k){return '<span style="color:'+MS.col(k)+';font-weight:700;margin-left:12px">'
+          +esc((res.names&&res.names[k])||'')+' '+MS.score(res,k)+'</span>'}).join('')+'</button>';
+    });
+    h+='</div>';
+  }
+  return h+'</div>';
+}
+/* 問題の画面。左の「○×？」の印は4択と同じ仕組み（S.yonList・S.yonI を合わせて yonmk を使う）。
+   本文を押しても何も起きない。右の色の丸を押すと、その人がその番号を選んだことになる（もう一度押すと外す）。 */
+function vMsq(){
+  var r=MS.run();
+  if(!r){S.view='moshi';return vMoshi()}
+  var i=Math.max(0,Math.min(r.qs.length-1,r.i|0)),qid=r.qs[i],q=YB.q(qid),opts=YB.opts(qid);
+  S.yonList=r.qs;S.yonI=i;S.yonPick=null;
+  var back='<button class="btn sm" data-act="msback" style="margin-bottom:10px">模試のタブへ戻る（時計は止まります）</button>';
+  if(!q)return '<div class="pad'+stag()+'">'+back+'<div class="warn">'+IC.warn+' この問題が読み込めません。</div></div>';
+  var kosu=(q.type==='個数'||q.type==='組合せ');
+  var h='<div class="pad'+stag()+'">'+back
+    +'<div class="mshead"><b style="font-size:17px">問'+r.nos[i]+'</b>'
+    +'<span class="mini">'+(i+1)+' / '+r.qs.length+'</span><span style="flex:1"></span>'
+    +'<span id="mstime" class="mstime'+(MS.sec()>MS_LIM?' over':'')+'">'+msTimeTxt(MS.sec())+'</span></div>'
+    +'<div class="yq">'+yonLead(q.lead,kosu?qid:null,false)+'</div>';
+  h+='<div class="yono">';
+  for(var n=1;n<=4;n++){
+    var mv=kosu?'':yonMkGet(qid+'-'+n);
+    h+='<div class="yo ms'+(mv?' m-'+mv:'')+'">'
+      +'<span class="col"'+(kosu?'':' data-act="yonmk" data-v="'+n+'"')+'>'
+      +'<span class="no">'+n+'</span>'+(kosu?'':'<span class="mk">'+YMK[mv]+'</span>')+'</span>'
+      +'<span class="tx">'+esc(opts[n-1])+'</span>'
+      +'<span class="mscol">'+r.players.map(function(k){var on=(r.sel[k]&&r.sel[k][i]===n);
+        return '<button class="msd'+(on?' on':'')+'" style="--c:'+MS.col(k)+'" data-act="mspick" data-k="'+k+'"'
+          +' data-v="'+n+'" aria-label="'+esc((r.names&&r.names[k])||k)+'"></button>'}).join('')+'</span></div>';
+  }
+  h+='</div>';
+  var last=(i+1>=r.qs.length);
+  h+='<div class="oxnav">'
+    +(i>0?'<button class="btn" data-act="msnav" data-v="-1">'+IC.chevL+'　前の問題</button>':'<span></span>')
+    +(last?'<button class="btn pri" data-act="msend">採点する</button>'
+          :'<button class="btn" data-act="msnav" data-v="1">次の問題　'+IC.chev+'</button>')+'</div>';
+  /* 番号で飛ぶ。全員が答えた問は濃く、一部だけは枠を濃く */
+  h+='<div class="msgrid">'+r.qs.map(function(x,k){var a=MS.answered(r,k);
+      var c=(a===r.players.length?'all':(a?'part':''))+(k===i?' cur':'');
+      return '<button class="'+c+'" data-act="msgoto" data-v="'+k+'">'+r.nos[k]+'</button>'}).join('')+'</div>'
+    +'<div style="margin-top:14px"><button class="btn sm" data-act="msend">採点する</button></div>';
+  return h+'</div>';
+}
+/* 結果の画面＝点数・分野別・問題ごとの一覧（間違えた欄は赤く。本人「×は書かなくていいから赤くしておいて」） */
+function vMsr(){
+  var res=MS.get(S.msResId);
+  var back='<button class="btn sm" data-act="msback" style="margin-bottom:10px">模試のタブへ戻る</button>';
+  if(!res)return '<div class="pad'+stag()+'">'+back+'<div class="warn">'+IC.warn+' 結果が見つかりません。</div></div>';
+  var P=res.players,nm=res.names||{},over=res.sec>MS_LIM;
+  var h='<div class="pad'+stag()+'">'+back+'<div class="panel"><div class="h" style="margin:0 0 4px">模試　結果</div>'
+    +'<div class="mini">'+esc(String(res.end||res.at).slice(0,16))+'　'+res.qs.length+'問・'+res.qs.length+'点満点　かかった時間 '
+    +hmmss(res.sec)+(over?'（'+hmmss(res.sec-MS_LIM)+' 超過）':'')+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat('+P.length+',1fr);gap:8px;margin-top:12px">';
+  P.forEach(function(k){h+='<div class="mscard" style="--c:'+MS.col(k)+'"><div class="nm">'+esc(nm[k]||'')+'</div>'
+    +'<div class="sc">'+MS.score(res,k)+'<span style="font-size:13px"> / '+res.qs.length+'</span></div></div>'});
+  h+='</div><table class="mstab" style="margin-top:12px"><tr><th style="text-align:left">分野</th>'
+    +P.map(function(k){return '<th style="color:'+MS.col(k)+'">'+esc(nm[k]||'')+'</th>'}).join('')+'</tr>';
+  MS_SEC.forEach(function(s){var c=MS.count(res,s[1],s[2]);if(!c)return;
+    h+='<tr><td class="l">'+s[0]+'</td>'+P.map(function(k){return '<td>'+MS.score(res,k,s[1],s[2])+'/'+c+'</td>'}).join('')+'</tr>'});
+  h+='</table><div style="display:flex;gap:8px;margin-top:12px">'
+    +'<button class="btn sm" data-act="msx" data-v="0">1問目から解説を見る</button></div></div>';
+  h+='<div class="panel"><div class="h" style="margin:0 0 6px">問題ごと</div><table class="mstab">'
+    +'<tr><th>問</th><th style="text-align:left">単元</th><th>正解</th>'
+    +P.map(function(k){return '<th style="color:'+MS.col(k)+'">'+esc(nm[k]||'')+'</th>'}).join('')+'<th></th></tr>';
+  res.qs.forEach(function(q,i){
+    h+='<tr><td>'+res.nos[i]+'</td><td class="l">'+esc(YB.catOf(q))+'</td><td><b>'+res.ans[i]+'</b></td>';
+    P.forEach(function(k){var pk=res.sel[k]&&res.sel[k][i];
+      h+=!pk?'<td class="na">—</td>':(pk===res.ans[i]?'<td>'+pk+'</td>':'<td class="ng">'+pk+'</td>')});
+    h+='<td style="text-align:right"><button class="btn sm" style="padding:2px 8px;min-height:0" data-act="msx" data-v="'+i+'">解説</button></td></tr>';
+  });
+  return h+'</table></div></div>';
+}
+/* 解説の画面（採点のあと）。正解の行に線、4人が選んだ番号に色の丸、その下に過去問の解説 */
+function vMsx(){
+  var res=MS.get(S.msResId),i=S.msXi|0;
+  var back='<button class="btn sm" data-act="msrback" style="margin-bottom:10px">結果へ戻る</button>';
+  if(!res||!res.qs[i])return '<div class="pad'+stag()+'">'+back+'</div>';
+  var qid=res.qs[i],q=YB.q(qid),opts=YB.opts(qid),head=RAWBY[qid+'-1']||RAWBY[qid+'-ア']||{};
+  var src=(head.src&&head.src.raw)?head.src.raw:'';
+  var h='<div class="pad'+stag()+'">'+back
+    +'<div class="mshead"><b style="font-size:17px">問'+res.nos[i]+'</b><span class="mini">'+esc(YB.catOf(qid))+'</span>'
+    +'<span style="flex:1"></span><span class="mini">'+esc(src)+'</span></div>'
+    +'<div class="yq">'+yonLead(q.lead,null,true)+'</div><div class="yono">';
+  for(var n=1;n<=4;n++){
+    h+='<div class="yo ms'+(n===q.a?' ok':'')+'"><span class="col"><span class="no">'+n+'</span></span>'
+      +'<span class="tx">'+esc(opts[n-1])+'</span><span class="mscol">'
+      +res.players.map(function(k){var on=(res.sel[k]&&res.sel[k][i]===n);
+        return '<span class="msd'+(on?' on':'')+'" style="--c:'+MS.col(k)+(on?'':';visibility:hidden')+'"></span>'}).join('')
+      +'</span></div>';
+  }
+  h+='</div>'+yonExpHtml(qid,q)
+    +'<div class="oxnav">'
+    +(i>0?'<button class="btn" data-act="msx" data-v="'+(i-1)+'">'+IC.chevL+'　前の問題</button>':'<span></span>')
+    +(i+1<res.qs.length?'<button class="btn" data-act="msx" data-v="'+(i+1)+'">次の問題　'+IC.chev+'</button>'
+      :'<button class="btn" data-act="msrback">結果へ戻る</button>')+'</div>';
+  return h+'</div>';
+}
 function flowHtml(){
   /* 2026-09-27 本人指示でホームの行を**2つだけ**にした。
      > 「①HOME画面の通し演習はやらないから消してほしい。
@@ -3436,6 +3651,9 @@ function flowHtml(){
   if(xc)rows.push({act:'oxopen',dd:xc.d,lab:'○×の続き（'+xc.title+'）',
                    st:(xc.i+1)+' / '+n3(xc.n)+'問',done:false});
 
+  /* 模試の続き（2026-10-07 本人「ホーム画面からも再開できるようにも」） */
+  var mr=MS.run();
+  if(mr)rows.push({act:'msgo',lab:'模試の続き',st:'問'+mr.nos[mr.i|0]+'（'+((mr.i|0)+1)+' / '+mr.qs.length+'）',done:false});
   /* ②間違えた問題＝解いて間違えて、まだ正解し直していないもの。 */
   var wp=wrongPool().length;
   rows.push({act:'startWrongAll',lab:'間違えた問題',st:(wp?n3(wp)+'問':'なし'),done:!wp});
@@ -9121,6 +9339,34 @@ document.addEventListener('click',function(e){
     YB.setPos(S.yonKey,S.yonI);
     S.dir=null;go('yon');return}
   /* 4択の範囲（2026-09-22）。押すたびに数え直して画面を描き直す */
+  /* ---- 模試（2026-10-07） ---- */
+  if(a==='msstart'){
+    var mps=MSP.map(function(p){return p[0]}).filter(function(k){return (S.msOn||{r:1,g:1,p:1,y:1})[k]});
+    if(!mps.length){msg('参加する人を選んでください');return}
+    if(MS.run()&&!confirm('途中の模試を捨てて、新しく始めますか？'))return;
+    MS.start(mps);S.dir=null;go('msq');return}
+  if(a==='msgo'){if(!MS.run()){msg('途中の模試がありません');return}S.dir=null;go('msq');return}
+  if(a==='msquit'){if(!confirm('途中の模試を捨てますか？（元に戻せません）'))return;
+    S.msT0=0;ST.msRun=null;saveST();render();return}
+  if(a==='mson'){var mk3=t.getAttribute('data-v');S.msOn=S.msOn||{r:1,g:1,p:1,y:1};S.msOn[mk3]=!S.msOn[mk3];render();return}
+  if(a==='mspick'){
+    var mr1=MS.run();if(!mr1)return;
+    var mpk=t.getAttribute('data-k'),mpv=+t.getAttribute('data-v'),mii=mr1.i|0;
+    mr1.sel[mpk]=mr1.sel[mpk]||{};
+    if(mr1.sel[mpk][mii]===mpv)delete mr1.sel[mpk][mii];else mr1.sel[mpk][mii]=mpv;
+    saveST();render();return}
+  if(a==='msnav'){var mr2=MS.run();if(!mr2)return;
+    mr2.i=Math.max(0,Math.min(mr2.qs.length-1,(mr2.i|0)+(+t.getAttribute('data-v'))));saveST();go('msq');return}
+  if(a==='msgoto'){var mr3=MS.run();if(!mr3)return;mr3.i=+t.getAttribute('data-v');saveST();go('msq');return}
+  if(a==='msend'){
+    var mr4=MS.run();if(!mr4)return;
+    var mun=0;mr4.qs.forEach(function(x,k){if(MS.answered(mr4,k)<mr4.players.length)mun++});
+    if(!confirm((mun?'まだ全員が答えていない問題が '+mun+'問あります。\n':'')+'採点しますか？（採点したら答えは変えられません）'))return;
+    var mres=MS.finish();if(!mres)return;S.msResId=mres.id;S.dir=null;go('msr');return}
+  if(a==='msback'){S.dir=null;go('moshi');return}
+  if(a==='msres'){S.msResId=t.getAttribute('data-v');S.dir=null;go('msr');return}
+  if(a==='msx'){S.msXi=+t.getAttribute('data-v');S.dir=null;go('msx');return}
+  if(a==='msrback'){S.dir=null;go('msr');return}
   /* ---- 復習タブの○×（2026-10-05） ---- */
   if(a==='oxrev'){
     var orr=OXR.start(t.getAttribute('data-r'));
@@ -10758,7 +11004,7 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
    戻ってきた時刻の差を積む。他のアプリを触っていた時間が混ざり得るため、その動画の尺の
    1.5倍で切り捨て、10秒未満は積まない（watchEnd に同じ注記あり）。 */
 /* 閉じる・再読み込みでも畳む（visibilitychange が来ない経路の保険） */
-window.addEventListener('pagehide',function(){try{runPause();mockPause()}catch(e){}});
+window.addEventListener('pagehide',function(){try{runPause();mockPause();msPause()}catch(e){}});
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState!=='visible'){
     /* ★離れる瞬間に同期する（2026-08-29）。iPhone はアプリを切り替えると止まるので、
