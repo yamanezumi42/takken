@@ -1294,6 +1294,8 @@ function applyEvent(E,live){
   if(E.e==='oxreset'){try{OXB.reset(E)}catch(e){}return}
   if(E.e==='yona'){try{YB.apply(E)}catch(e){}return}
   /* 模試の結果（2026-10-07）。同じ回を二重に入れない（土台と出来事の両方にあっても1つ） */
+  /* 模試の結果のリセット（2026-10-07）。この時点より前の結果を消す */
+  if(E.e==='msreset'){ST.msLog=[];return}
   if(E.e==='ms'){if(!Array.isArray(ST.msLog))ST.msLog=[];
     if(E.r&&!ST.msLog.some(function(x){return x&&x.id===E.r.id}))ST.msLog.push(E.r);return}
   if(E.e==='closed'){if(E.cat)ST.closedSeen[E.cat]=E.day;return}
@@ -3543,6 +3545,9 @@ function vMoshi(){
         +res.players.map(function(k){return '<span style="color:'+MS.col(k)+';font-weight:700;margin-left:12px">'
           +esc((res.names&&res.names[k])||'')+' '+MS.score(res,k)+'</span>'}).join('')+'</button>';
     });
+    /* リセット（2026-10-07 本人「これまでの結果をリセットできるようにして欲しいな」） */
+    h+='<div style="margin-top:12px"><button class="btn sm" style="width:auto" data-act="msreset">'
+      +IC.again+'<span style="margin-left:6px">これまでの結果をリセット（'+L.length+'回分）</span></button></div>';
     h+='</div>';
   }
   return h+'</div>';
@@ -9406,6 +9411,12 @@ document.addEventListener('click',function(e){
     var mres=MS.finish();if(!mres)return;S.msResId=mres.id;S.dir=null;go('msr');return}
   if(a==='msback'){S.msMid=null;S.dir=null;go('moshi');return}
   if(a==='msres'){S.msResId=t.getAttribute('data-v');S.dir=null;go('msr');return}
+  if(a==='msreset'){
+    var mrn=MS.log().length;if(!mrn)return;
+    if(!confirm('これまでの模試の結果（'+mrn+'回分）を消します。\n'
+      +'さとうさん（黄）の答えとして4択の記録に入った分は消えません。\n元に戻せません。よろしいですか？'))return;
+    applyEvent(logEv('msreset',{day:today()}),true);saveST();try{syncSoon()}catch(e){}
+    msg(mrn+'回分の結果を消しました');render();return}
   if(a==='msx'){S.msXi=+t.getAttribute('data-v');S.dir=null;go('msx');return}
   if(a==='msrback'){S.dir=null;go('msr');return}
   /* ---- 復習タブの○×（2026-10-05） ---- */
