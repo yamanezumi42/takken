@@ -3444,9 +3444,11 @@ function oxCont(){
 /* 色＝くすみ色（2026-10-07 本人「原色はダサい」→ 案5） */
 var MSP=[['r','#c4766f','すずき'],['g','#7ea58b','えのもと'],['p','#d79db0','ゆうたい'],['y','#d2b064','さとう']];
 var MS_ME='y';          /* 本人＝黄。黄の答えは4択の記録（ST.yon）にも入れる（本人④） */
-var MS_LIM=7200;        /* 2時間。超えたら「時間超過」を出すだけで止めない（本人⑥） */
-/* 問1〜50。統計（問48）は過去問の数字が古く今の正解と合わないので外す＝49問・49点満点（本人⑤） */
-var MS_NOS=(function(){var a=[];for(var i=1;i<=50;i++)if(i!==48)a.push(i);return a})();
+/* 1時間50分＝本試験の5問免除者と同じ（2026-10-08）。超えたら「時間超過」を出すだけで止めない（本人⑥） */
+var MS_LIM=6600;
+/* 問1〜45（2026-10-08 本人「免除科目は抜いて全４５問にして欲しい」）＝45問・45点満点。
+   前は問1〜50から統計の問48を除いた49問だった（本人⑤） */
+var MS_NOS=(function(){var a=[];for(var i=1;i<=45;i++)a.push(i);return a})();
 /* 結果の分野（問番号で分ける） */
 var MS_SEC=[['権利関係',1,14],['法令上の制限',15,22],['税・価格',23,25],['宅建業法',26,45],['5問免除科目',46,50]];
 var MS={
@@ -3478,7 +3480,7 @@ var MS={
   finish:function(){
     msPause();
     var r=this.run();if(!r)return null;
-    var res={id:r.id,at:r.at,end:nowStamp(),sec:r.acc||0,players:r.players.slice(),names:r.names,
+    var res={id:r.id,at:r.at,end:nowStamp(),sec:r.acc||0,lim:MS_LIM,players:r.players.slice(),names:r.names,
              qs:r.qs.slice(),nos:r.nos.slice(),ans:r.qs.map(function(q){var x=YB.q(q);return x?x.a:0}),sel:r.sel};
     applyEvent(logEv('ms',{r:res}),true);
     /* 本人（黄）の答えは4択の記録にも入れる（本人④）。答えていない問は入れない */
@@ -3522,8 +3524,8 @@ function vMoshi(){
   }
   var on=S.msOn||(S.msOn={r:1,g:1,p:1,y:1});
   h+='<div class="panel"><div class="h" style="margin:0 0 4px">模試を始める</div>'
-    +'<div class="mini" style="margin-bottom:10px">本試験と同じ順番で、過去28回の同じ問番号から1問ずつ選んだ49問'
-    +'（統計の問48は除く・49点満点）。2時間を計り、最後にまとめて採点します。参加する人の丸を押して選びます。</div>';
+    +'<div class="mini" style="margin-bottom:10px">本試験と同じ順番で、過去28回の同じ問番号から1問ずつ選んだ45問'
+    +'（5問免除科目の問46〜50は除く・45点満点）。1時間50分を計り、最後にまとめて採点します。参加する人の丸を押して選びます。</div>';
   MSP.forEach(function(p){
     h+='<div class="msp"><button class="mspon" data-act="mson" data-v="'+p[0]+'" aria-label="参加">'
       +'<span class="msd'+(on[p[0]]?' on':'')+'" style="--c:'+p[1]+'"></span></button>'
@@ -3535,7 +3537,7 @@ function vMoshi(){
     +'<button class="tog xs'+(msMidOn()?' on':'')+'" data-act="msmidset" data-v="1">入</button>'
     +'<button class="tog xs'+(msMidOn()?'':' on')+'" data-act="msmidset" data-v="0">切</button></div>';
   h+='<button class="btn pri" style="margin-top:12px" data-act="msstart">'
-    +(r?'新しく始める（途中の模試は捨てる）':'始める（49問・2時間）')+'</button></div>';
+    +(r?'新しく始める（途中の模試は捨てる）':'始める（45問・1時間50分）')+'</button></div>';
   var L=MS.log();
   if(L.length){
     h+='<div class="panel"><div class="h" style="margin:0 0 6px">これまでの結果</div>';
@@ -3622,10 +3624,10 @@ function vMsr(){
   var res=MS.get(S.msResId);
   var back='<button class="btn sm" data-act="msback" style="margin-bottom:10px">模試のタブへ戻る</button>';
   if(!res)return '<div class="pad'+stag()+'">'+back+'<div class="warn">'+IC.warn+' 結果が見つかりません。</div></div>';
-  var P=res.players,nm=res.names||{},over=res.sec>MS_LIM;
+  var P=res.players,nm=res.names||{},lim=res.lim||7200,over=res.sec>lim;
   var h='<div class="pad'+stag()+'">'+back+'<div class="panel"><div class="h" style="margin:0 0 4px">模試　結果</div>'
     +'<div class="mini">'+esc(String(res.end||res.at).slice(0,16))+'　'+res.qs.length+'問・'+res.qs.length+'点満点　かかった時間 '
-    +hmmss(res.sec)+(over?'（'+hmmss(res.sec-MS_LIM)+' 超過）':'')+'</div>'
+    +hmmss(res.sec)+(over?'（'+hmmss(res.sec-lim)+' 超過）':'')+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat('+P.length+',1fr);gap:8px;margin-top:12px">';
   P.forEach(function(k){h+='<div class="mscard" style="--c:'+MS.col(k)+'"><div class="nm">'+esc(nm[k]||'')+'</div>'
     +'<div class="sc">'+MS.score(res,k)+'<span style="font-size:13px"> / '+res.qs.length+'</span></div></div>'});
