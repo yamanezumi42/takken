@@ -3690,6 +3690,11 @@ function flowHtml(){
   var xc=oxCont();
   if(xc)rows.push({act:'oxopen',dd:xc.d,lab:'○×の続き（'+xc.title+'）',
                    st:(xc.i+1)+' / '+n3(xc.n)+'問',done:false});
+  /* 復習の○×の続き（2026-10-09 本人「ほかのタブに移動したときにホーム画面から再開できないのがつらい」）。
+     解き終えた回は出さない */
+  var xr=OXR.run();
+  if(xr&&!xr.end)rows.push({act:'oxrevgo',lab:'復習の'+xr.title.replace(/^範囲の○×/,'○×'),
+                   st:(Math.min(xr.i,xr.list.length-1)+1)+' / '+n3(xr.list.length)+'問',done:false});
 
   /* 模試の続き（2026-10-07 本人「ホーム画面からも再開できるようにも」） */
   var mr=MS.run();
@@ -4937,12 +4942,20 @@ var OXR={
   /* kind＝'ng'（まちがえたまま）／'new'（まだ解いていない）／'all'（範囲の問すべて）。並びは単元の並び */
   list:function(kind){
     var out=[],me=this;
-    OXB.dirs().forEach(function(d){OXB.vis(d).forEach(function(i){
+    this.order().forEach(function(d){OXB.vis(d).forEach(function(i){
       var lv=OXB.lv(d,i);
       if(kind==='ng'&&lv!==1)return;
       if(kind==='new'&&lv!==0)return;
       if(me.inRange(d,i))out.push([d,i]);
     })});
+    return out;
+  },
+  /* 単元の並び＝範囲の一覧と同じ（2026-10-09 本人「範囲の上から順番の単元通りに出してほしい」）。
+     前は OXB.dirs()＝フォルダ名の順で、35条書面がいつも先頭になっていた。一覧に無い単元は末尾 */
+  order:function(){
+    var out=[],me=this;
+    bigsOrdered().forEach(function(b){me.cats(b).forEach(function(c){var d=me.dirOf(c);if(d&&out.indexOf(d)<0)out.push(d)})});
+    OXB.dirs().forEach(function(d){if(out.indexOf(d)<0)out.push(d)});
     return out;
   },
   label:function(){
@@ -4962,7 +4975,7 @@ var OXR={
       w.sort(function(a,b){return (b.n-a.n)||(a.k-b.k)});L=w.map(function(x){return x.p});
     }
     var t=(kind==='ng'?'まちがえた○×':(kind==='new'?'まだ解いていない○×':'範囲の○×'))+'（'+this.label()+'）';
-    ST.oxRun={key:'rev:'+kind,title:t,list:L,i:0};
+    ST.oxRun={key:'rev:'+kind,title:t,list:L,i:0,end:false};
     saveST();return ST.oxRun;
   },
   /* いまの位置の問を画面に出す（単元の「やめた場所」は動かさない） */
@@ -4974,8 +4987,8 @@ var OXR={
   },
   step:function(dl){
     var r=this.run();if(!r)return;
-    if(S.oxRunEnd){S.oxRunEnd=false;if(dl<0){this.show();return}}
-    if(dl>0&&r.i+1>=r.list.length){S.oxRunEnd=true;S.oxPick=null;saveST();return}
+    if(S.oxRunEnd){S.oxRunEnd=false;r.end=false;if(dl<0){this.show();saveST();return}}
+    if(dl>0&&r.i+1>=r.list.length){S.oxRunEnd=true;r.end=true;S.oxPick=null;saveST();return}
     r.i+=dl;this.show();saveST();
   },
   leave:function(){S.oxFrom=null;S.oxRunEnd=false;S.oxSeen={}}
@@ -9425,6 +9438,11 @@ document.addEventListener('click',function(e){
   if(a==='oxrev'){
     var orr=OXR.start(t.getAttribute('data-r'));
     if(!orr){msg('いまは0問です');return}
+    S.oxFrom='review';S.oxRunEnd=false;S.oxSeen={};S.oxSeq=null;
+    OXR.show();S.dir=null;go('ox');return}
+  /* ホームの「復習の○×の続き」（2026-10-09）。止めた問題から、復習の並びのまま */
+  if(a==='oxrevgo'){
+    if(!OXR.run()){render();return}
     S.oxFrom='review';S.oxRunEnd=false;S.oxSeen={};S.oxSeq=null;
     OXR.show();S.dir=null;go('ox');return}
   if(a==='oxftog'){S.oxFOpen=!S.oxFOpen;render();return}
