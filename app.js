@@ -9221,6 +9221,8 @@ function ghSave(){
   var o={repo:repo,err:''};
   if(tok&&tok.indexOf('•')<0)o.token=tok;      /* 伏せ字のままなら変更しない */
   ghSet(o);msg('保存しました');dataSheet();
+  /* 殻の側の控え（IndexedDB）も新しくする＝localStorage が空になっても入れ直さずに済む（2026-10-10） */
+  try{ if(window.TAKKEN_KEEP)window.TAKKEN_KEEP() }catch(e){}
   /* ★接続を入れた直後に土台を点検する（2026-08-29 批評）。
      ここで見ないと、この端末の記録と共有の記録が別々に育っていることに気づけず、
      最初の同期で相手の土台を潰す。 */

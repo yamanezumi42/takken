@@ -1858,7 +1858,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='55f8004a';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='a02d02a1';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -2372,6 +2372,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             o.settings.gh=o.settings.gh||{};
             o.settings.gh.repo=repo;o.settings.gh.token=tok;
             localStorage.setItem('takken_v1',JSON.stringify(o));
+            keepSync();   /* 控えも新しくする（2026-10-10） */
           }catch(e){$('impstat').textContent='この端末に保存できません';return}
           $('impstat').textContent='取り込んでいます…';
           ghGo(sv);
@@ -2435,10 +2436,48 @@ body{overflow-x:clip;overscroll-behavior-x:none}
         });
     },1200);
   }
+  /* ---------- 接続の控え（2026-10-10 本人「スマホの方で更新すると、GitHubへの自動バックアップの
+     テキスト消されるの地味に面倒」→「直しを先に入れて」） ----------
+     実機の記録：10-09 に localStorage だけが丸ごと空になった（端末番号が新しくなった）。
+     IndexedDB の問題データは残っていた（本人「大きいダウンロードのやり直しはなかった」）。
+     消える原因はまだ確かめていない。原因が何でも入れ直さずに済むよう、
+     接続の設定（repo・token）と端末番号を **IndexedDB にも控える**。起動のたび app.js より先に
+       ①localStorage に接続があれば → 控えを新しくする
+       ②無くて控えがあれば → 控えから戻す（記録は次の同期で共有から入る）
+     記録の文字列が壊れて読めないときは触らない（app.js の退避に任せる）。 */
+  var KEEPK='keep:gh';
+  function keepSync(){
+    return get(KEEPK).then(function(bk){
+      var raw=null,st=null,dev=null;
+      try{raw=localStorage.getItem('takken_v1')}catch(e){return null}
+      try{st=JSON.parse(raw||'null')}catch(e){return null}
+      try{dev=localStorage.getItem('takken_dev')}catch(e){}
+      var g=st&&st.settings&&st.settings.gh;
+      if(g&&g.repo&&g.token){
+        if(bk&&bk.repo===g.repo&&bk.token===g.token&&(!dev||bk.dev===dev))return null;
+        return put({repo:g.repo,token:g.token,dev:dev||(bk&&bk.dev)||'',at:stamp(),
+                    back:(bk&&bk.back)||[]},KEEPK);
+      }
+      if(!bk||!bk.repo||!bk.token)return null;
+      var o=(st&&typeof st==='object')?st:{};
+      if(!o.settings||typeof o.settings!=='object')o.settings={};
+      o.settings.gh=Object.assign({},o.settings.gh||{},{repo:bk.repo,token:bk.token});
+      /* 戻した記録（いつ消えていたか）。原因を詰めるときの手がかりにする */
+      o.settings.keepBack=stamp();
+      try{
+        localStorage.setItem('takken_v1',JSON.stringify(o));
+        if(!dev&&bk.dev)localStorage.setItem('takken_dev',bk.dev);
+      }catch(e){return null}
+      window.TAKKEN_SRC.keepBack=o.settings.keepBack;
+      var back=(bk.back||[]).concat([o.settings.keepBack+(dev?'':'・端末番号も')]).slice(-20);
+      return put({repo:bk.repo,token:bk.token,dev:bk.dev||dev||'',at:bk.at||'',back:back},KEEPK);
+    }).catch(function(){return null});
+  }
+  window.TAKKEN_KEEP=keepSync;
   var force=(location.hash||'').indexOf('import')>=0;
   /* v2（非公開リポジトリから取り込んだ分）を優先。無ければ v1（手渡しの34MB）で起動する
      ＝トークンが無くても今まで通り動く。 */
-  get(KEY2).then(function(r2){
+  keepSync().then(function(){return get(KEY2)}).then(function(r2){
     if(force||!r2)return null;
     /* ①いまの形＝ファイル1件ごとに別の鍵。版の情報から名前を引いて読み集める。
        ②古い形＝1件に parts を抱えている（2026-08-24 より前）。そのまま読めるので使う。 */
