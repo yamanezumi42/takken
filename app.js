@@ -9341,6 +9341,11 @@ document.addEventListener('click',function(e){
     OXB.setPos(S.oxDir,S.oxI);render();return}
   /* 前へ／次へ／番号で飛ぶ。どれも**やめた場所を更新する**＝閉じても同じ所に戻る。 */
   /* 復習からの○×（2026-10-05）。並びの中で前へ／次へ。単元の「やめた場所」は動かさない */
+  /* 最後の問題の「おしまいへ」＝一覧へ戻る（2026-10-09 本人「おしまいを押したときは一覧に戻ってほしい」）。
+     復習から来たときは復習へ。その回は終わった印（r.end）を付ける＝ホームの続きに出さない */
+  if(a==='oxnext'&&oxRunOn()){var R9=OXR.run();
+    if(R9&&!S.oxRunEnd&&R9.i+1>=R9.list.length){R9.end=true;S.oxPick=null;saveST();
+      OXR.leave();S.dir=null;go('review');return}}
   if((a==='oxnext'||a==='oxprev')&&oxRunOn()){OXR.step(a==='oxnext'?1:-1);render();return}
   if(a==='oxnext'||a==='oxprev'||a==='oxgo'){
     var omax=OXB.list(S.oxDir).length,oq=oxSeq(),oni,obase=oq||OXB.vis(S.oxDir);
@@ -9354,6 +9359,10 @@ document.addEventListener('click',function(e){
       var op=obase.indexOf(S.oxI|0)+(a==='oxnext'?1:-1);
       if(op<0)op=0;
       oni=(op>=obase.length)?omax:obase[op];  /* 並びの終わり＝おしまいの画面 */
+      /* 最後の問題の「おしまいへ」＝一覧へ戻る（2026-10-09 本人）。やめた場所は「最後まで行った」に */
+      if(a==='oxnext'&&op>=obase.length){
+        S.oxI=omax;S.oxPick=null;S.oxAgain=false;S.oxGrid=false;OXB.setPos(S.oxDir,omax);
+        S.dir=null;S.fmode='ox';go('fields');return}
     }
     if(oni<0)oni=0;
     if(oni>omax)oni=omax;                     /* omax＝おしまいの画面 */
