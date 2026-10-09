@@ -3450,6 +3450,8 @@ var MS_LIM=6600;
    前は問1〜50から統計の問48を除いた49問だった（本人⑤） */
 var MS_NOS=(function(){var a=[];for(var i=1;i<=45;i++)a.push(i);return a})();
 /* 結果の分野（問番号で分ける） */
+/* 模試に出さない単元（2026-10-09 本人） */
+var MS_SKIP=['贈与税','その他の法令'];
 var MS_SEC=[['権利関係',1,14],['法令上の制限',15,22],['税・価格',23,25],['宅建業法',26,45],['5問免除科目',46,50]];
 var MS={
   names:function(){
@@ -3459,9 +3461,14 @@ var MS={
   col:function(k){for(var i=0;i<MSP.length;i++)if(MSP[i][0]===k)return MSP[i][1];return '#999'},
   /* その4択が本試験の何問目だったか */
   noOf:function(qid){var r=RAWBY[qid+'-1']||RAWBY[qid+'-ア'];return (r&&r.src)?(+r.src.q||0):0},
-  /* 問番号ごとの候補（過去28回でその問番号だった4択） */
+  /* 問番号ごとの候補（平成21年〜令和7年の19回でその問番号だった4択。2026-10-09）。
+     平成20年以前は本試験の並びが今と違う（問26〜28が税）ので使わない。
+     贈与税・その他の法令は出さない（本人「贈与税は出さないでもらいたい」「3も抜いて」） */
   pool:function(no){
-    if(!this._p){var me=this;this._p={};YB.all().forEach(function(q){var n=me.noOf(q);if(n)(me._p[n]=me._p[n]||[]).push(q)})}
+    if(!this._p){var me=this;this._p={};YB.all().forEach(function(q){
+      var r=RAWBY[q+'-1']||RAWBY[q+'-ア'];if(!r||!r.src||(+r.src.year||0)<2009)return;
+      if(MS_SKIP.indexOf(r.cat)>=0)return;
+      var n=me.noOf(q);if(n)(me._p[n]=me._p[n]||[]).push(q)})}
     return this._p[no]||[];
   },
   run:function(){var r=ST.msRun;return (r&&r.qs&&r.qs.length&&r.sel)?r:null},
@@ -3524,8 +3531,8 @@ function vMoshi(){
   }
   var on=S.msOn||(S.msOn={r:1,g:1,p:1,y:1});
   h+='<div class="panel"><div class="h" style="margin:0 0 4px">模試を始める</div>'
-    +'<div class="mini" style="margin-bottom:10px">本試験と同じ順番で、過去28回の同じ問番号から1問ずつ選んだ45問'
-    +'（5問免除科目の問46〜50は除く・45点満点）。1時間50分を計り、最後にまとめて採点します。参加する人の丸を押して選びます。</div>';
+    +'<div class="mini" style="margin-bottom:10px">本試験と同じ順番で、平成21年〜令和7年（19回）の同じ問番号から1問ずつ選んだ45問'
+    +'（5問免除科目の問46〜50は除く・贈与税とその他の法令は出さない・45点満点）。1時間50分を計り、最後にまとめて採点します。参加する人の丸を押して選びます。</div>';
   MSP.forEach(function(p){
     h+='<div class="msp"><button class="mspon" data-act="mson" data-v="'+p[0]+'" aria-label="参加">'
       +'<span class="msd'+(on[p[0]]?' on':'')+'" style="--c:'+p[1]+'"></span></button>'
