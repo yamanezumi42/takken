@@ -1214,7 +1214,8 @@ function replay(log){
                 ホームの「過去問4択の続き」が出なくなっていた（本人が三度報告）。
                 これは成績ではなく居場所なので、土台にも出来事にも入っていない。 */
              yonRun:ST.yonRun,yonPos:ST.yonPos,yonLast:ST.yonLast,yonF:ST.yonF,
-             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast,oxF:ST.oxF,oxRun:ST.oxRun,msRun:ST.msRun};
+             oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast,oxF:ST.oxF,oxRun:ST.oxRun,msRun:ST.msRun,
+             numPos:ST.numPos,numLast:ST.numLast,numF:ST.numF,numRun:ST.numRun};   /* 数字4択（2026-10-09） */
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
   Object.keys(ST.items||{}).forEach(function(k){
@@ -1242,6 +1243,10 @@ function replay(log){
   if(keep.oxF)ST.oxF=keep.oxF;
   if(keep.oxRun)ST.oxRun=keep.oxRun;
   if(keep.msRun)ST.msRun=keep.msRun;
+  if(keep.numPos)ST.numPos=keep.numPos;
+  if(keep.numLast)ST.numLast=keep.numLast;
+  if(keep.numF)ST.numF=keep.numF;
+  if(keep.numRun)ST.numRun=keep.numRun;
   ST.logn=keep.logn||0;
   ST.gen=keep.gen||0;
   ST.log=L;
@@ -1293,6 +1298,9 @@ function applyEvent(E,live){
   /* ○×の記録リセット（2026-09-28 本人「〇×問題はリセットできるようにしておいて」） */
   if(E.e==='oxreset'){try{OXB.reset(E)}catch(e){}return}
   if(E.e==='yona'){try{YB.apply(E)}catch(e){}return}
+  /* 数字4択（2026-10-09）。その場（NUMB.put）と同じ apply を通す */
+  if(E.e==='numa'){try{NUMB.apply(E)}catch(e){}return}
+  if(E.e==='numreset'){try{NUMB.reset(E)}catch(e){}return}
   /* 模試の結果（2026-10-07）。同じ回を二重に入れない（土台と出来事の両方にあっても1つ） */
   /* 模試の結果のリセット（2026-10-07）。この時点より前の結果を消す */
   if(E.e==='msreset'){ST.msLog=[];return}
@@ -1437,7 +1445,8 @@ function normST(o){
      次に開いたときも同じ側を出す（2026-08-15 本人の注文「動画学習か単元学習で分けて」）。
      2026-08-15 本人指示「単元学習をメインにしたい」＝**未設定のときの既定を単元側にする**。
      すでに保存されている選択（cat/video）はここでは触らない＝本人の選択を尊重する。 */
-  if(o.settings.fmode!=='cat'&&o.settings.fmode!=='video'&&o.settings.fmode!=='ox')o.settings.fmode='cat';
+  /* 2026-10-09：4つ目の入口「数字4択」（num） */
+  if(o.settings.fmode!=='cat'&&o.settings.fmode!=='video'&&o.settings.fmode!=='ox'&&o.settings.fmode!=='num')o.settings.fmode='cat';
   /* ○×の記録（2026-09-20）。過去問の成績とは別に持つ＝到達度・正答率に混ぜない。
      形＝{単元dir:{問の番号:[答えた回数,正解した回数]}} */
   if(!o.ox||typeof o.ox!=='object')o.ox={};
@@ -1447,6 +1456,13 @@ function normST(o){
      形＝{単元:{問id:[答えた回数,正解した回数,最後に選んだ番号]}} と {単元:番号} */
   if(!o.yon||typeof o.yon!=='object')o.yon={};
   if(!o.yonPos||typeof o.yonPos!=='object')o.yonPos={};
+  /* 数字4択（2026-10-09）。形＝{単元dir:{問id:[答えた回数,正解した回数,最後に押した番号]}}／やめた場所＝{単元dir:問id}。
+     最後の単元・復習の範囲と並びは端末ごとの居場所（数え直しで捨てない） */
+  if(!o.num||typeof o.num!=='object')o.num={};
+  if(!o.numPos||typeof o.numPos!=='object')o.numPos={};
+  if(typeof o.numLast!=='string'||!o.numLast)delete o.numLast;
+  if(!o.numF||typeof o.numF!=='object')delete o.numF;
+  if(!o.numRun||typeof o.numRun!=='object'||!o.numRun.list||!o.numRun.list.slice)delete o.numRun;
   /* 最後に開いていた4択の一覧（ホームの「続き」に使う） */
   if(!o.yonLast||typeof o.yonLast!=='object'||!o.yonLast.key)delete o.yonLast;
   /* 最後に解いていた○×の単元（2026-09-28）。単元フォルダ名の文字列だけ持つ */
@@ -2409,7 +2425,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         pendBig:null,         /* 次の1回だけ効く科目基準（startQueue の冒頭で baseBig に移す） */
         /* 学習タブの入口（video＝動画で進む／cat＝単元で進む）。記録から復元する。
            既定は単元側（2026-08-15 本人指示「単元学習をメインにしたい」＝loadST の正規化で決まる） */
-        fmode:((ST.settings&&(ST.settings.fmode==='video'||ST.settings.fmode==='ox'))?ST.settings.fmode:'cat'),
+        fmode:((ST.settings&&(ST.settings.fmode==='video'||ST.settings.fmode==='ox'||ST.settings.fmode==='num'))?ST.settings.fmode:'cat'),
         oxDir:null,oxI:0,oxPick:null,   /* ○×で確認（2026-09-20） */
         oxAgain:false,oxGrid:false,     /* もう一度答える／番号で飛ぶの開閉 */
         oxSeen:{},oxSeq:null,           /* この回に押した答え（記録には残さない）／解いて回る並び */
@@ -2418,6 +2434,9 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         yonList:null,yonTitle:'',yonKey:'',yonFrom:'unit',  /* いま解いて回っている一覧 */
         yonFOpen:false,yonFBig:{},yonFYear:false,  /* 範囲の開閉（面・大分類・年度） */
         oxFOpen:false,oxFBig:{},oxFrom:null,oxRunEnd:false, /* 復習タブの○×（2026-10-05） */
+        /* 数字4択（2026-10-09）。○×と同じ決まりで持つ */
+        numDir:null,numId:null,numPick:null,numAgain:false,numGrid:false,numSeen:{},numSeq:null,
+        numFrom:null,numFOpen:false,numFBig:{},numOpen:null,numrest:false,
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -2668,6 +2687,7 @@ function render(){
   else if(S.view==='nsearch'){h=vNSearch();setTimeout(nbSearchBind,0)}
   else if(S.view==='nprog')h=vNProg();
   else if(S.view==='ox')h=vOx();
+  else if(S.view==='num')h=vNum();          /* 数字4択（2026-10-09） */
   else if(S.view==='yon')h=vYon();
   else if(S.view==='moshi')h=vMoshi();      /* 模試（2026-10-07） */
   else if(S.view==='msq')h=vMsq();
@@ -2772,11 +2792,11 @@ function stag(){return ANIMON?' stag':''}
 /* ゲームタブは外した（2026-08-25 本人指示。線つなぎ3件・早見表2件・オリジナル4択3件・聞き取り2択は使わない）。
    関数の本体は残してある＝kkRate・kkVoice・kkVol などを過去問の読み上げが使っているため。 */
 var TABS=[['home','ホーム',IC.home],['fields','学習',IC.book],['review','復習',IC.again],
-          ['moshi','模試',IC.exam],   /* 2026-10-07 本人「模擬試験としてタブを作成してね。復習の右側に」 */
-          ['analysis','分析',IC.chart]];
+          ['moshi','模試',IC.exam]];  /* 2026-10-07 本人「模擬試験としてタブを作成してね。復習の右側に」
+          2026-10-09 本人：分析のタブを外す（ほかに分析へ行く入口は無い） */
 /* 学習タブの呼び名は中身に合わせる（単元学習／動画学習）。画面の見出しと読み上げが食い違わないため。
    2026-08-15：既定が単元側になったので「動画学習」で固定していると中身と合わない。 */
-function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':(S.fmode==='ox'?'○×で確認':'動画学習')):x[1]}
+function tabLabel(x){return x[0]==='fields'?(S.fmode==='cat'?'単元学習':(S.fmode==='ox'?'○×で確認':(S.fmode==='num'?'数字4択':'動画学習'))):x[1]}
 function renderTabs(){
   var cur=(S.view==='study'||S.view==='fields')?'fields':(S.view==='quiz'?'':S.view);
   if(S.view==='msq'||S.view==='msr'||S.view==='msx')cur='moshi';
@@ -2898,7 +2918,8 @@ function oxyToday(){
   var d=today(),o=0,y=0,L=ST.log||[];
   for(var k=0;k<L.length;k++){var E=L[k];
     if(!E||E.day!==d)continue;
-    if(E.e==='oxa')o++;else if(E.e==='yona')y++;}
+    /* 数字4択も ○× の数に入れる（2026-10-09 本人「見出しは今日・○× N・4択 N のまま」） */
+    if(E.e==='oxa'||E.e==='numa')o++;else if(E.e==='yona')y++;}
   return {ox:o,yon:y};
 }
 /* ○×の1問：0＝未回答／1＝答えたが直近は不正解／2＝直近が正解。記録の箱は作らない（読むだけ） */
@@ -2936,6 +2957,11 @@ function oxyAll(){
   if(YB.ok())YB.all().forEach(function(id){n++;var b=YB.box(id),v=b?b[id]:null;
     if(v&&v[0]){a++;cnt+=v[0]}
     if(yonLastOk(id)!==2)rest++});
+  /* 数字4択も入れる（2026-10-09 本人）。出す範囲（出た・重要・あまり出ない）の問だけ */
+  if(typeof NUMB!=='undefined'&&NUMB.ok())NUMB.dirs().forEach(function(d){
+    NUMB.vis(d).forEach(function(id){n++;var v=NUMB.box(d,id);if(v&&v[0]){a++;cnt+=v[0]}
+      if(NUMB.last(d,id)!==2)rest++});
+  });
   return {n:n,a:a,cnt:cnt,rest:rest};
 }
 /* その日の目標。期間で意味が変わる（新規／間違い直し／総復習／仕上げ）。 */
@@ -3755,6 +3781,14 @@ function flowHtml(){
   if(xr&&!xr.end)rows.push({act:'oxrevgo',lab:'復習の'+xr.title.replace(/^範囲の○×/,'○×'),
                    st:(Math.min(xr.i,xr.list.length-1)+1)+' / '+n3(xr.list.length)+'問',done:false});
 
+  /* 数字4択の続き（2026-10-09 本人）。○×の続きと同じ考え＝最後の単元の止めた場所。押す先は一覧と同じ入口 */
+  var nc=numCont();
+  if(nc)rows.push({act:'numopen',dd:nc.d,lab:'数字4択の続き（'+nc.title+'）',
+                   st:(nc.i+1)+' / '+n3(nc.n)+'問',done:false});
+  /* 復習の数字4択の続き。解き終えた回は出さない */
+  var nrn=NUMB.ok()?NUMR.run():null;
+  if(nrn&&!nrn.end)rows.push({act:'numrevgo',lab:'復習の数字4択の続き',
+                   st:(Math.min(nrn.i,nrn.list.length-1)+1)+' / '+n3(nrn.list.length)+'問',done:false});
   /* 模試の続き（2026-10-07 本人「ホーム画面からも再開できるようにも」） */
   var mr=MS.run();
   if(mr)rows.push({act:'msgo',lab:'模試の続き',st:'問'+mr.nos[mr.i|0]+'（'+((mr.i|0)+1)+' / '+mr.qs.length+'）',done:false});
@@ -4159,15 +4193,17 @@ function vFieldsCat(){
 function vFields(){
   /* 学習の入口は2つ。「動画で進む」＝今までの画面（動画→章→問題）、
      「単元で進む」＝小分類の一覧。選んだ側は記録（settings.fmode）に残し、次に開いたときも同じ側を出す。 */
-  var cm=(S.fmode==='cat'),om=(S.fmode==='ox');
-  var h='<div class="pad'+stag()+'"><div class="h">'+(om?'○×で確認':(cm?'単元学習':'動画学習'))+'</div>'
+  var cm=(S.fmode==='cat'),om=(S.fmode==='ox'),nm=(S.fmode==='num');   /* nm＝数字4択（2026-10-09） */
+  var h='<div class="pad'+stag()+'"><div class="h">'+(nm?'数字4択':(om?'○×で確認':(cm?'単元学習':'動画学習')))+'</div>'
     +'<div style="margin:0 0 12px">'
     /* 2026-08-17 本人指示：入口の切替と絞り込みを**1行**にまとめる
        （「動画学習　単元学習 / すべて　残り」）。呼び名も画面の見出しと同じ言葉にそろえる。
        2026-09-20：3つ目の入口「○×で確認」を足した（ノートの試験前の○×を解説付きにしたもの）。 */
-    +'<button class="tog'+((cm||om)?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画学習</button>'
+    +'<button class="tog'+((cm||om||nm)?'':' on')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="video">動画学習</button>'
     +'<button class="tog'+(cm?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="cat">単元学習</button>'
     +'<button class="tog'+(om?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="ox">○×で確認</button>'
+    /* 4つ目の入口（2026-10-09 本人）＝期間・日数・金額などの数字を4択で */
+    +'<button class="tog'+(nm?' on':'')+'" style="margin:0 6px 6px 0" data-act="fmode" data-v="num">数字4択</button>'
     +(cm?('<span class="togsep">/</span>'
       +'<button class="tog'+(S.urest?'':' on')+'" style="margin:0 6px 6px 0"'
       +' data-act="ufilt" data-v="">すべて</button>'
@@ -4179,11 +4215,17 @@ function vFields(){
       +' data-act="oxfilt" data-v="">すべて</button>'
       +'<button class="tog'+(S.oxrest?' on':'')+'" style="margin:0 6px 6px 0"'
       +' data-act="oxfilt" data-v="rest">残り</button>'):'')
+    /* 数字4択にも同じ絞り込み（残り＝全部正解した単元を隠す） */
+    +(nm?('<span class="togsep">/</span>'
+      +'<button class="tog'+(S.numrest?'':' on')+'" style="margin:0 6px 6px 0"'
+      +' data-act="numfilt" data-v="">すべて</button>'
+      +'<button class="tog'+(S.numrest?' on':'')+'" style="margin:0 6px 6px 0"'
+      +' data-act="numfilt" data-v="rest">残り</button>'):'')
     /* ノートの検索（2026-09-14）。論点1,982件から語で節に着く */
     +(NB.ok()?('<button class="tog" style="margin:0 0 6px auto;float:right"'
       +' data-act="nsearch">ノートを検索</button>'):'')
     +'</div>';
-  h+=(om?vFieldsOx():(cm?vFieldsCat():vFieldsVideo()));
+  h+=(nm?vFieldsNum():(om?vFieldsOx():(cm?vFieldsCat():vFieldsVideo())));
   h+='</div>';
   return h;
 }
@@ -5124,6 +5166,434 @@ function oxryline(label,n,kind,strong){
     +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="oxrev" data-r="'+kind+'">解く</button>'
        :'<span class="mini">—</span>')+'</div>';
 }
+/* ---------- 数字4択（2026-10-09 本人） ----------
+   単元学習の切り替えに「数字4択」を足す。期間・日数・金額などの数字を4択で確かめる。
+   元＝work_figs/num4/<単元>.json → tools/build_num4_js.py → data/num4.js（window.NUMQ）。
+   記録は ○× と同じく**出来事**で残す（'numa'／'numreset'）。その場（put）と数え直し（replay）で同じ apply を通す。
+   キーは**問の id**＝範囲のチェック（出た・重要・あまり出ない）で並びが変わってもずれない。
+   番号（a・最後に押した番号・table.hl）は 0 から数える。画面には ①〜④ で出す。 */
+var NUMT=[['out','出た'],['imp','重要'],['rare','あまり出ない']];
+var NUMC=['①','②','③','④'];
+var NUMB={
+  ok:function(){return typeof NUMQ!=='undefined'&&!!NUMQ},
+  unit:function(d){return (this.ok()&&NUMQ[d]&&NUMQ[d].qs)?NUMQ[d]:null},
+  all:function(d){var u=this.unit(d);return u?u.qs:[]},
+  q:function(d,id){
+    if(!this._m)this._m={};
+    if(!this._m[d]){var m={};this.all(d).forEach(function(q){m[q.id]=q});this._m[d]=m}
+    return this._m[d][id]||null;
+  },
+  /* 出す範囲（settings.numTiers）。初めは「出た」「重要」。いくつでも入れられる */
+  tiers:function(){
+    if(!ST.settings)ST.settings={};
+    var t=ST.settings.numTiers;
+    if(!t||!t.slice)t=ST.settings.numTiers=['out','imp'];
+    return t;
+  },
+  tierOn:function(k){return this.tiers().indexOf(k)>=0},
+  tierName:function(k){for(var i=0;i<NUMT.length;i++)if(NUMT[i][0]===k)return NUMT[i][1];return ''},
+  /* 出す問の id の並び（範囲のチェックで絞る）。数える・進む・飛ぶ・続き、は全部これを通す */
+  vis:function(d){var me=this;return this.all(d).filter(function(q){return me.tierOn(q.tier)}).map(function(q){return q.id})},
+  /* 単元フォルダ → 単元名（ノートの単元名。無ければデータの unit） */
+  cat:function(d){var c=OXB.cat(d),u=this.unit(d);return (c!==d)?c:((u&&u.unit)||d)},
+  /* 並び＝ノート48冊の並び（習う順）。データがある単元だけ */
+  dirs:function(){
+    if(this._d)return this._d;
+    var out=[];if(!this.ok())return out;
+    if(NB.ok())NOTES.units.forEach(function(u){if(NUMQ[u.dir]&&out.indexOf(u.dir)<0)out.push(u.dir)});
+    Object.keys(NUMQ).forEach(function(d){if(out.indexOf(d)<0)out.push(d)});
+    this._d=out;return out;
+  },
+  /* 記録を読むだけ（箱を作らない） */
+  box:function(d,id){var b=(ST.num&&ST.num[d])||null;return b?(b[id]||null):null},
+  rec:function(d){
+    if(!ST.num||typeof ST.num!=='object')ST.num={};
+    if(!ST.num[d]||typeof ST.num[d]!=='object')ST.num[d]={};
+    return ST.num[d];
+  },
+  /* 答えを1つ記録する＝出来事を1件足して、すぐ当てる */
+  put:function(d,id,good,pick){
+    this.apply(logEv('numa',{dir:d,id:id,ok:!!good,pick:pick,day:today()}));
+    saveST();
+  },
+  /* 出来事1件を記録に当てる。その場（put）でも数え直し（applyEvent）でも、ここだけを通る */
+  apply:function(E){
+    if(!E||!E.dir||!E.id)return;
+    var r=this.rec(E.dir),v=r[E.id]||[0,0,null];
+    v[0]++;if(E.ok)v[1]++;v[2]=(typeof E.pick==='number')?E.pick:null;r[E.id]=v;
+  },
+  /* 1問の状態＝2（一度でも正解）／1（答えたがまだ正解していない）／0（未回答） */
+  lv:function(d,id){var v=this.box(d,id);return (!v||!v[0])?0:(v[1]?2:1)},
+  /* 直近の答えが正解か（ホームの数え方。○×の oxLastOk と同じ）＝2／直近は不正解＝1／未回答＝0 */
+  last:function(d,id){var v=this.box(d,id);if(!v||!v[0])return 0;var q=this.q(d,id);return (q&&v[2]===q.a)?2:1},
+  stat:function(d){
+    var vs=this.vis(d),a=0,o=0,me=this;
+    vs.forEach(function(id){var v=me.box(d,id);if(v&&v[0]>0)a++;if(v&&v[1]>0)o++});
+    return {n:vs.length,a:a,o:o,rest:vs.length-a,pct:(vs.length?Math.round(o*100/vs.length):0)};
+  },
+  /* 次に出す問＝まだ正解していない最初の問（全部正解していれば先頭） */
+  firstRest:function(d){
+    var vs=this.vis(d);
+    for(var k=0;k<vs.length;k++){var v=this.box(d,vs[k]);if(!v||!v[1])return vs[k]}
+    return vs.length?vs[0]:null;
+  },
+  /* やめた場所。範囲のチェックで外れた問なら、その次に出す問。'#end'（最後まで行った）は null */
+  pos:function(d){
+    var v=ST.numPos&&ST.numPos[d];
+    if(typeof v!=='string'||!v||v==='#end')return null;
+    var vs=this.vis(d);
+    if(vs.indexOf(v)>=0)return v;
+    var all=this.all(d).map(function(q){return q.id}),k0=all.indexOf(v);
+    if(k0<0)return null;
+    for(var k=k0;k<all.length;k++)if(vs.indexOf(all[k])>=0)return all[k];
+    return null;
+  },
+  setPos:function(d,id){
+    if(!ST.numPos||typeof ST.numPos!=='object')ST.numPos={};
+    ST.numPos[d]=id;ST.numLast=d;saveST();
+  },
+  /* 記録リセットを当てる（その場でも数え直しでも、ここだけを通る）。E.all＝すべて／E.dir＝その単元 */
+  reset:function(E){
+    if(!E)return;
+    if(!ST.num||typeof ST.num!=='object')ST.num={};
+    if(!ST.numPos||typeof ST.numPos!=='object')ST.numPos={};
+    if(E.all){ST.num={};ST.numPos={};return}
+    if(E.dir){delete ST.num[E.dir];delete ST.numPos[E.dir]}
+  }
+};
+function numHas(v){return typeof v==='number'&&v>=0&&v<4}
+/* 数字4択の記録リセットの確認（d＝単元。空なら数字4択すべて） */
+function numResetAsk(d){
+  var dirs=d?[d]:NUMB.dirs(),n=0,a=0;
+  dirs.forEach(function(x){var st=NUMB.stat(x);n+=st.n;a+=st.a});
+  var m=document.getElementById('modal');
+  m.innerHTML='<div class="sheet">'
+   +'<div class="spread" style="margin-bottom:10px"><div class="h" style="margin:0">数字4択の記録をリセット</div>'
+   +'<button class="btn sm" data-act="closeModal">'+IC.close+'閉じる</button></div>'
+   +'<div class="mini" style="line-height:1.9">'+(d?esc(NUMB.cat(d)):'数字4択すべて（'+dirs.length+'単元）')+'<br>'
+   +'いまの範囲の全'+n3(n)+'問のうち、<b>答えた記録がある '+n3(a)+'問</b>を「まだ答えていない」状態に戻します。<br>'
+   +'範囲のチェックで外している問の記録も消えます。<br>'
+   +'消えるのは、正解・まちがい・最後に押した答え・やめた場所です。<br>'
+   +'<b>解いた日数・学習時間は残ります。</b>過去問・○×の記録には触りません。<br>'
+   +'元に戻せません。</div>'
+   +'<div class="rowx" style="gap:8px;margin-top:12px">'
+   +'<button class="btn sm" style="width:auto" data-act="numresetgo" data-d="'+esc(d||'')+'">'
+   +'リセットする（'+n3(a)+'問）</button>'
+   +'<button class="btn sm" style="width:auto" data-act="closeModal">やめる</button></div></div>';
+  m6SheetOpen();
+}
+function numResetGo(d){
+  var dirs=d?[d]:NUMB.dirs(),a=0;
+  dirs.forEach(function(x){a+=NUMB.stat(x).a});
+  applyEvent(logEv('numreset',d?{dir:d,day:today()}:{all:1,day:today()}),true);
+  S.numPick=null;S.numSeen={};S.numSeq=null;S.numAgain=false;
+  saveST();try{syncSoon()}catch(e){}
+  var mm=document.getElementById('modal');if(mm)mm.hidden=true;
+  msg(a+'問を「まだ答えていない」に戻しました');
+  render();
+}
+/* 一覧の上の「出す範囲」のチェック3つ（数はデータ全体の問の数） */
+function numTierHtml(){
+  var cnt={};
+  NUMB.dirs().forEach(function(d){NUMB.all(d).forEach(function(q){cnt[q.tier]=(cnt[q.tier]||0)+1})});
+  return '<div class="numtier"><span class="lb">出す範囲</span>'
+    +NUMT.map(function(x){var on=NUMB.tierOn(x[0]);
+      return '<button class="tog numtg'+(on?' on':'')+'" data-act="numtier" data-v="'+x[0]+'">'
+        +'<span class="ck'+(on?'':' off')+'">'+IC.check+'</span>'+x[1]
+        +'<span class="n">'+n3(cnt[x[0]]||0)+'</span></button>'}).join('')
+    +'</div>'
+    +'<div class="mini" style="margin:0 0 10px">出た＝過去問で問われた数字／重要＝まだ問われていないが、テキストで必ず扱う数字</div>';
+}
+/* 単元の一覧（○×で確認 vFieldsOx と同じ骨格） */
+function vFieldsNum(){
+  if(!NUMB.ok())
+    return '<div class="warn">'+IC.warn+' 数字4択のデータが読み込めていません。data/num4.js を確認してください。</div>';
+  var dirs=NUMB.dirs(),byBig={},tot={n:0,a:0,o:0};
+  dirs.forEach(function(d){
+    var c=NUMB.cat(d),b=(CINFO[c]&&CINFO[c].big)?CINFO[c].big:'その他';
+    (byBig[b]=byBig[b]||[]).push(d);
+    var st=NUMB.stat(d);tot.n+=st.n;tot.a+=st.a;tot.o+=st.o;
+  });
+  var h='<div class="sub" style="margin:0 0 10px">期間・日数・金額などの数字を4択で確かめる問題。'
+    +'　いまの範囲で全'+n3(tot.n)+'問／一度でも正解 '+n3(tot.o)+'問。</div>'
+    +numTierHtml();
+  if(!NUMB.tiers().length)return h+'<div class="mini">出す範囲にチェックが入っていません。</div>';
+  var om=numOpenMap(byBig),order=bigsOrdered().filter(function(b){return byBig[b]});
+  Object.keys(byBig).forEach(function(b){if(order.indexOf(b)<0)order.push(b)});
+  order.forEach(function(b){
+    var so=catsSorted(b),ds=byBig[b].slice().sort(function(x,y){
+      var i=so.indexOf(NUMB.cat(x)),j=so.indexOf(NUMB.cat(y));
+      if(i<0)i=9999;if(j<0)j=9999;
+      return i-j||byBig[b].indexOf(x)-byBig[b].indexOf(y);
+    }),bq=0,br=0;
+    /* いまの範囲に1問も無い単元は出さない */
+    ds=ds.filter(function(d){return NUMB.stat(d).n>0});
+    ds.forEach(function(d){var st=NUMB.stat(d);bq+=CATQ[NUMB.cat(d)]||0;br+=st.n-st.o});
+    if(S.numrest)ds=ds.filter(function(d){var st=NUMB.stat(d);return !(st.n>0&&st.o>=st.n)});
+    if(!ds.length)return;
+    var bk='N:'+b,bo=!!om[b];
+    h+='<details class="panel ub m6-det" data-k="'+esc(bk)+'"'+(bo?' open':'')+'>'
+      +'<summary><span class="nm">'+esc(b)+'</span>'
+      +'<span class="m6-mk">'+IC.chev+'</span>'
+      +'<span class="sm">単元 '+ds.length+' ／ 毎年 '+bq.toFixed(1)+'問 ／ 残り '+n3(br)+'問</span>'
+      +'</summary><div class="vlist">';
+    ds.forEach(function(d){h+=numRowHtml(d)});
+    h+='</div></details>';
+  });
+  if(tot.a)h+='<div style="margin:14px 0 4px"><button class="btn sm" style="width:auto" data-act="numreset" data-d="">'
+    +IC.again+'<span style="margin-left:6px">数字4択の記録をすべてリセット（'+n3(tot.a)+'問）</span></button></div>';
+  return h;
+}
+/* 数字4択の一覧で開いている大分類。記録（settings.numOpen）に残す。既定＝残りがある最初の大分類だけ開く */
+function numOpenMap(byBig){
+  if(S.numOpen)return S.numOpen;
+  var saved=ST.settings&&ST.settings.numOpen;
+  if(saved&&typeof saved==='object'){S.numOpen=saved;return saved}
+  var m={},hit=false;
+  bigsOrdered().forEach(function(b){
+    if(!byBig||!byBig[b])return;
+    var r=0;byBig[b].forEach(function(d){var st=NUMB.stat(d);r+=st.n-st.o});
+    m[b]=(!hit&&r>0);if(m[b])hit=true;
+  });
+  if(!hit){var f=bigsOrdered().filter(function(b){return byBig&&byBig[b]})[0];if(f)m[f]=true}
+  S.numOpen=m;return m;
+}
+function numRowHtml(d){
+  var st=NUMB.stat(d),pc=st.pct,po=NUMB.pos(d),vs=NUMB.vis(d),pi=(po===null)?-1:vs.indexOf(po);
+  return '<button class="vrow'+(st.o===st.n&&st.n?' done':'')+'" data-act="numopen" data-d="'+esc(d)+'">'
+    +(pc>0&&pc<100?'<span class="fill" data-m6v="'+(pc/100).toFixed(4)+'" data-m6vk="num:'+esc(d)+'"></span>':'')
+    +'<span class="rc">'
+    +'<span class="nm">'+esc(NUMB.cat(d))+'</span>'
+    +(function(c){var off=CATQ_OFF[c];return '<span class="n2">'+(off?esc(off):'毎年 '+(CATQ[c]||0).toFixed(1)+'問')+'</span>'})(NUMB.cat(d))
+    +'<span class="n2">'+st.o+'/'+st.n+((pi>0&&st.o!==st.n)?'　続き'+(pi+1):'')+'</span>'
+    +(st.n&&st.o===st.n?'<span class="ck">'+IC.check+'</span>':'<span class="ar">'+IC.chev+'</span>')
+    +'</span></button>';
+}
+/* いま解いて回る並び。null＝出す問すべて。まちがえた問題だけ＝入った時点で固定 */
+function numSeq(){return (S.numSeq&&S.numSeq.length)?S.numSeq:null}
+function numBase(){return numSeq()||NUMB.vis(S.numDir)}
+function numNgList(d){var out=[];NUMB.vis(d).forEach(function(id){if(NUMB.lv(d,id)===1)out.push(id)});return out}
+function numRunOn(){return S.numFrom==='review'&&!!NUMR.run()}
+/* この回に押した答えの鍵。復習から＝並びの何番目か */
+function numSeenKey(id){return numRunOn()?('#r'+NUMR.run().i):id}
+/* 答えたあとの解説＝ひとことで・表・根拠の条文（○×の oxPlusHtml と同じ見た目） */
+function numPlusHtml(q){
+  var h='<div class="oxp">';
+  if(q.one)h+='<div class="oxs"><div class="oxh">ひとことで</div><div class="one">'+q.one+'</div></div>';
+  var t=q.table;
+  if(t&&t.rows&&t.rows.length){
+    h+='<div class="oxs"><div class="oxh">並べて覚える</div><table>';
+    if(t.head&&t.head.length)h+='<tr>'+t.head.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr>';
+    t.rows.forEach(function(r,k){
+      h+='<tr'+(k===t.hl?' class="hl"':'')+'>'+r.map(function(c){return '<td>'+c+'</td>'}).join('')+'</tr>';
+    });
+    h+='</table></div>';
+  }
+  if(q.law)h+='<div class="law">'+esc(q.law)+'</div>';
+  return h+'</div>';
+}
+/* 1問ずつ答える画面（○×の vOx と同じ骨格。選択肢は4択の .yo） */
+function vNum(){
+  var d=S.numDir,id=S.numId,q=NUMB.q(d,id);
+  var back='<button class="btn sm" data-act="numback" style="margin-bottom:10px">'+(numRunOn()?'復習へ戻る':'一覧へ戻る')+'</button>';
+  if(!q)return '<div class="pad'+stag()+'">'+back
+    +'<div class="panel"><div class="sub" style="margin:0">いまの範囲に出せる問題がありません。</div></div></div>';
+  var st=NUMB.stat(d);
+  /* いま押した答え。無ければこの回に押した答え（前の回の答えは出さない＝○×と同じ） */
+  var pk=numHas(S.numPick)?S.numPick:(S.numAgain?null:(S.numSeen?S.numSeen[numSeenKey(id)]:null));
+  var done=numHas(pk),was=(!numHas(S.numPick)&&done),good=done&&(pk===q.a);
+  var ng=numNgList(d).length,sq=numSeq(),vs=NUMB.vis(d),nb=numBase();
+  var h='<div class="pad'+stag()+'">'+back;
+  if(numRunOn()){
+    var R0=NUMR.run();
+    h+='<div class="sub" style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+      +'<span>'+esc(R0.title)+'</span><span>'+(R0.i+1)+' / '+R0.list.length+'</span>'
+      +'<span>'+esc(NUMB.cat(d))+'</span><span>'+esc(NUMB.tierName(q.tier))+'</span></div>';
+  }else{
+    h+='<div class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+      +'<span>'+esc(NUMB.cat(d))+'</span>'
+      +'<button class="oxjump" data-act="numgrid">'+(nb.indexOf(id)+1)+' / '+nb.length
+      +(S.numGrid?IC.up:IC.down)+'</button>'
+      +'<span>一度でも正解 '+st.o+'問</span></div>'
+      +'<div style="margin:0 0 10px">'
+      +'<button class="tog'+(sq?'':' on')+'" style="margin:0 6px 6px 0" data-act="numonly" data-v="">'
+        +'すべて '+vs.length+'</button>'
+      +'<button class="tog'+(sq?' on':'')+'" style="margin:0 6px 6px 0" data-act="numonly" data-v="ng"'
+        +(ng?'':' disabled')+'>まちがえた問題だけ '+ng+'</button>'
+      +(st.a?('<button class="tog oxrst" style="margin:0 6px 6px 0" data-act="numreset" data-d="'+esc(d)+'">'
+        +IC.again+'<span>記録をリセット</span></button>'):'')
+      +'</div>'
+      +(S.numGrid?numGridHtml(d,id):'');
+  }
+  h+='<div class="panel"><div style="font-size:15px;line-height:1.7">'+esc(q.q)+'</div></div>';
+  /* 選択肢4つ＝4択の過去問（vYon）と同じ .yo。答えたら正解は緑の線、選んだまちがいは赤の線 */
+  h+='<div class="yono">';
+  for(var n=0;n<4;n++){
+    var cls='yo';
+    if(done){if(n===q.a)cls+=' ok';else if(n===pk)cls+=' ng';}
+    h+='<button class="'+cls+'"'+(done?' disabled':' data-act="numans" data-v="'+n+'"')+'>'
+      +'<span class="no">'+(n+1)+'</span><span class="tx">'+esc(q.opts[n])+'</span></button>';
+  }
+  h+='</div>';
+  if(done){
+    h+='<div class="oxjudge'+(good?' ok':' ng')+'">'+(good?'正解':'まちがい')
+      +'　<span>答えは '+NUMC[q.a]+' '+esc(q.opts[q.a])+(was?'（'+NUMC[pk]+' と答えました）':'')+'</span></div>'
+      +numPlusHtml(q)
+      +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button class="btn sm" data-act="numagain">もう一度答える</button>'
+      +'</div>';
+  }
+  var pos=numRunOn()?NUMR.run().i:nb.indexOf(id),tot=numRunOn()?NUMR.run().list.length:nb.length;
+  var nav='<div class="oxnav">'
+    +(pos>0?'<button class="btn" data-act="numprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
+    +'<button class="btn'+(done?' pri':'')+'" data-act="numnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
+    +'</div>';
+  /* 答えたあとは下に固定（○×の OXBAR をそのまま使う） */
+  if(done){OXBAR=nav;h+='<div style="height:76px"></div>'}
+  else{OXBAR='';h+=nav}
+  return h+'</div>';
+}
+function numGridHtml(d,cur){
+  var h='<div class="oxgrid">';
+  NUMB.vis(d).forEach(function(id,k){
+    var lv=NUMB.lv(d,id);
+    h+='<button class="oxg l'+lv+(id===cur?' cur':'')+'" data-act="numgo" data-id="'+esc(id)+'">'+(k+1)+'</button>';
+  });
+  return h+'</div>';
+}
+/* 数字4択の続き。最後に解いていた単元のやめた場所。無い／最後まで行った／1問も答えていない＝null */
+function numCont(){
+  if(!NUMB.ok())return null;
+  var d=ST.numLast;
+  if(!d&&Array.isArray(ST.log)){
+    for(var k=ST.log.length-1;k>=0;k--){var E=ST.log[k];
+      if(E&&E.e==='numa'&&E.dir&&NUMB.unit(E.dir)){d=E.dir;break}}
+  }
+  if(!d||!NUMB.unit(d))return null;
+  var id=NUMB.pos(d);
+  if(id===null)return null;
+  if(!NUMB.stat(d).a)return null;
+  var vs=NUMB.vis(d);
+  return {d:d,i:vs.indexOf(id),n:vs.length,title:NUMB.cat(d)};
+}
+/* ---------- 復習タブの数字4択（○×の OXR と同じ形） ---------- */
+var NUMR={
+  f:function(){
+    if(!ST.numF||typeof ST.numF!=='object')ST.numF={cats:[],ord:'seq'};
+    var f=ST.numF;
+    if(!f.cats||!f.cats.slice)f.cats=[];
+    if(f.ord!=='seq'&&f.ord!=='rand')f.ord='seq';
+    return f;
+  },
+  dirOf:function(c){
+    if(!this._dc){this._dc={};var me=this;NUMB.dirs().forEach(function(d){me._dc[NUMB.cat(d)]=d})}
+    return this._dc[c]||null;
+  },
+  cats:function(b){var me=this;return catsSorted(b).filter(function(c){return !!me.dirOf(c)})},
+  /* 単元の並び＝範囲の一覧と同じ（上から順） */
+  order:function(){
+    var out=[],me=this;
+    bigsOrdered().forEach(function(b){me.cats(b).forEach(function(c){var d=me.dirOf(c);if(d&&out.indexOf(d)<0)out.push(d)})});
+    NUMB.dirs().forEach(function(d){if(out.indexOf(d)<0)out.push(d)});
+    return out;
+  },
+  /* kind＝'ng'（まちがえたまま）／'new'（まだ解いていない）／'all'（範囲の問すべて）。出す範囲のチェックも効く */
+  list:function(kind){
+    var out=[],f=this.f();
+    this.order().forEach(function(d){
+      if(f.cats.length&&f.cats.indexOf(NUMB.cat(d))<0)return;
+      NUMB.vis(d).forEach(function(id){
+        var lv=NUMB.lv(d,id);
+        if(kind==='ng'&&lv!==1)return;
+        if(kind==='new'&&lv!==0)return;
+        out.push([d,id]);
+      });
+    });
+    return out;
+  },
+  label:function(){
+    var f=this.f(),a=[],t=NUMB.tiers();
+    a.push(f.cats.length?(f.cats.length===1?f.cats[0]:('単元'+f.cats.length)):'すべての単元');
+    a.push(t.length?NUMT.filter(function(x){return t.indexOf(x[0])>=0}).map(function(x){return x[1]}).join('・'):'範囲なし');
+    return a.join('／');
+  },
+  run:function(){var r=ST.numRun;return (r&&r.list&&r.list.length)?r:null},
+  /* 押した時点の一覧を固定する */
+  start:function(kind){
+    var L=this.list(kind),f=this.f();
+    if(!L.length)return null;
+    if(f.ord==='rand')L=shuffle(L);
+    var t=(kind==='ng'?'まちがえた数字4択':(kind==='new'?'まだ解いていない数字4択':'範囲の数字4択'))+'（'+this.label()+'）';
+    ST.numRun={key:'rev:'+kind,title:t,list:L,i:0,end:false};
+    saveST();return ST.numRun;
+  },
+  show:function(){
+    var r=this.run();if(!r)return;
+    if(r.i<0)r.i=0;if(r.i>=r.list.length)r.i=r.list.length-1;
+    S.numDir=r.list[r.i][0];S.numId=r.list[r.i][1];
+    S.numPick=null;S.numAgain=false;S.numGrid=false;
+  },
+  step:function(dl){
+    var r=this.run();if(!r)return;
+    r.i=Math.max(0,Math.min(r.list.length-1,r.i+dl));this.show();saveST();
+  },
+  leave:function(){S.numFrom=null;S.numSeen={}}
+};
+/* 復習タブの数字4択の範囲（○×の oxRangeHtml と同じ形）。単元＋出す範囲のチェック＋並び */
+function numRangeHtml(){
+  var f=NUMR.f();
+  var h='<button class="tapline" data-act="numftog" style="min-height:38px">'
+    +'<span style="flex:1">範囲</span>'
+    +'<span class="badge">'+esc(NUMR.label())+'</span>'
+    +(S.numFOpen?IC.up:IC.down)+'</button>';
+  if(!S.numFOpen)return h;
+  h+='<div class="hr"></div>';
+  bigsOrdered().forEach(function(b){
+    var cs=NUMR.cats(b);
+    if(!cs.length)return;
+    var nsel=cs.filter(function(c){return f.cats.indexOf(c)>=0}).length;
+    var onb=(nsel===cs.length&&cs.length>0);
+    var nq=0;cs.forEach(function(c){nq+=NUMB.vis(NUMR.dirOf(c)).length});
+    h+='<div class="rowx" style="gap:0;align-items:stretch">'
+      +'<button class="tapline" data-act="numfball" data-b="'+esc(b)+'" style="min-height:40px;flex:1">'
+      +'<span class="ck" style="width:20px;opacity:'+(onb?1:0.22)+'">'+IC.check+'</span>'
+      +'<span style="flex:1;font-weight:600">'+esc(b)+'</span>'
+      +((nsel&&!onb)?'<span class="chip">'+nsel+'</span>':'')
+      +'<span class="badge">'+n3(nq)+'問</span></button>'
+      +'<button class="tapline" data-act="numfopen" data-b="'+esc(b)+'"'
+      +' style="min-height:40px;width:44px;justify-content:center;flex:none" aria-label="開く">'
+      +(S.numFBig[b]?IC.up:IC.down)+'</button></div>';
+    if(!S.numFBig[b])return;
+    cs.forEach(function(c){
+      var st=NUMB.stat(NUMR.dirOf(c)),on=(f.cats.indexOf(c)>=0);
+      h+='<button class="tapline" data-act="numfcat" data-c="'+esc(c)+'"'
+        +' style="min-height:38px;padding-left:28px">'
+        +'<span class="ck" style="width:20px;opacity:'+(on?1:0.22)+'">'+IC.check+'</span>'
+        +'<span style="flex:1">'+esc(c)+'</span>'
+        +'<span class="badge">'+st.o+'/'+n3(st.n)+'問</span></button>';
+    });
+  });
+  h+='<div class="frow2" style="margin-top:6px"><span class="lb">出す範囲</span><span class="bs">'
+    +NUMT.map(function(x){return '<button class="tog xs'+(NUMB.tierOn(x[0])?' on':'')
+      +'" data-act="numtier" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')
+    +'</span></div>'
+    +'<div class="mini" style="margin:-2px 0 6px">単元学習の「数字4択」の一覧の上のチェックと同じです</div>'
+    +'<div class="frow2"><span class="lb">並び</span><span class="bs">'
+    +[['seq','順番'],['rand','ランダム']].map(function(x){
+      return '<button class="tog xs'+(f.ord===x[0]?' on':'')+'" data-act="numford" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')
+    +'</span></div>'
+    +'<div class="spread" style="margin-top:6px"><span class="mini">選んだ範囲 <b class="num">'
+      +n3(NUMR.list('ng').length+NUMR.list('new').length)+'</b> 問（まだ解いていない＋まちがえた）</span>'
+    +'<button class="btn sm" data-act="numfclear">範囲をクリア</button></div>'
+    +'<div class="hr"></div>';
+  return h;
+}
+function numryline(label,n,kind,strong){
+  return '<div class="li"><div class="nm">'+esc(label)+'</div>'
+    +'<b class="num" style="font-size:20px">'+n3(n)+'</b>'
+    +(n?'<button class="btn sm'+(strong?' acc':'')+'" data-act="numrev" data-r="'+kind+'">解く</button>'
+       :'<span class="mini">—</span>')+'</div>';
+}
 function oxGridHtml(d,cur){
   var vs=OXB.vis(d),h='<div class="oxgrid">';
   vs.forEach(function(i,k){
@@ -6012,7 +6482,7 @@ var OXBAR='';
 function syncOxBar(){
   var b=document.getElementById('oxbar');
   if(!b)return;
-  var show=(S.view==='ox'&&!!OXBAR);
+  var show=((S.view==='ox'||S.view==='num')&&!!OXBAR);   /* 数字4択も同じ（2026-10-09） */
   if(show&&b.innerHTML!==OXBAR)b.innerHTML=OXBAR;
   b.hidden=!show;
 }
@@ -7974,6 +8444,16 @@ function vReview(){
       +oxryline('範囲の○×をすべて',OXR.list('all').length,'all',false)
       +'</div>';
   }
+  /* 数字4択（2026-10-09 本人）。○×の枠と同じ形 */
+  if(NUMB.ok()){
+    h+='<div class="panel"><div class="h">数字4択</div>'
+      +'<div class="mini" style="margin:-4px 0 8px">期間・日数・金額などの数字の4択。記録は単元学習の「数字4択」と同じです。</div>'
+      +numRangeHtml()
+      +numryline('まちがえた数字4択',NUMR.list('ng').length,'ng',true)
+      +numryline('まだ解いていない数字4択',NUMR.list('new').length,'new',false)
+      +numryline('範囲の数字4択をすべて',NUMR.list('all').length,'all',false)
+      +'</div>';
+  }
   h+='<div class="panel"><div class="h">重症リスト（'+sev.length+'章）</div>';
   if(!sev.length)h+='<div class="mini">5問以上解いて誤答が35%以上の章、または誤答3回の問題が2つ以上ある章が出ます。今はありません。</div>';
   sev.forEach(function(x){
@@ -9633,6 +10113,94 @@ document.addEventListener('click',function(e){
     S.dir=null;
     if(S.yonFrom==='review'){go('review');return}
     S.cat=S.yonCat;S.ucat=true;go('study');return}
+  /* ---- 数字4択（2026-10-09 本人）。○×と同じ決まりで動かす ---- */
+  if(a==='numopen'){
+    var nd=t.getAttribute('data-d'),nvs=NUMB.vis(nd);
+    if(!nvs.length){msg('いまの範囲に出せる問題がありません');return}
+    S.numFrom=null;S.numDir=nd;S.numPick=null;S.numAgain=false;S.numGrid=false;
+    S.numSeen={};S.numSeq=null;                 /* 入り直したら白紙から（答えを先に見せない） */
+    var np=NUMB.pos(nd);S.numId=(np===null)?NUMB.firstRest(nd):np;
+    NUMB.setPos(nd,S.numId);
+    S.dir=null;go('num');return}
+  if(a==='numans'){
+    if(numHas(S.numPick))return;                /* 二度押しで記録を増やさない */
+    var nq=NUMB.q(S.numDir,S.numId),nv=+t.getAttribute('data-v');
+    if(!nq||!numHas(nv))return;
+    S.numPick=nv;S.numAgain=false;
+    S.numSeen=S.numSeen||{};S.numSeen[numSeenKey(S.numId)]=nv;
+    NUMB.put(S.numDir,S.numId,nv===nq.a,nv);
+    render();return}
+  if(a==='numagain'){S.numPick=null;S.numAgain=true;render();return}
+  if(a==='numgrid'){S.numGrid=!S.numGrid;render();return}
+  if(a==='numonly'){
+    if(t.getAttribute('data-v')==='ng'){
+      var nl=numNgList(S.numDir);
+      if(!nl.length){msg('まちがえたままの問題はありません');return}
+      S.numSeq=nl;S.numId=nl[0];
+    }else{S.numSeq=null}
+    S.numSeen={};S.numPick=null;S.numAgain=false;S.numGrid=false;
+    NUMB.setPos(S.numDir,S.numId);render();return}
+  if(a==='numnext'||a==='numprev'||a==='numgo'){
+    if(numRunOn()){
+      /* 復習から：最後の問題の「おしまいへ」＝復習へ戻る。その回は終わった印を付ける＝ホームの続きに出さない */
+      var nr0=NUMR.run();
+      if(a==='numnext'&&nr0.i+1>=nr0.list.length){
+        nr0.end=true;S.numPick=null;saveST();NUMR.leave();S.dir=null;go('review');return}
+      if(a!=='numgo'){NUMR.step(a==='numnext'?1:-1);render();return}
+    }
+    var nbs=numBase(),nid=null;
+    if(a==='numgo'){
+      nid=t.getAttribute('data-id');
+      if(numSeq()&&numSeq().indexOf(nid)<0)S.numSeq=null;
+      S.numGrid=false;
+    }else{
+      var nk=nbs.indexOf(S.numId)+(a==='numnext'?1:-1);
+      /* 最後の問題の「おしまいへ」＝一覧へ戻る。やめた場所は「最後まで行った」に */
+      if(a==='numnext'&&nk>=nbs.length){
+        S.numPick=null;S.numAgain=false;S.numGrid=false;NUMB.setPos(S.numDir,'#end');
+        S.dir=null;S.fmode='num';go('fields');return}
+      if(nk<0)nk=0;
+      nid=nbs[nk];
+    }
+    if(!nid)return;
+    S.numId=nid;S.numPick=null;S.numAgain=false;
+    NUMB.setPos(S.numDir,nid);
+    render();return}
+  if(a==='numback'){
+    if(numRunOn()){NUMR.leave();S.dir=null;go('review');return}   /* 復習から来たら復習へ */
+    S.dir=null;S.fmode='num';go('fields');return}
+  /* 出す範囲のチェック（出た・重要・あまり出ない）。一覧・問題・復習の数がこの範囲で数え直される */
+  if(a==='numtier'){
+    var tv=t.getAttribute('data-v'),tt=NUMB.tiers().slice(),tk=tt.indexOf(tv);
+    if(tk>=0)tt.splice(tk,1);else tt.push(tv);
+    ST.settings.numTiers=NUMT.map(function(x){return x[0]}).filter(function(k){return tt.indexOf(k)>=0});
+    saveST();render();return}
+  if(a==='numfilt'){S.numrest=(t.getAttribute('data-v')==='rest');S.fieldsY=0;render();return}
+  if(a==='numreset'){numResetAsk(t.getAttribute('data-d')||'');return}
+  if(a==='numresetgo'){numResetGo(t.getAttribute('data-d')||'');return}
+  /* 復習タブの数字4択 */
+  if(a==='numrev'){
+    var nrr=NUMR.start(t.getAttribute('data-r'));
+    if(!nrr){msg('いまは0問です');return}
+    S.numFrom='review';S.numSeen={};S.numSeq=null;
+    NUMR.show();S.dir=null;go('num');return}
+  if(a==='numrevgo'){
+    if(!NUMR.run()){render();return}
+    S.numFrom='review';S.numSeen={};S.numSeq=null;
+    NUMR.show();S.dir=null;go('num');return}
+  if(a==='numftog'){S.numFOpen=!S.numFOpen;render();return}
+  if(a==='numfclear'){var ng0=NUMR.f();ng0.cats=[];saveST();render();return}
+  if(a==='numfball'){
+    var ng1=NUMR.f(),nb1=t.getAttribute('data-b'),ncs=NUMR.cats(nb1);
+    var nall=ncs.every(function(c){return ng1.cats.indexOf(c)>=0});
+    ncs.forEach(function(c){var k=ng1.cats.indexOf(c);if(nall){if(k>=0)ng1.cats.splice(k,1)}else if(k<0)ng1.cats.push(c)});
+    saveST();render();return}
+  if(a==='numfopen'){var nb2=t.getAttribute('data-b');S.numFBig[nb2]=!S.numFBig[nb2];render();return}
+  if(a==='numfcat'){
+    var ng2=NUMR.f(),nc=t.getAttribute('data-c'),nk2=ng2.cats.indexOf(nc);
+    if(nk2>=0)ng2.cats.splice(nk2,1);else ng2.cats.push(nc);
+    saveST();render();return}
+  if(a==='numford'){var ng4=NUMR.f();ng4.ord=t.getAttribute('data-v');saveST();render();return}
   if(a==='oxagain'){S.oxPick=null;S.oxAgain=true;render();return}
   if(a==='oxnote'){
     S.noteCat=OXB.cat(t.getAttribute('data-d'));S.noteSec=+t.getAttribute('data-s');
@@ -9642,7 +10210,7 @@ document.addEventListener('click',function(e){
     S.dir=null;S.fmode='ox';go('fields');return}
   if(a==='fmode'){
     var fm=t.getAttribute('data-v');
-    if(fm!=='cat'&&fm!=='video'&&fm!=='ox')return;
+    if(fm!=='cat'&&fm!=='video'&&fm!=='ox'&&fm!=='num')return;
     if(S.fmode===fm)return;
     S.fmode=fm;ST.settings.fmode=fm;saveST();
     S.dir=null;go('fields');return;
@@ -12022,6 +12590,12 @@ document.addEventListener('toggle',function(e){
   if(!d||!d.classList||!d.classList.contains('m6-det'))return;
   var k=d.getAttribute('data-k');
   if(!k)return;
+  if(k.slice(0,2)==='N:'){               /* 数字4択の一覧（2026-10-09） */
+    var mn=S.numOpen||{};
+    mn[k.slice(2)]=d.open;S.numOpen=mn;
+    ST.settings.numOpen=mn;saveST();
+    return;
+  }
   if(k.slice(0,2)==='X:'){
     var mx=S.oxOpen||{};
     mx[k.slice(2)]=d.open;S.oxOpen=mx;

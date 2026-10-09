@@ -475,6 +475,15 @@ span.msd{cursor:default}
 .oxp .chips{display:flex;flex-wrap:wrap;gap:6px}
 .oxp .chips span{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:14px;background:#fff}
 .oxp .law{font-size:12.5px;color:#8a8074;margin-top:2px}
+/* 数字4択（2026-10-09 本人）。選択肢は4択の .yo、解説は○×の .oxp をそのまま使う */
+.numtier{display:flex;flex-wrap:wrap;align-items:center;margin:0 0 2px}
+.numtier .lb{font-size:12.5px;color:var(--muted);margin:0 8px 6px 0}
+.tog.numtg{display:inline-flex;align-items:center;gap:4px;margin:0 6px 6px 0}
+.tog.numtg .ck{display:inline-flex}
+.tog.numtg .ck svg{width:14px;height:14px;flex:none}
+.tog.numtg .ck.off{opacity:.22}
+.tog.numtg .n{font-family:var(--num);font-size:11.5px;opacity:.8}
+.oxp tr.hl td,.oxp tr.hl td:first-child{background:#fbefd2}
 .tog.oxrst{vertical-align:top}
 .tog.oxrst svg{width:14px;height:14px;flex:none}
 .bigrow{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
@@ -1814,6 +1823,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 <!-- 試験前の○×（解説付き。ノートの論点ごと）。tools/build_ox_js.py が作る。2026-09-20 -->
 <!-- ○×を分かりやすくした中身（問題文の直し・ひとことで・なぜ・表・ひっかけ）。2026-09-28
      元＝work_figs/ox_plus/<単元>.py → data/ox_plus.json → tools/build_ox_plus_js.py → data/ox_plus.js -->
+<!-- 数字4択（2026-10-09）。元＝work_figs/num4/<単元>.json → tools/build_num4_js.py → data/num4.js -->
 <!-- 過去問を4択のまま出すためのデータ。tools/build_yon_js.py が作る。2026-09-21 -->
 <!-- 開発用ダミー：上の本番データが読めた場合は自身で何もしない（if(!window.TAKKEN_ITEMS)ガード） -->
 
@@ -1848,7 +1858,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='15a712dd';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='55f8004a';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
@@ -2083,6 +2093,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
             notebody:rec.parts['notes_body.json']||null,  /* 同（本体HTML・アイコン・見た目） */
             ox:rec.parts['ox.json']||null,                /* 試験前の○×（2026-09-20） */
             oxplus:rec.parts['ox_plus.json']||null,       /* ○×の足した解説（2026-09-28） */
+            num4:rec.parts['num4.json']||null,            /* 数字4択（2026-10-09） */
             yon:rec.parts['yon.json']||null,              /* 4択の過去問（2026-09-21） */
             hosokuTiming:rec.parts['hosoku_timing.json']||null};
   }
@@ -2251,6 +2262,8 @@ body{overflow-x:clip;overscroll-behavior-x:none}
     window.OXQ=d.ox||null;
     /* ○×を分かりやすくした中身（2026-09-28）。app.html は OXPLUS を見る。無ければ何も足さない。 */
     window.OXPLUS=d.oxplus||{};
+    /* 数字4択（2026-10-09）。app.html は NUMQ を見る。無ければ数字4択の一覧は空 */
+    window.NUMQ=d.num4||null;
     /* 過去問を4択のまま（2026-09-21）。app.html は YONQ を見る。 */
     window.YONQ=d.yon||null;
     /* 補足の時間表（段落ごとの音の帯）＝{鍵:{p:[{i,sec,s:[[開始,終了,字始,字終]]}]}} */
