@@ -2891,6 +2891,53 @@ function ph(){
   return 'last';
 }
 function isSunday(){return new Date(today().replace(/-/g,'/')).getDay()===0}
+/* ---- ○×と4択をホームの数字と点数に入れる（2026-10-09 本人「〇×でやったものをホーム画面の点数や問題に
+   反映して。もう一問１答はほぼ使わないからね。４択と〇×で反映させたいよね」→「Aでいいよ」） ---- */
+/* 今日の○×・4択の回答数（記録の出来事から数える。day＝答えた日） */
+function oxyToday(){
+  var d=today(),o=0,y=0,L=ST.log||[];
+  for(var k=0;k<L.length;k++){var E=L[k];
+    if(!E||E.day!==d)continue;
+    if(E.e==='oxa')o++;else if(E.e==='yona')y++;}
+  return {ox:o,yon:y};
+}
+/* ○×の1問：0＝未回答／1＝答えたが直近は不正解／2＝直近が正解。記録の箱は作らない（読むだけ） */
+function oxLastOk(d,i){
+  var b=(ST.ox&&ST.ox[d])||null,v=b?b[String(i)]:null;
+  if(!v||!v[0])return 0;
+  var row=OXB.list(d)[i];
+  return (row&&v[2]===row[1])?2:1;
+}
+/* 4択の1問（同じ数え方） */
+function yonLastOk(id){
+  var b=YB.box(id),v=b?b[id]:null;
+  if(!v||!v[0])return 0;
+  var q=YB.q(id);
+  return (q&&v[2]===q.a)?2:1;
+}
+/* 単元の○×・4択の到達度＝直近の答えが正解の問 ÷ その単元の問の数。手ごたえ（答えた割合）も返す */
+function oxyReach(c){
+  var on=0,ook=0,oa=0,yn=0,yok=0,ya=0;
+  if(OXB.ok()&&NB.ok())OXB.dirs().forEach(function(d){
+    if(OXB.cat(d)!==c)return;
+    OXB.vis(d).forEach(function(i){on++;var l=oxLastOk(d,i);if(l)oa++;if(l===2)ook++});
+  });
+  if(YB.ok())YB.ofCat(c).forEach(function(id){yn++;var l=yonLastOk(id);if(l)ya++;if(l===2)yok++});
+  return {ox:on?ook/on:0,oxA:on?oa/on:0,on:on,yon:yn?yok/yn:0,yonA:yn?ya/yn:0,yn:yn};
+}
+/* ○×と4択の全体（ホームの「学習 N/M問」と目標） */
+function oxyAll(){
+  var n=0,a=0,cnt=0,rest=0;
+  if(OXB.ok()&&NB.ok())OXB.dirs().forEach(function(d){
+    var b=(ST.ox&&ST.ox[d])||{};
+    OXB.vis(d).forEach(function(i){n++;var v=b[String(i)];if(v&&v[0]){a++;cnt+=v[0]}
+      if(oxLastOk(d,i)!==2)rest++});
+  });
+  if(YB.ok())YB.all().forEach(function(id){n++;var b=YB.box(id),v=b?b[id]:null;
+    if(v&&v[0]){a++;cnt+=v[0]}
+    if(yonLastOk(id)!==2)rest++});
+  return {n:n,a:a,cnt:cnt,rest:rest};
+}
 /* その日の目標。期間で意味が変わる（新規／間違い直し／総復習／仕上げ）。 */
 function goal2(){
   var p=ph(),dt=(ST.days[today()]||{});
@@ -2901,7 +2948,9 @@ function goal2(){
   if(p==='all'){
     var left=Math.max(1,Math.round((new Date(PLAN2.allEnd.replace(/-/g,'/'))
              -new Date(today().replace(/-/g,'/')))/864e5)+1);
-    return {lab:'総復習',n:Math.ceil(ITEMS.length/12/left*3),done:dt.n||0};
+    /* ○×と4択で（2026-10-09 本人）：まだ直近で正解していない数 ÷ 残り日数。済み＝今日答えた数（3つ合わせて） */
+    var oyt=oxyToday();
+    return {lab:'総復習',n:Math.ceil(oxyAll().rest/left),done:(dt.n||0)+oyt.ox+oyt.yon};
   }
   return {lab:'仕上げ',n:49,done:dt.n||0};
 }
@@ -2919,7 +2968,8 @@ function vHome(){
     +' aria-label="記録の書き出しと読み込み">'+IC.io+'</button></div>';
   /* 4枚とも「小花＋見出し＋数字」の同じ作りにする。1枚だけ違う形にしない。
      復習の数は捨てず、見出しに添える（数字の行に入れると3桁のときだけ折り返して1枚だけ窮屈になる）。 */
-  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0,drev=Math.max(0,dn-dnew),sc0=scoreNow();
+  /* 今日のカード＝一問一答＋○×＋4択（2026-10-09 本人「〇×でやったものをホーム画面の…問題に反映して」） */
+  var dd=ST.days[today()]||{n:0,ok:0},dn=dd.n||0,dnew=dd.newq||0,drev=Math.max(0,dn-dnew),sc0=scoreNow(),oyd=oxyToday();
   h+='<div class="hpair">'
     +'<div class="hcard">'+flw(17)+'<div class="hlab">試験まで</div>'
     +'<div class="hnum'+(dl<=30?' near':'')+'">'+n3(dl)+'<span>日</span></div></div>'
@@ -2930,8 +2980,8 @@ function vHome(){
     +(recallOn()
       ?('<div class="hcard">'+flw(17)+'<div class="hlab">復習</div>'
         +'<div class="hnum">'+n3(recallToday())+'<span>/ '+n3(RECALL_N)+'問</span></div></div>')
-      :('<div class="hcard">'+flw(17)+'<div class="hlab">今日'+(drev?'・復習 '+n3(drev):'')+'</div>'
-        +'<div class="hnum">'+n3(dn)+'<span>問</span></div></div>'))
+      :('<div class="hcard">'+flw(17)+'<div class="hlab">今日・○× '+n3(oyd.ox)+'・4択 '+n3(oyd.yon)+'</div>'
+        +'<div class="hnum">'+n3(dn+oyd.ox+oyd.yon)+'<span>問</span></div></div>'))
     +'<div class="hcard">'+flw(17)+'<div class="hlab">いま</div>'
     /* 分母は分析①と同じ CATQ_TOTAL（49点）。ここだけ 50 とベタ書きすると2画面で食い違う */
     +'<div class="hnum">'+sc0.pts.toFixed(1)+'<span>/ '+sc0.total+'点</span></div></div>'
@@ -2945,12 +2995,14 @@ function vHome(){
      ・学習 N/M問 … 一度でも答えた問題（実数）／このアプリで解ける問題数（ITEMS＝単元に入っている数）
      ・解いた問題数 … のべ回数（同じ問題を2回答えれば2）
      設定画面に出る「読み込み 5,924」は**読み込んだ肢の総数**で、ここの分母とは別のもの。 */
-  var apd=0,apn=0;
-  ITEMS.forEach(function(it){var r=R(it.id),a=att(r);if(a){apd++;apn+=a}});
-  h+='<div class="hstat"><span>学習 <b>'+n3(apd)+'</b>/'+n3(ITEMS.length)+'問</span>'
+  /* ○×と4択で数える（2026-10-09 本人「もう一問１答はほぼ使わないからね。４択と〇×で反映させたい」）。
+     学習＝○×（出している問）と4択のうち一度でも答えた数／その合計。解いた問題数＝のべ回数 */
+  var oxa0=oxyAll(),apd=oxa0.a,apn=oxa0.cnt,apN=oxa0.n;
+  h+='<div class="hstat"><span>学習 <b>'+n3(apd)+'</b>/'+n3(apN)+'問</span>'
     +'<span>解いた問題数 <b>'+n3(apn)+'</b>問</span></div>'
-    +'<div class="bar3" style="margin-bottom:14px"><i style="width:'
-    +(ITEMS.length?(apd/ITEMS.length*100).toFixed(1):'0')+'%"></i></div>';
+    /* 塗りは data-m6v で伸ばす（m6Fills）。width:% のままだと scaleX(0) のまま空に見えていた（2026-10-09 気づいて直す） */
+    +'<div class="bar3" style="margin-bottom:14px"><i data-m6v="'
+    +(apN?(apd/apN).toFixed(4):'0')+'" data-m6vk="home:learn"></i></div>';
   /* いまどの期間か（1行だけ。カードは増やさない＝引き算の原則）。 */
   h+='<div class="hstat" style="margin-bottom:12px"><span>'
     /* 日付はベタ書きしない＝PLAN2 を変えたのに文字が古いまま残る事故を作らない
@@ -8125,12 +8177,15 @@ function scoreNow(){
   CATS.forEach(function(c){
     var q=CATQ[c];
     if(!q)return;                                       /* 配点0（贈与税）と別枠（統計）は寄与しない */
-    var s=catReach(c);
-    if(!s.tn)return;
+    var s=catReach(c),x=oxyReach(c);
+    if(!s.tn&&!x.on&&!x.yn)return;
+    /* 案A（2026-10-09 本人「Aでいいよ」）：一問一答・○×・4択のうち、到達度がいちばん高いもの。
+       ○×・4択＝その単元の問のうち直近の答えが正解の割合（手を付けていない問は0＝盛らない） */
+    var rc=Math.max(s.reach,x.ox,x.yon),cv=Math.max(s.tn?s.tdone/s.tn:0,x.oxA,x.yonA);
     var b=CINFO[c].big,g=agg[b]||(agg[b]={big:b,q:0,pts:0,tn:0,tdone:0,aq:0,nq:0});
-    g.q+=q;g.pts+=q*s.reach;g.tn+=s.tn;g.tdone+=s.tdone;g.aq+=s.aq;g.nq+=s.nq;
-    pts+=q*s.reach;
-    covered+=q*(s.tdone/s.tn);                          /* 手を付けた論点ぶんの配点＝測定できた範囲 */
+    g.q+=q;g.pts+=q*rc;g.tn+=s.tn;g.tdone+=s.tdone;g.aq+=s.aq;g.nq+=s.nq;
+    pts+=q*rc;
+    covered+=q*cv;                                      /* 手を付けたぶんの配点＝測定できた範囲 */
   });
   /* 内訳は大分類で出す。単元で出した点を大分類へ足すだけなので、
      内訳の合計は必ず見出しの数字に一致する（2026-08-15 批評指摘：4行までで税と価格が永久に出ず、
@@ -8183,14 +8238,14 @@ function vAnalysis(){
        トグルで収まるようにして。1行で収まるならそれで」）。閉じているときは1行だけ。 */
     +'<button class="tapline" data-act="togsc" style="min-height:34px;margin-top:6px">'
     +'<span style="flex:1" class="mini">式と分野ごとの内訳</span>'+(S.openSc?IC.up:IC.down)+'</button>'
-    +(S.openSc?('<div class="mini" style="margin-top:2px">配点 × 論点ごとの到達度の平均。'
-    +'到達度＝その論点で解いた肢のうち直近が正解の割合。まだ1肢も解いていない論点は0点です</div>'):'')
+    +(S.openSc?('<div class="mini" style="margin-top:2px">単元ごとに、一問一答・○×・4択のうち到達度がいちばん高いもの × 配点。'
+    +'○×・4択＝その単元の問のうち直近の答えが正解の割合。一問一答＝論点ごとに解いた肢のうち直近が正解の割合の平均。'
+    +'まだ解いていない問は0点です</div>'):'')
     /* 内訳は上位N件で切らない＝6分野すべて出す。切ると税（2.00）と価格の評定（1.00）は
        配点の上限が低いので永久に上位に入らず、内訳の合計と見出しの数字も一致しなくなる。 */
     +((S.openSc&&sc.done.length)?'<div class="mini" style="margin-top:4px">'
       +sc.done.map(function(d){
-        return esc(d.big)+' '+d.show.toFixed(1)+' / '+d.q.toFixed(0)+'点（論点 '
-          +n3(d.tdone)+'/'+n3(d.tn)+'）'}).join('<br>')+'</div>':'')
+        return esc(d.big)+' '+d.show.toFixed(1)+' / '+d.q.toFixed(0)+'点'}).join('<br>')+'</div>':'')
     /* 統計は得点予測に入っていないことを1行だけ断る（数字を出さない＝軽視も過大評価もさせない） */
     +(S.openSc?'<div class="mini" style="margin-top:4px">統計（毎年1問）は過去問で測れないため別枠</div>':'');
   h+='</div>';
