@@ -2468,6 +2468,7 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         /* 数字4択（2026-10-09）。○×と同じ決まりで持つ */
         numDir:null,numId:null,numPick:null,numAgain:false,numGrid:false,numSeen:{},numSeq:null,
         numFrom:null,numFOpen:false,numFBig:{},numOpen:null,numrest:false,
+        numEnd:false,          /* 数字4択のおしまいの画面を出しているか（2026-10-13） */
         /* ノートの拡大（2026-09-21）。nbFit＝'col'（1段の幅）／'page'（紙の幅）／null（自分で決めた） */
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
@@ -5070,7 +5071,7 @@ function oxNgList(d){
   return out;
 }
 function vOx(){
-  PCLK_RUN='';
+  PCLK_RUN='';OXBAR='';                    /* 下の固定ボタンは答えたあとの問題でだけ入れ直す（おしまいの画面に残さない） */
   var d=S.oxDir,rows=OXB.list(d),i=S.oxI|0;
   var back='<button class="btn sm" data-act="oxback" style="margin-bottom:10px">'+(oxRunOn()?'復習へ戻る':'一覧へ戻る')+'</button>';
   if(oxRunOn()&&S.oxRunEnd)return oxRunEndHtml(back);
@@ -5547,13 +5548,39 @@ function numPlusHtml(q){
   return h+'</div>';
 }
 /* 1問ずつ答える画面（○×の vOx と同じ骨格。選択肢は4択の .yo） */
+/* 数字4択のおしまいの画面（2026-10-13 本人「数字の４択の結果画面」）。過去問4択・○×と同じ形 */
+function numEndHtml(back,d,st){
+  var bt='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">';
+  if(numRunOn()){
+    var r=NUMR.run(),o=0;
+    r.list.forEach(function(p){if(NUMB.lv(p[0],p[1])===2)o++});
+    return '<div class="pad'+stag()+'">'+back
+      +'<div class="panel"><div class="h" style="margin:0">'+esc(r.title)+'　おしまい</div>'
+      +'<div class="sub" style="margin:8px 0 0">全'+r.list.length+'問中、一度でも正解したのは '+o+'問。</div>'
+      +pclkDoneHtml('num')+bt
+      +'<button class="btn" data-act="numback">復習へ戻る</button>'
+      +'<button class="btn sm" data-act="numprev">最後の問題へ戻る</button>'
+      +'</div></div></div>';
+  }
+  var ng=numNgList(d).length;
+  return '<div class="pad'+stag()+'">'+back
+    +'<div class="panel"><div class="h" style="margin:0">'+esc(NUMB.cat(d))+'　おしまい</div>'
+    +'<div class="sub" style="margin:8px 0 0">全'+st.n+'問中、一度でも正解したのは '+st.o+'問。</div>'
+    +pclkDoneHtml('num')+bt
+    +'<button class="btn" data-act="numstart" data-i="0">はじめから解く</button>'
+    +(st.n-st.o>0?('<button class="btn" data-act="numstart" data-i="rest">まだ正解していない '+(st.n-st.o)+'問へ</button>'):'')
+    +(ng?('<button class="btn" data-act="numonly" data-v="ng">まちがえた問題だけ '+ng+'問</button>'):'')
+    +'<button class="btn sm" data-act="numprev">最後の問題へ戻る</button>'
+    +'</div></div></div>';
+}
 function vNum(){
-  PCLK_RUN='';
+  PCLK_RUN='';OXBAR='';                    /* 同上 */
   var d=S.numDir,id=S.numId,q=NUMB.q(d,id);
   var back='<button class="btn sm" data-act="numback" style="margin-bottom:10px">'+(numRunOn()?'復習へ戻る':'一覧へ戻る')+'</button>';
   if(!q)return '<div class="pad'+stag()+'">'+back
     +'<div class="panel"><div class="sub" style="margin:0">いまの範囲に出せる問題がありません。</div></div></div>';
   var st=NUMB.stat(d);
+  if(S.numEnd)return numEndHtml(back,d,st);   /* おしまいの画面（2026-10-13） */
   PCLK_RUN='num';
   /* いま押した答え。無ければこの回に押した答え（前の回の答えは出さない＝○×と同じ） */
   var pk=numHas(S.numPick)?S.numPick:(S.numAgain?null:(S.numSeen?S.numSeen[numSeenKey(id)]:null));
@@ -10046,11 +10073,10 @@ document.addEventListener('click',function(e){
     OXB.setPos(S.oxDir,S.oxI);render();return}
   /* 前へ／次へ／番号で飛ぶ。どれも**やめた場所を更新する**＝閉じても同じ所に戻る。 */
   /* 復習からの○×（2026-10-05）。並びの中で前へ／次へ。単元の「やめた場所」は動かさない */
-  /* 最後の問題の「おしまいへ」＝一覧へ戻る（2026-10-09 本人「おしまいを押したときは一覧に戻ってほしい」）。
-     復習から来たときは復習へ。その回は終わった印（r.end）を付ける＝ホームの続きに出さない */
-  if(a==='oxnext'&&oxRunOn()){var R9=OXR.run();
-    if(R9&&!S.oxRunEnd&&R9.i+1>=R9.list.length){R9.end=true;S.oxPick=null;saveST();
-      OXR.leave();S.dir=null;go('review');return}}
+  /* 最後の問題の「おしまいへ」＝おしまいの画面（一度でも正解した数・かかった時間）。
+     2026-10-09 は本人「おしまいを押したときは一覧に戻ってほしい」で一覧へ直接戻していたが、
+     2026-10-13 本人「〇×でも見えるようにして」（かかった時間）→ 結果の画面を出す (b) を本人が選んだ。
+     その回は終わった印（r.end）を OXR.step が付ける＝ホームの続きに出さない */
   if((a==='oxnext'||a==='oxprev')&&oxRunOn()){OXR.step(a==='oxnext'?1:-1);render();window.scrollTo(0,0);return}
   if(a==='oxnext'||a==='oxprev'||a==='oxgo'){
     var omax=OXB.list(S.oxDir).length,oq=oxSeq(),oni,obase=oq||OXB.vis(S.oxDir);
@@ -10064,15 +10090,14 @@ document.addEventListener('click',function(e){
       var op=obase.indexOf(S.oxI|0)+(a==='oxnext'?1:-1);
       if(op<0)op=0;
       oni=(op>=obase.length)?omax:obase[op];  /* 並びの終わり＝おしまいの画面 */
-      /* 最後の問題の「おしまいへ」＝一覧へ戻る（2026-10-09 本人）。やめた場所は「最後まで行った」に */
-      if(a==='oxnext'&&op>=obase.length){
-        S.oxI=omax;S.oxPick=null;S.oxAgain=false;S.oxGrid=false;OXB.setPos(S.oxDir,omax);
-        S.dir=null;S.fmode='ox';go('fields');return}
+      /* 最後の問題の「おしまいへ」＝おしまいの画面（2026-10-13 本人が (b) を選択。前は一覧へ直接戻していた）。
+         oni＝omax のまま下へ進む＝やめた場所は「最後まで行った」になる */
+      if(a==='oxnext'&&op>=obase.length)S.oxGrid=false;
     }
     if(oni<0)oni=0;
     if(oni>omax)oni=omax;                     /* omax＝おしまいの画面 */
     S.oxI=oni;S.oxPick=null;S.oxAgain=false;
-    if(oni<omax)OXB.setPos(S.oxDir,oni);
+    OXB.setPos(S.oxDir,oni);                  /* omax＝最後まで行った */
     render();window.scrollTo(0,0);return}       /* 次の問題は一番上から（2026-10-13） */
   if(a==='oxgrid'){S.oxGrid=!S.oxGrid;render();return}
   /* ---- 4択（2026-09-21）。○×と同じ決まりで動かす ---- */
@@ -10290,7 +10315,7 @@ document.addEventListener('click',function(e){
   if(a==='numopen'){
     var nd=t.getAttribute('data-d'),nvs=NUMB.vis(nd);
     if(!nvs.length){msg('いまの範囲に出せる問題がありません');return}
-    S.numFrom=null;S.numDir=nd;S.numPick=null;S.numAgain=false;S.numGrid=false;
+    S.numFrom=null;S.numDir=nd;S.numPick=null;S.numAgain=false;S.numGrid=false;S.numEnd=false;
     S.numSeen={};S.numSeq=null;                 /* 入り直したら白紙から（答えを先に見せない） */
     var np=NUMB.pos(nd);S.numId=(np===null)?NUMB.firstRest(nd):np;
     NUMB.setPos(nd,S.numId);
@@ -10306,7 +10331,15 @@ document.addEventListener('click',function(e){
     render();return}
   if(a==='numagain'){S.numPick=null;S.numAgain=true;render();return}
   if(a==='numgrid'){S.numGrid=!S.numGrid;render();return}
+  if(a==='numstart'){
+    var nsd=S.numDir,nsi=t.getAttribute('data-i');
+    S.numSeq=null;S.numEnd=false;S.numSeen={};S.numPick=null;S.numAgain=false;S.numGrid=false;
+    var nsv=NUMB.vis(nsd);if(!nsv.length){render();return}
+    S.numId=(nsi==='rest')?NUMB.firstRest(nsd):nsv[0];
+    NUMB.setPos(nsd,S.numId);pclkReset('num');                 /* 解き直し＝時間は0から */
+    render();window.scrollTo(0,0);return}
   if(a==='numonly'){
+    S.numEnd=false;
     if(t.getAttribute('data-v')==='ng'){
       var nl=numNgList(S.numDir);
       if(!nl.length){msg('まちがえたままの問題はありません');return}
@@ -10314,12 +10347,18 @@ document.addEventListener('click',function(e){
     }else{S.numSeq=null}
     S.numSeen={};S.numPick=null;S.numAgain=false;S.numGrid=false;
     NUMB.setPos(S.numDir,S.numId);render();return}
+  if(a==='numprev'&&S.numEnd){
+    S.numEnd=false;S.numPick=null;S.numAgain=false;
+    if(numRunOn()){var nr1=NUMR.run();nr1.end=false;saveST()}else NUMB.setPos(S.numDir,S.numId);
+    render();window.scrollTo(0,0);return}
   if(a==='numnext'||a==='numprev'||a==='numgo'){
+    S.numEnd=false;
     if(numRunOn()){
       /* 復習から：最後の問題の「おしまいへ」＝復習へ戻る。その回は終わった印を付ける＝ホームの続きに出さない */
       var nr0=NUMR.run();
       if(a==='numnext'&&nr0.i+1>=nr0.list.length){
-        nr0.end=true;S.numPick=null;saveST();NUMR.leave();S.dir=null;go('review');return}
+        /* おしまいの画面へ（2026-10-13 本人が (b) を選択。前は復習へ直接戻していた）。終わった印＝ホームの続きに出さない */
+        nr0.end=true;S.numPick=null;S.numEnd=true;saveST();render();window.scrollTo(0,0);return}
       if(a!=='numgo'){NUMR.step(a==='numnext'?1:-1);render();window.scrollTo(0,0);return}
     }
     var nbs=numBase(),nid=null;
@@ -10331,8 +10370,9 @@ document.addEventListener('click',function(e){
       var nk=nbs.indexOf(S.numId)+(a==='numnext'?1:-1);
       /* 最後の問題の「おしまいへ」＝一覧へ戻る。やめた場所は「最後まで行った」に */
       if(a==='numnext'&&nk>=nbs.length){
+        /* おしまいの画面へ（2026-10-13 本人が (b) を選択。前は一覧へ直接戻していた） */
         S.numPick=null;S.numAgain=false;S.numGrid=false;NUMB.setPos(S.numDir,'#end');
-        S.dir=null;S.fmode='num';go('fields');return}
+        S.numEnd=true;render();window.scrollTo(0,0);return}
       if(nk<0)nk=0;
       nid=nbs[nk];
     }
@@ -10341,6 +10381,7 @@ document.addEventListener('click',function(e){
     NUMB.setPos(S.numDir,nid);
     render();window.scrollTo(0,0);return}        /* 次の問題は一番上から（2026-10-13） */
   if(a==='numback'){
+    S.numEnd=false;
     if(numRunOn()){NUMR.leave();S.dir=null;go('review');return}   /* 復習から来たら復習へ */
     S.dir=null;S.fmode='num';go('fields');return}
   /* 出す範囲のチェック（出た・重要・あまり出ない）。一覧・問題・復習の数がこの範囲で数え直される */
@@ -10356,10 +10397,11 @@ document.addEventListener('click',function(e){
   if(a==='numrev'){
     var nrr=NUMR.start(t.getAttribute('data-r'));
     if(!nrr){msg('いまは0問です');return}
-    S.numFrom='review';S.numSeen={};S.numSeq=null;
+    S.numFrom='review';S.numSeen={};S.numSeq=null;S.numEnd=false;
     NUMR.show();pclkReset('num');S.dir=null;go('num');return}
   if(a==='numrevgo'){
     if(!NUMR.run()){render();return}
+    S.numEnd=false;
     S.numFrom='review';S.numSeen={};S.numSeq=null;
     NUMR.show();S.dir=null;go('num');return}
   if(a==='numftog'){S.numFOpen=!S.numFOpen;render();return}
