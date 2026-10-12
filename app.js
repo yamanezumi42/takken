@@ -1148,6 +1148,7 @@ function baseSt(){
   delete st.settings;delete st.run;delete st.wpend;delete st.lastChap;
   delete st.mockRun;                 /* 途中の模試は端末ごと（焼き付くと生き返る） */
   delete st.msRun;                   /* 4人の模試の途中も同じ（2026-10-07） */
+  delete st.pclk;                    /* ○×・4択の経過時間も端末ごと（2026-10-13） */
   delete st.log;delete st.logn;delete st.gen;
   /* ★軽くする（2026-08-29 実機で 0.76MB＝GitHubがそのまま返す上限1MBに近いと判明）。
      一時的な値・再計算できる欄・空の欄は持たない。実データで 220→94バイト/問。 */
@@ -1215,6 +1216,7 @@ function replay(log){
                 これは成績ではなく居場所なので、土台にも出来事にも入っていない。 */
              yonRun:ST.yonRun,yonPos:ST.yonPos,yonLast:ST.yonLast,yonF:ST.yonF,
              oxPos:ST.oxPos,oxSeq:ST.oxSeq,oxLast:ST.oxLast,oxF:ST.oxF,oxRun:ST.oxRun,msRun:ST.msRun,
+             pclk:ST.pclk,       /* ○×・4択の経過時間（2026-10-13）。端末ごと */
              numPos:ST.numPos,numLast:ST.numLast,numF:ST.numF,numRun:ST.numRun};   /* 数字4択（2026-10-09） */
   /* 一時的な値は土台に入れない（軽くするため）が、「ケアレス」の判定に使うので持ち越す */
   var tmp={};
@@ -1247,6 +1249,7 @@ function replay(log){
   if(keep.numLast)ST.numLast=keep.numLast;
   if(keep.numF)ST.numF=keep.numF;
   if(keep.numRun)ST.numRun=keep.numRun;
+  if(keep.pclk)ST.pclk=keep.pclk;
   ST.logn=keep.logn||0;
   ST.gen=keep.gen||0;
   ST.log=L;
@@ -1485,6 +1488,8 @@ function normST(o){
   /* 模試（2026-10-07）。途中＝{id,at,players,names,qs,nos,sel,i,acc}／結果＝出来事 'ms' から作る一覧 */
   if(!o.msRun||typeof o.msRun!=='object'||!o.msRun.qs||!o.msRun.qs.slice||!o.msRun.sel)delete o.msRun;
   if(!Array.isArray(o.msLog))o.msLog=[];
+  /* ○×・4択の経過時間（2026-10-13）。形が違えば捨てる */
+  if(!o.pclk||typeof o.pclk!=='object'||Array.isArray(o.pclk))o.pclk={};
   /* いま解いて回っている4択の一覧（2026-09-24）。形が違えば捨てる＝壊れた値で止まらない */
   if(!o.yonRun||typeof o.yonRun!=='object'||!o.yonRun.ids||!o.yonRun.ids.slice)delete o.yonRun;
   /* ノートの拡大（2026-09-21）。0.25〜3倍の外は捨てる（壊れた値で真っ白にしない） */
@@ -2643,7 +2648,62 @@ function runSec(){
   var d=r.tick?Math.min(180000,Math.max(0,Date.now()-r.tick)):0;   /* 放置は180秒で打ち切る */
   return Math.round(((r.spent||0)+d)/1000);
 }
-function qtNow(){return (S.view==='mock'&&S.mock)?mockSec(S.mock):runSec()}
+/* ---------- ○×・過去問4択・数字4択の経過時間（2026-10-13 本人「4択問題とか復習タブの問題にも
+   他と同じように時間も表示してほしい」「1問1答でやっているのと同じ形式」「結果画面でも」） ----------
+   一覧ごとに持つ（ST.pclk['ox|u:単元'] など）＝別の一覧を挟んでも「続き」に戻れば続きから。
+   0に戻すのは一覧から解き始めたときだけ（pclkReset）。進むのは問題の画面にいる間だけ
+   （おしまいの画面・ほかの画面・アプリを離れている間は止める）。放置は一問一答と同じく180秒で打ち切る。 */
+var PCLK_RUN='';                  /* いま問題を出している画面（'ox'/'yon'/'num'）。各画面が描くときに入れる */
+function pclkKey(m){
+  if(m==='ox')return 'ox|'+(oxRunOn()&&OXR.run()?'r:'+OXR.run().key:'u:'+(S.oxDir||''));
+  if(m==='yon')return 'yon|'+(S.yonKey||'');
+  if(m==='num')return 'num|'+(numRunOn()&&NUMR.run()?'r:'+NUMR.run().key:'u:'+(S.numDir||''));
+  return '';
+}
+function pclkGet(k,make){
+  if(!ST.pclk||typeof ST.pclk!=='object')ST.pclk={};
+  var c=ST.pclk[k];
+  if((!c||typeof c!=='object')&&make){
+    c=ST.pclk[k]={s:0,t:null,at:Date.now()};
+    /* 古いものから捨てる（30一覧まで） */
+    var ks=Object.keys(ST.pclk);
+    if(ks.length>30){ks.sort(function(a,b){return (ST.pclk[a].at||0)-(ST.pclk[b].at||0)});
+      ks.slice(0,ks.length-30).forEach(function(x){delete ST.pclk[x]})}
+  }
+  return (c&&typeof c==='object')?c:null;
+}
+function pclkReset(m){
+  var k=pclkKey(m);if(!k)return;
+  pclkGet(k,true);ST.pclk[k]={s:0,t:null,at:Date.now()};saveST();
+}
+function pclkSecK(k){
+  var c=pclkGet(k,false);if(!c)return 0;
+  var d=c.t?Math.min(180000,Math.max(0,Date.now()-c.t)):0;
+  return Math.round(((c.s||0)+d)/1000);
+}
+function pclkSec(m){return pclkSecK(pclkKey(m))}
+/* 描いたあと・離れた／戻ったときに通す。いま出している一覧だけ動かし、ほかは止める */
+function pclkSync(){
+  var vis=(typeof document.visibilityState==='undefined'||document.visibilityState!=='hidden');
+  var act=(PCLK_RUN&&S.view===PCLK_RUN&&vis)?pclkKey(PCLK_RUN):'',ch=false;
+  if(!ST.pclk||typeof ST.pclk!=='object')ST.pclk={};
+  Object.keys(ST.pclk).forEach(function(k){
+    var c=ST.pclk[k];if(!c||typeof c!=='object'||k===act||!c.t)return;
+    c.s=(c.s||0)+Math.min(180000,Math.max(0,Date.now()-c.t));c.t=null;ch=true;
+  });
+  if(act){var c=pclkGet(act,true);if(!c.t){c.t=Date.now();c.at=Date.now();ch=true}}
+  if(ch)saveST();
+}
+/* おしまいの画面に出す「かかった時間」 */
+function pclkDoneHtml(m){
+  var k=pclkKey(m),c=pclkGet(k,false);
+  return c?('<div class="sub" style="margin:4px 0 0">かかった時間 <span class="num">'+mmss(pclkSecK(k))+'</span></div>'):'';
+}
+function pclkSpan(m,st){return '<span class="pqtime num" id="qtime"'+(st?' style="'+st+'"':'')+'>'+mmss(pclkSec(m))+'</span>'}
+function qtNow(){
+  if(PCLK_RUN&&S.view===PCLK_RUN)return pclkSec(PCLK_RUN);
+  return (S.view==='mock'&&S.mock)?mockSec(S.mock):runSec();
+}
 function qtTick(){
   var e=document.getElementById('qtime');
   if(!e){qtStop();return}
@@ -2678,7 +2738,8 @@ function clockSync(){
   if(S.view==='quiz'&&vis)runResume();else runPause();
   if(S.view==='mock'&&vis)mockResume();else mockPause();
   if(S.view==='msq'&&vis){msResume();msTickStart()}else{msPause();msTickStop()}
-  if((S.view==='quiz'||S.view==='mock')&&vis)qtStart();else qtStop();
+  pclkSync();
+  if((S.view==='quiz'||S.view==='mock'||(PCLK_RUN&&S.view===PCLK_RUN))&&vis)qtStart();else qtStop();
 }
 function render(){
   var v=document.getElementById('view'),h='';
@@ -4985,6 +5046,7 @@ function oxNgList(d){
   return out;
 }
 function vOx(){
+  PCLK_RUN='';
   var d=S.oxDir,rows=OXB.list(d),i=S.oxI|0;
   var back='<button class="btn sm" data-act="oxback" style="margin-bottom:10px">'+(oxRunOn()?'復習へ戻る':'一覧へ戻る')+'</button>';
   if(oxRunOn()&&S.oxRunEnd)return oxRunEndHtml(back);
@@ -4995,6 +5057,7 @@ function vOx(){
     return '<div class="pad'+stag()+'">'+back
       +'<div class="panel"><div class="h" style="margin:0">'+esc(OXB.cat(d))+'　おしまい</div>'
       +'<div class="sub" style="margin:8px 0 0">全'+st.n+'問中、一度でも正解したのは '+st.o+'問。</div>'
+      +pclkDoneHtml('ox')
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
       +'<button class="btn" data-act="oxstart" data-d="'+esc(d)+'" data-i="0">はじめから解く</button>'
       +(st.n-st.o>0?('<button class="btn" data-act="oxstart" data-d="'+esc(d)+'" data-i="rest">'
@@ -5006,6 +5069,7 @@ function vOx(){
       +'</div></div></div>';
   }
   var row=rows[i],ans=row[1];
+  PCLK_RUN='ox';                           /* 問題を出している間だけ時計を進める */
   /* いま押した答え。無ければ**この回に押した答え**（S.oxSeen）を出す。
      2026-09-21 本人「間違えた問題だけやろうと思ったら、答え出ちゃってて萎えた」＝
      前の回に答えた記録まで出していたので、解き直しに来たのに答えが先に見えていた。
@@ -5020,14 +5084,14 @@ function vOx(){
     /* 復習から（2026-10-05）。単元をまたいで解く */
     var R0=OXR.run();
     h+='<div class="sub" style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-      +'<span>'+esc(R0.title)+'</span><span>'+(R0.i+1)+' / '+R0.list.length+'</span>'
+      +'<span>'+esc(R0.title)+'</span><span>'+(R0.i+1)+' / '+R0.list.length+'</span>'+pclkSpan('ox')
       +'<span>'+esc(OXB.cat(d))+'</span><span>過去'+OXB.freq(d,row[0])+'回出た論点</span></div>';
   }else{
   h+=''
     +'<div class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
     +'<span>'+esc(OXB.cat(d))+'</span>'
     +'<button class="oxjump" data-act="oxgrid">'+(oxPos(i)+1)+' / '+oxTotal(d)
-    +(S.oxGrid?IC.up:IC.down)+'</button>'
+    +(S.oxGrid?IC.up:IC.down)+'</button>'+pclkSpan('ox')
     +'<span>一度でも正解 '+st.o+'問</span></div>'
     /* すべて／まちがえた問題だけ（2026-09-21）。単元学習の「すべて／残り」と同じ言い方にそろえる。 */
     +'<div style="margin:0 0 10px">'
@@ -5169,6 +5233,7 @@ function oxRunEndHtml(back){
   return '<div class="pad'+stag()+'">'+back
     +'<div class="panel"><div class="h" style="margin:0">'+esc(r.title)+'　おしまい</div>'
     +'<div class="sub" style="margin:8px 0 0">全'+r.list.length+'問中、一度でも正解したのは '+o+'問。</div>'
+    +pclkDoneHtml('ox')
     +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
     +'<button class="btn" data-act="oxback">復習へ戻る</button>'
     +'<button class="btn sm" data-act="oxprev">最後の問題へ戻る</button>'
@@ -5459,11 +5524,13 @@ function numPlusHtml(q){
 }
 /* 1問ずつ答える画面（○×の vOx と同じ骨格。選択肢は4択の .yo） */
 function vNum(){
+  PCLK_RUN='';
   var d=S.numDir,id=S.numId,q=NUMB.q(d,id);
   var back='<button class="btn sm" data-act="numback" style="margin-bottom:10px">'+(numRunOn()?'復習へ戻る':'一覧へ戻る')+'</button>';
   if(!q)return '<div class="pad'+stag()+'">'+back
     +'<div class="panel"><div class="sub" style="margin:0">いまの範囲に出せる問題がありません。</div></div></div>';
   var st=NUMB.stat(d);
+  PCLK_RUN='num';
   /* いま押した答え。無ければこの回に押した答え（前の回の答えは出さない＝○×と同じ） */
   var pk=numHas(S.numPick)?S.numPick:(S.numAgain?null:(S.numSeen?S.numSeen[numSeenKey(id)]:null));
   var done=numHas(pk),was=(!numHas(S.numPick)&&done),good=done&&(pk===q.a);
@@ -5472,13 +5539,13 @@ function vNum(){
   if(numRunOn()){
     var R0=NUMR.run();
     h+='<div class="sub" style="margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-      +'<span>'+esc(R0.title)+'</span><span>'+(R0.i+1)+' / '+R0.list.length+'</span>'
+      +'<span>'+esc(R0.title)+'</span><span>'+(R0.i+1)+' / '+R0.list.length+'</span>'+pclkSpan('num')
       +'<span>'+esc(NUMB.cat(d))+'</span><span>'+esc(NUMB.tierName(q.tier))+'</span></div>';
   }else{
     h+='<div class="sub" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
       +'<span>'+esc(NUMB.cat(d))+'</span>'
       +'<button class="oxjump" data-act="numgrid">'+(nb.indexOf(id)+1)+' / '+nb.length
-      +(S.numGrid?IC.up:IC.down)+'</button>'
+      +(S.numGrid?IC.up:IC.down)+'</button>'+pclkSpan('num')
       +'<span>一度でも正解 '+st.o+'問</span></div>'
       +'<div style="margin:0 0 10px">'
       +'<button class="tog'+(sq?'':' on')+'" style="margin:0 6px 6px 0" data-act="numonly" data-v="">'
@@ -5902,6 +5969,7 @@ function yonTotal(){var q=yonSeq();return q?q.length:yonIds().length}
    ＝続きから／前へ・次へ／番号で飛ぶ／まちがえた問題だけ／**答えを先に見せない**。 */
 function vYon(){
   OXBAR='';                               /* 下の固定ボタンは答えたあとだけ（下で入れ直す） */
+  PCLK_RUN='';
   var ids=yonIds(),i=S.yonI|0,ttl=S.yonTitle||'過去問4択';
   var back='<button class="btn sm" data-act="yonback" style="margin-bottom:10px">'
     +esc(S.yonFrom==='review'?'復習へ戻る':((S.yonCat||'')+'へ戻る'))+'</button>';
@@ -5912,6 +5980,7 @@ function vYon(){
     return '<div class="pad'+stag()+'">'+back
       +'<div class="panel"><div class="h" style="margin:0">'+esc(ttl)+'　おしまい</div>'
       +'<div class="sub" style="margin:8px 0 0">全'+st.n+'問中、一度でも正解したのは '+st.o+'問。</div>'
+      +pclkDoneHtml('yon')
       +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
       +'<button class="btn" data-act="yonstart" data-i="0">はじめから解く</button>'
       +(st.n-st.o>0?('<button class="btn" data-act="yonstart" data-i="rest">'
@@ -5922,6 +5991,7 @@ function vYon(){
   }
   var qid=ids[i],q=YB.q(qid),opts=YB.opts(qid),head=RAWBY[qid+'-1']||RAWBY[qid+'-ア']||{};
   if(!q)return '<div class="pad'+stag()+'">'+back+'</div>';
+  PCLK_RUN='yon';
   var kosu=(q&&(q.type==='個数'||q.type==='組合せ'));   /* 印はア〜エの側に出す */
   var pick=S.yonPick||(S.yonAgain?null:(S.yonSeen?S.yonSeen[qid]:null))||null;
   var done=!!pick,was=(!S.yonPick&&done),good=done&&(pick===q.a);
@@ -5937,7 +6007,7 @@ function vYon(){
     +'<div class="yq">'+yonLead(q.lead,kosu?qid:null,done)+'</div>'
     /* 出典と進み具合は右寄せの小さい字（本人が送ってくれた画面と同じ置き方） */
     +'<div class="ymeta">'+(src?esc(src)+'<br>':'')
-      +(pos+1)+'問目／'+(sq?'まちがえた問題':esc(ttl))+' '+tot+'問</div>';
+      +(pos+1)+'問目／'+(sq?'まちがえた問題':esc(ttl))+' '+tot+'問'+pclkSpan('yon','margin-left:8px')+'</div>';
   /* 選択肢4つ */
   h+='<div class="yono">';
   for(var n=1;n<=4;n++){
@@ -9929,6 +9999,7 @@ document.addEventListener('click',function(e){
     else if(oi==='last')S.oxI=ovs.length?ovs[ovs.length-1]:0;
     else{var op=OXB.pos(od);S.oxI=(op===null)?OXB.firstRest(od):op}
     OXB.setPos(od,S.oxI);
+    if(oi!=='last')pclkReset('ox');          /* 一覧から解き始めた＝時間は0から（「最後の問題へ戻る」は続き） */
     S.dir=null;go('ox');return}
   if(a==='oxans'){
     if(S.oxPick)return;                       /* 二度押しで記録を増やさない */
@@ -10016,6 +10087,7 @@ document.addEventListener('click',function(e){
     S.yonPick=null;S.yonAgain=false;S.yonGrid=false;
     S.yonSeen={};S.yonSeq=null;      /* 入り直したら白紙から（答えを先に見せない） */
     YB.setPos(S.yonKey,S.yonI);
+    if(!(a==='yonstart'&&yi==='last'))pclkReset('yon');   /* 解き始め＝時間は0から（「最後の問題へ」は続き） */
     S.dir=null;go('yon');return}
   /* 4択の範囲（2026-09-22）。押すたびに数え直して画面を描き直す */
   /* ---- 模試（2026-10-07） ---- */
@@ -10065,7 +10137,7 @@ document.addEventListener('click',function(e){
     var orr=OXR.start(t.getAttribute('data-r'));
     if(!orr){msg('いまは0問です');return}
     S.oxFrom='review';S.oxRunEnd=false;S.oxSeen={};S.oxSeq=null;
-    OXR.show();S.dir=null;go('ox');return}
+    OXR.show();pclkReset('ox');S.dir=null;go('ox');return}
   /* ホームの「復習の○×の続き」（2026-10-09）。止めた問題から、復習の並びのまま */
   if(a==='oxrevgo'){
     if(!OXR.run()){render();return}
@@ -10196,6 +10268,7 @@ document.addEventListener('click',function(e){
     S.numSeen={};S.numSeq=null;                 /* 入り直したら白紙から（答えを先に見せない） */
     var np=NUMB.pos(nd);S.numId=(np===null)?NUMB.firstRest(nd):np;
     NUMB.setPos(nd,S.numId);
+    pclkReset('num');
     S.dir=null;go('num');return}
   if(a==='numans'){
     if(numHas(S.numPick))return;                /* 二度押しで記録を増やさない */
@@ -10258,7 +10331,7 @@ document.addEventListener('click',function(e){
     var nrr=NUMR.start(t.getAttribute('data-r'));
     if(!nrr){msg('いまは0問です');return}
     S.numFrom='review';S.numSeen={};S.numSeq=null;
-    NUMR.show();S.dir=null;go('num');return}
+    NUMR.show();pclkReset('num');S.dir=null;go('num');return}
   if(a==='numrevgo'){
     if(!NUMR.run()){render();return}
     S.numFrom='review';S.numSeen={};S.numSeq=null;
@@ -11792,7 +11865,7 @@ window.TK={S:S,F:F,get ST(){return ST},ITEMS:ITEMS,BY:BY,
    戻ってきた時刻の差を積む。他のアプリを触っていた時間が混ざり得るため、その動画の尺の
    1.5倍で切り捨て、10秒未満は積まない（watchEnd に同じ注記あり）。 */
 /* 閉じる・再読み込みでも畳む（visibilitychange が来ない経路の保険） */
-window.addEventListener('pagehide',function(){try{runPause();mockPause();msPause()}catch(e){}});
+window.addEventListener('pagehide',function(){try{runPause();mockPause();msPause();PCLK_RUN='';pclkSync()}catch(e){}});
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState!=='visible'){
     /* ★離れる瞬間に同期する（2026-08-29）。iPhone はアプリを切り替えると止まるので、

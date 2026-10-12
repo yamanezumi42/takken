@@ -328,6 +328,8 @@ a{color:var(--chipfg)}
    判定は色の帯で出す。 */
 /* 前へ／次へ（2026-09-20 本人「前の問題に戻れないの悲しいね」）。左右に離して置く。 */
 .oxnav{display:flex;gap:10px;margin-top:14px}
+/* ○×・4択の経過時間（2026-10-13）。一問一答の .qhead .qtime と同じ大きさ・色 */
+.pqtime{font-size:11px;color:var(--muted);min-width:34px;font-variant-numeric:tabular-nums}
 /* 答えたあとの「前の問題／次の問題」を下に固定（2026-09-28 本人「下までスクロールしないと次の問題へいけない」）。
    位置・ぼかしは一問一答の #nextbar と同じ。タブ（z-index 20）は隠さない。 */
 #oxbar{position:fixed;left:0;right:0;bottom:calc(53px + env(safe-area-inset-bottom));z-index:19;
@@ -1865,7 +1867,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='9819ccd4';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='a0731634';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。
