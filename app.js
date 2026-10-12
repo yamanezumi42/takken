@@ -1349,6 +1349,16 @@ function oxyonMigrate(){
     if(E.k)have[E.k]=1;
     if(E.e==='oxa'&&E.dir){var k1='ox|'+E.dir+'|'+(E.i|0);cnt[k1]=(cnt[k1]||0)+1}
     if(E.e==='yona'&&E.qid){var k2='yon|'+E.qid;cnt[k2]=(cnt[k2]||0)+1}
+    /* ★土台に畳んである解答も「すでにある分」に数える（2026-10-13 本人報告）。
+       数えていなかったので、畳み直した直後の起動で全件を出来事に起こし直し、
+       土台と出来事で二重に数えた（4,346件。起動のたびにさらに増えた）。 */
+    if(E.e==='base'&&E.st){
+      var bo=E.st.ox||{},by=E.st.yon||{};
+      Object.keys(bo).forEach(function(dir){var r=bo[dir]||{};Object.keys(r).forEach(function(i){
+        var k3='ox|'+dir+'|'+(+i|0);cnt[k3]=(cnt[k3]||0)+(((r[i]||[])[0])|0)})});
+      Object.keys(by).forEach(function(cat){var r=by[cat]||{};Object.keys(r).forEach(function(q){
+        var k4='yon|'+q;cnt[k4]=(cnt[k4]||0)+(((r[q]||[])[0])|0)})});
+    }
   });
   function done(k){return cnt[k]||0}
   function emit(kind,key,o){
