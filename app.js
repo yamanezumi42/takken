@@ -2688,7 +2688,9 @@ function pclkGet(k,make){
 function pclkReset(m){
   var k=pclkKey(m);if(!k)return;
   var o=pclkGet(k,true);
-  if(o.t){var dd=Math.min(180000,Math.max(0,Date.now()-o.t));if(dd>0)addStudyMs('ox',null,dd)}   /* 動いていた分は積んでから0に */
+  /* 動いていた分と、まだ学習時間に積んでいない分（u）は積んでから0に */
+  var dd=(o.t?Math.min(180000,Math.max(0,Date.now()-o.t)):0)+(+o.u||0);
+  if(dd>0)addStudyMs('ox',null,dd);
   ST.pclk[k]={s:0,t:null,at:Date.now()};saveST();
 }
 function pclkSecK(k){
@@ -2704,13 +2706,23 @@ function pclkSync(){
   if(!ST.pclk||typeof ST.pclk!=='object')ST.pclk={};
   Object.keys(ST.pclk).forEach(function(k){
     var c=ST.pclk[k];if(!c||typeof c!=='object'||k===act||!c.t)return;
-    var dd=Math.min(180000,Math.max(0,Date.now()-c.t));
-    c.s=(c.s||0)+dd;c.t=null;ch=true;
+    var dd=Math.min(180000,Math.max(0,Date.now()-c.t))+(+c.u||0);
+    c.s=(c.s||0)+Math.min(180000,Math.max(0,Date.now()-c.t));c.t=null;c.u=0;ch=true;
     /* 解いていた時間を学習時間に積む（2026-10-13 本人「ホーム画面に追加して。今日やった時間と今週の合計時間」）。
-       出来事（vms）で積むので、ほかの端末にも同期される */
+       出来事（vms）で積むので、ほかの端末にも同期される。区切り直した分（u）もここでまとめて1件にする */
     if(dd>0)addStudyMs('ox',null,dd);
   });
-  if(act){var c=pclkGet(act,true);if(!c.t){c.t=Date.now();c.at=Date.now();ch=true}}
+  if(act){
+    var c=pclkGet(act,true);
+    if(!c.t){c.t=Date.now();c.at=Date.now();ch=true}
+    else{
+      /* ★描き直すたび（答えた・次へ進んだ）に区切り直す（2026-10-13 本人「４択問題やっているときちょいちょい時間停止するね」）。
+         区切らないと「放置は180秒で打ち切る」が画面に入ってからの通しに掛かり、続けて解いていても3分で止まっていた。
+         一問一答も1問ごとに区切っている。学習時間へは離れたときにまとめて積む（u に貯める＝出来事を増やさない） */
+      var cd=Math.min(180000,Math.max(0,Date.now()-c.t));
+      if(cd>0){c.s=(c.s||0)+cd;c.u=(+c.u||0)+cd;c.t=Date.now();c.at=Date.now();ch=true}
+    }
+  }
   if(ch)saveST();
 }
 /* おしまいの画面に出す「かかった時間」 */
