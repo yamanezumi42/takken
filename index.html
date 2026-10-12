@@ -1641,6 +1641,13 @@ body{overflow-x:clip;overscroll-behavior-x:none}
 .nbbar .z.on{background:var(--chipbg);color:var(--chipfg);border-color:var(--chipbg)}
 .nbbar .pct{font-family:var(--num);font-size:12px;color:var(--muted);min-width:44px;text-align:center}
 .nb section{scroll-margin-top:64px}
+/* スマホ版のノート（2026-10-13）：1段・画面の幅で折り返す。倍率と幅は nbApplyZoom が当てる */
+.nb.m > section > .in,.nb.m > .cover2{column-count:1;min-height:0}
+.nb.m section{scroll-margin-top:110px}   /* 倍率で縮むので、上の帯（約60px）の下に見出しが来るよう大きめに */
+.nb.m table.wr th,.nb.m table.wr td{padding-left:.8mm!important;padding-right:.8mm!important}
+.nb.m table.wr th,.nb.m table.wr td.c b{white-space:normal!important}  /* 幅に収まらない表だけ（nbApplyZoom が印を付ける） */
+.nbbar .z.back{display:block;flex:1 1 auto;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;text-align:left;line-height:30px}
 .nb section.hit{animation:nbhit 1.6s ease-out 1}
 @keyframes nbhit{
   0%{background:#fdf3d8}
@@ -1858,7 +1865,7 @@ body{overflow-x:clip;overscroll-behavior-x:none}
    IndexedDB に入れる。以後はオフラインでもここから起動する。
    #import を付けて開くと入れ直しの画面を出す。 */
 (function(){
-  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='d6e8c90d';
+  var DB='takken-data', STORE='blob', KEY='v1', KEY2='v2', VER='2cf9f849';
   var $=function(id){return document.getElementById(id)};
   /* ---------- 非公開リポジトリからの取り込み（2026-08-18 本人指示） ----------
      34MB を LocalSend で手渡すのをやめる。**変わったファイルだけ**取る。

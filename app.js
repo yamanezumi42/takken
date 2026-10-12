@@ -1491,6 +1491,10 @@ function normST(o){
   if(!(typeof o.settings.nbZ==='number'&&o.settings.nbZ>=.25&&o.settings.nbZ<=3))
     delete o.settings.nbZ;
   if(o.settings.nbFit!=='col'&&o.settings.nbFit!=='page')delete o.settings.nbFit;
+  /* スマホ版のノートの倍率（2026-10-13）。0.5〜1.5倍の外は捨てる */
+  if(!(typeof o.settings.nbMz==='number'&&o.settings.nbMz>=.5&&o.settings.nbMz<=1.5))
+    delete o.settings.nbMz;
+  if(typeof o.settings.nbPaper!=='boolean')delete o.settings.nbPaper;
   /* 「単元で進む」の大分類パネルの開閉（{大分類:true/false}）。null＝まだ一度も触っていない
      ＝そのときは既定（残りがある最初の大分類だけ開く）を使う＝ubOpenMap() 参照。 */
   if(!o.settings.ubOpen||typeof o.settings.ubOpen!=='object')o.settings.ubOpen=null;
@@ -2451,6 +2455,10 @@ var S={view:'home',cat:null,sort:'std',srcF:null,queue:[],qi:0,phase:'q',res:nul
         nbZ:((ST.settings&&typeof ST.settings.nbZ==='number')?ST.settings.nbZ:null),
         nbFit:((ST.settings&&(ST.settings.nbFit==='col'||ST.settings.nbFit==='page'))
                ?ST.settings.nbFit:null),
+        /* スマホ版のノート（2026-10-13 本人「スマホ版に直しておいて」「73%の拡大だといいかな」）。
+           nbPaper＝紙のままで見る／nbMz＝スマホ版の倍率（既定0.73） */
+        nbPaper:!!(ST.settings&&ST.settings.nbPaper===true),
+        nbMz:((ST.settings&&typeof ST.settings.nbMz==='number')?ST.settings.nbMz:.73),
         ubOpen:null,          /* 単元一覧で開いている大分類（ubOpenMap() が作る／記録にも残す） */
         oxOpen:null,oxrest:false, /* ○×の一覧で開いている大分類／「残り」で絞っているか（2026-09-28） */
         sT:0,sR:0,sStreak:0,sBest:0,spent:0,
@@ -4453,20 +4461,30 @@ function vNote(){
     return '<div class="pad'+stag()+'">'+back
       +'<div class="warn">'+IC.warn+' ノートのデータが読み込めていません。data/notes.js を確認してください。</div></div>';
   NB.mount();
-  return '<div class="pad'+stag()+'">'+back+nbBarHtml()
-    +'<div class="nbwrap"><div class="nbz"><div class="nb">'+NOTEHTML[u.dir]+'</div></div></div></div>';
+  /* 戻るは上の帯に入れて常に見えるようにする（2026-10-13 本人「問題に戻るボタンを常に上に固定で出しておいて欲しい」） */
+  back=back.replace('class="btn sm" data-act="noteback" style="margin-bottom:10px"','class="z back" data-act="noteback"');
+  return '<div class="pad'+stag()+'">'+nbBarHtml(back)
+    +'<div class="nbwrap"><div class="nbz"><div class="nb'+(S.nbPaper?'':' m')+'">'+NOTEHTML[u.dir]+'</div></div></div></div>';
 }
 /* 拡大縮小の操作（2026-09-21）。紙のままで読めるように、指でも押しても寄れるようにする。
    ・−／＋＝1段ずつ（×1.25） ・段＝1段の幅にぴったり ・全体＝紙の幅にぴったり
    ・2本指のつまみ／画面を2回たたく、でも変わる（nbPinch） */
-function nbBarHtml(){
+function nbBarHtml(back){
+  if(!S.nbPaper)
+    return '<div class="nbbar">'+(back||'')
+      +'<button class="z big" data-act="nbz" data-v="out" aria-label="小さく">−</button>'
+      +'<span class="pct">'+Math.round(S.nbMz*100)+'%</span>'
+      +'<button class="z big" data-act="nbz" data-v="in" aria-label="大きく">＋</button>'
+      +'<button class="z" data-act="nbmode">紙</button>'
+      +'</div>';
   var z=Math.round((S.nbZ||1)*100);
-  return '<div class="nbbar">'
+  return '<div class="nbbar">'+(back||'')
     +'<button class="z big" data-act="nbz" data-v="out" aria-label="小さく">−</button>'
     +'<span class="pct">'+z+'%</span>'
     +'<button class="z big" data-act="nbz" data-v="in" aria-label="大きく">＋</button>'
     +'<button class="z'+(S.nbFit==='col'?' on':'')+'" data-act="nbz" data-v="col">段に合わせる</button>'
     +'<button class="z'+(S.nbFit==='page'?' on':'')+'" data-act="nbz" data-v="page">全体</button>'
+    +'<button class="z" data-act="nbmode">スマホ</button>'
     +'</div>';
 }
 /* 紙の実寸（拡大の前）。offsetWidth は transform の影響を受けないのでそのまま測れる。 */
@@ -4491,6 +4509,21 @@ function nbFitZ(kind){
 function nbApplyZoom(){
   var wrap=document.querySelector('.nbwrap'),zb=document.querySelector('.nbz'),nat=nbNat();
   if(!wrap||!zb||!nat)return;
+  var nb0=document.querySelector('.nb');
+  if(!S.nbPaper){
+    /* スマホ版：1段にして画面の幅で折り返す。倍率は zoom で当て、幅は倍率で割った値にする
+       ＝縮めたあとでちょうど画面の幅になる（横に動かさずに読める） */
+    zb.style.transform='none';zb.style.width='';zb.style.height='';
+    nb0.style.zoom=S.nbMz;nb0.style.width=((wrap.clientWidth-28)/S.nbMz)+'px';
+    /* 幅に収まらない表だけ、見出しの折り返しを許して余白を詰める（全部の表に当てると見出しが途中で割れる） */
+    var tb=nb0.querySelectorAll('table');
+    for(var ti=0;ti<tb.length;ti++)tb[ti].classList.remove('wr');
+    for(ti=0;ti<tb.length;ti++)if(tb[ti].offsetWidth>tb[ti].parentNode.clientWidth+1)tb[ti].classList.add('wr');
+    var p0=document.querySelector('.nbbar .pct');
+    if(p0)p0.textContent=Math.round(S.nbMz*100)+'%';
+    return;
+  }
+  nb0.style.zoom='';nb0.style.width='';
   var z=S.nbZ||1;
   zb.style.transform='scale('+z+')';
   zb.style.width=Math.round(nat.w*z)+'px';
@@ -4506,6 +4539,25 @@ function nbApplyZoom(){
 /* 倍率を決める。kind＝'in'／'out'／'col'／'page'／数値 */
 function nbSetZoom(kind,keepFit){
   var nat=nbNat();if(!nat)return;
+  if(!S.nbPaper){
+    if(kind!=='in'&&kind!=='out')return;
+    S.nbMz=Math.max(.5,Math.min(1.5,Math.round((S.nbMz+(kind==='in'?.05:-.05))*100)/100));
+    ST.settings.nbMz=S.nbMz;saveST();
+    /* 読んでいた行を動かさない：帯のすぐ下にある要素を覚えて、倍率を変えたあと同じ高さに戻す */
+    var bar=document.querySelector('.nbbar'),yb=bar?bar.getBoundingClientRect().bottom+4:70;
+    var nbx=document.querySelector('.nb'),r0=nbx.getBoundingClientRect(),fr=(yb-r0.top)/(r0.height||1);
+    var an=document.elementFromPoint(Math.round(window.innerWidth/2),Math.round(yb)),y0=null;
+    /* 小さな要素（1段落・1行ほど）が拾えたらそれを、拾えなければノート全体の中の割合を目印にする */
+    if(an&&an.closest&&an.closest('.nb')&&an.getBoundingClientRect().height<240)
+      y0=an.getBoundingClientRect().top-yb;
+    else an=null;
+    var he=document.documentElement,bd=document.body;he.style.overflowAnchor=bd.style.overflowAnchor='none';   /* ブラウザの位置合わせと二重にしない */
+    nbApplyZoom();
+    if(an)window.scrollBy(0,(an.getBoundingClientRect().top-yb)-y0);
+    else{var r1=nbx.getBoundingClientRect();window.scrollBy(0,(r1.top+fr*r1.height)-yb)}
+    setTimeout(function(){he.style.overflowAnchor=bd.style.overflowAnchor=''},0);
+    return;
+  }
   if(kind==='in'||kind==='out'){
     S.nbZ=Math.max(.25,Math.min(3,(S.nbZ||1)*(kind==='in'?1.25:1/1.25)));
     if(!keepFit)S.nbFit=null;
@@ -4518,6 +4570,8 @@ function nbSetZoom(kind,keepFit){
   ST.settings.nbZ=S.nbZ;ST.settings.nbFit=S.nbFit;saveST();
   nbApplyZoom();
 }
+/* 画面の向き・幅が変わったら、スマホ版の幅を合わせ直す（2026-10-13） */
+try{window.addEventListener('resize',function(){if(S&&S.view==='note'&&!S.nbPaper)nbApplyZoom()})}catch(e){}
 /* 2本指のつまみと、2回たたく。中の横スクロールと取り合いにならないよう自前で受ける。 */
 function nbPinch(){
   var wrap=document.querySelector('.nbwrap');
@@ -4527,7 +4581,7 @@ function nbPinch(){
   function dist(t){var a=t[0],b=t[1];
     return Math.sqrt(Math.pow(a.clientX-b.clientX,2)+Math.pow(a.clientY-b.clientY,2))}
   wrap.addEventListener('touchstart',function(e){
-    if(e.touches.length!==2)return;
+    if(e.touches.length!==2||!S.nbPaper)return;
     d0=dist(e.touches);z0=S.nbZ||1;
     var r=wrap.getBoundingClientRect();
     mx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left;
@@ -4552,6 +4606,7 @@ function nbPinch(){
   var last=0;
   wrap.addEventListener('click',function(e){
     if(e.target.closest&&e.target.closest('button'))return;
+    if(!S.nbPaper)return;
     var now=Date.now();
     if(now-last<320){nbSetZoom(S.nbFit==='col'?'page':'col');last=0;return}
     last=now;
@@ -6083,7 +6138,8 @@ function nbAfterRender(){
   nbMarkSections();                      /* 節の見出しに到達度を差し込む（2026-09-14） */
   /* 拡大縮小（2026-09-21）。初めて開くときは**読める大きさ**から始める＝
      紙の全体を入れると11.6ptが6px以下になって読めないので、狭い画面では1段に合わせる。 */
-  if(typeof S.nbZ!=='number'||!(S.nbZ>0)){
+  if(!S.nbPaper){}
+  else if(typeof S.nbZ!=='number'||!(S.nbZ>0)){
     var fit=(nbFitZ('page')*1>=.78)?'page':'col';   /* 全体でも字が小さくならないなら全体 */
     S.nbFit=fit;S.nbZ=nbFitZ(fit);
   }else if(S.nbFit){
@@ -10239,6 +10295,8 @@ document.addEventListener('click',function(e){
     S.dir=null;go('note');return}
   /* ノートの拡大縮小（2026-09-21） */
   if(a==='nbz'){nbSetZoom(t.getAttribute('data-v'));return}
+  /* スマホ版と紙のままを切り替える（2026-10-13） */
+  if(a==='nbmode'){S.nbPaper=!S.nbPaper;ST.settings.nbPaper=S.nbPaper;saveST();render();return}
   if(a==='nprog'){S.noteCat=t.getAttribute('data-c');S.dir=null;go('nprog');return}
   /* 節から解く（2026-09-14）。単元から解くときと同じ道を通す＝解禁は科目で判定し、
      並びはあこ課長の習う順（基準の動画は渡さない）。 */
