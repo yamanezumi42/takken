@@ -5901,6 +5901,7 @@ function yonTotal(){var q=yonSeq();return q?q.length:yonIds().length}
 /* 4択の画面。○×の画面と同じ決まりでそろえる
    ＝続きから／前へ・次へ／番号で飛ぶ／まちがえた問題だけ／**答えを先に見せない**。 */
 function vYon(){
+  OXBAR='';                               /* 下の固定ボタンは答えたあとだけ（下で入れ直す） */
   var ids=yonIds(),i=S.yonI|0,ttl=S.yonTitle||'過去問4択';
   var back='<button class="btn sm" data-act="yonback" style="margin-bottom:10px">'
     +esc(S.yonFrom==='review'?'復習へ戻る':((S.yonCat||'')+'へ戻る'))+'</button>';
@@ -5967,10 +5968,15 @@ function vYon(){
       +'<button class="btn sm" data-act="yonagain">もう一度答える</button>'
       +'</div>';
   }
-  h+='<div class="oxnav">'
+  var nav='<div class="oxnav">'
     +(pos>0?'<button class="btn" data-act="yonprev">'+IC.chevL+'　前の問題</button>':'<span></span>')
-    +'<button class="btn" data-act="yonnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
-    +'</div>'
+    +'<button class="btn'+(done?' pri':'')+'" data-act="yonnext">'+(pos+1>=tot?'おしまいへ':'次の問題')+'　'+IC.chev+'</button>'
+    +'</div>';
+  /* 答えたあとは「前の問題／次の問題」を下に固定（2026-10-13 本人「4択問題で答えた後に次の問題に行けるように固定で入れてほしい」
+     「過去問の4択だけ」「前の問題も」「答える前はそのまま」）。○×・数字4択と同じ OXBAR を使う */
+  if(done)OXBAR=nav;
+  else h+=nav;
+  h+=''
     /* 絞り込みと番号は**下**に置く（読むところの上を混ませない） */
     +'<div style="margin:14px 0 0">'
     +'<button class="tog'+(sq?'':' on')+'" style="margin:0 6px 6px 0" data-act="yononly" data-v="">'
@@ -5982,7 +5988,8 @@ function vYon(){
       +' data-act="yongrid">番号で飛ぶ</button>'):'')
     +'</div>'
     +((S.yonGrid&&ids.length<=200)?yonGridHtml(i):'');
-  return h+'</div>';
+  /* 固定ボタンの高さぶん空ける（一番下の絞り込みが隠れないように） */
+  return h+(done?'<div style="height:76px"></div>':'')+'</div>';
 }
 /* リードの ア〜オ を**選択肢と同じ組み方**（札＋本文）で出す
    （2026-09-22 本人が案1を選択。「これ見にくいよね？選択問題と同じようにできないの？」）。
@@ -6548,7 +6555,7 @@ var OXBAR='';
 function syncOxBar(){
   var b=document.getElementById('oxbar');
   if(!b)return;
-  var show=((S.view==='ox'||S.view==='num')&&!!OXBAR);   /* 数字4択も同じ（2026-10-09） */
+  var show=((S.view==='ox'||S.view==='num'||S.view==='yon')&&!!OXBAR);   /* 数字4択も同じ（2026-10-09）・過去問4択も（2026-10-13） */
   if(show&&b.innerHTML!==OXBAR)b.innerHTML=OXBAR;
   b.hidden=!show;
 }
