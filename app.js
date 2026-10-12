@@ -1726,7 +1726,7 @@ function vpOf(vid){
    sneak（抜き打ち）は 2026-08-22 に廃止したので欄も落とす（2026-08-23 本人指摘
    「やたら動画を並べられてる」「新しいものに対応してないように思えるものもある」）。
    過去に記録された sneak の秒は review に足して数える＝過去の時間を消さない。 */
-var TKINDS=[['video','動画'],['new','新規'],['review','復習']];
+var TKINDS=[['video','動画'],['new','新規'],['review','復習'],['ox','○×・4択']];   /* ○×・4択は 2026-10-13 */
 function tlogDay(day){
   var d=ST.tlog[day];
   if(!d){d={video:0,'new':0,review:0};ST.tlog[day]=d}
@@ -1746,13 +1746,25 @@ function applyVms(E){
   if(!(ms>0))return;
   /* sneak（抜き打ち）は 2026-08-22 に廃止。渡ってきたら復習として数える。 */
   if(kind==='sneak')kind='review';
-  if(['video','new','review'].indexOf(kind)<0)kind='new';
+  if(['video','new','review','ox'].indexOf(kind)<0)kind='new';
   tlogDay(E.day)[kind]+=ms;
   if(E.vid&&kind!=='video')vpOf(E.vid).quizMs+=ms;
 }
+/* 今週（月曜から今日まで）の合計ミリ秒（2026-10-13 ホームに出す） */
+function tlogWeek(){
+  var t=today(),dw=(new Date(dnum(t)*86400000).getUTCDay()+6)%7,tot=0;   /* 月曜＝0 */
+  Object.keys(ST.tlog).forEach(function(day){
+    var g=dgap(day,t);if(g<0||g>dw)return;
+    var d=ST.tlog[day];TKINDS.forEach(function(k){tot+=(+d[k[0]]||0)});
+  });
+  return tot;
+}
+/* 分を「1時間23分」「45分」にする */
+function hmTxt(ms){var mn=Math.round((+ms||0)/60000);return hhm(mn)||(mn+'分')}
 /* 日別の合計（n日ぶん・n=null で通算）。返すのはミリ秒 */
 function tlogSum(n){
-  var out={video:0,'new':0,review:0,total:0},t=today();
+  var out={total:0},t=today();
+  TKINDS.forEach(function(k){out[k[0]]=0});      /* 種類を足しても NaN にしない（2026-10-13 ○×・4択を足した） */
   Object.keys(ST.tlog).forEach(function(day){
     if(n!==null&&n!==undefined){var g=dgap(day,t);if(g<0||g>n-1)return}
     var d=ST.tlog[day];
@@ -2674,7 +2686,9 @@ function pclkGet(k,make){
 }
 function pclkReset(m){
   var k=pclkKey(m);if(!k)return;
-  pclkGet(k,true);ST.pclk[k]={s:0,t:null,at:Date.now()};saveST();
+  var o=pclkGet(k,true);
+  if(o.t){var dd=Math.min(180000,Math.max(0,Date.now()-o.t));if(dd>0)addStudyMs('ox',null,dd)}   /* 動いていた分は積んでから0に */
+  ST.pclk[k]={s:0,t:null,at:Date.now()};saveST();
 }
 function pclkSecK(k){
   var c=pclkGet(k,false);if(!c)return 0;
@@ -2689,7 +2703,11 @@ function pclkSync(){
   if(!ST.pclk||typeof ST.pclk!=='object')ST.pclk={};
   Object.keys(ST.pclk).forEach(function(k){
     var c=ST.pclk[k];if(!c||typeof c!=='object'||k===act||!c.t)return;
-    c.s=(c.s||0)+Math.min(180000,Math.max(0,Date.now()-c.t));c.t=null;ch=true;
+    var dd=Math.min(180000,Math.max(0,Date.now()-c.t));
+    c.s=(c.s||0)+dd;c.t=null;ch=true;
+    /* 解いていた時間を学習時間に積む（2026-10-13 本人「ホーム画面に追加して。今日やった時間と今週の合計時間」）。
+       出来事（vms）で積むので、ほかの端末にも同期される */
+    if(dd>0)addStudyMs('ox',null,dd);
   });
   if(act){var c=pclkGet(act,true);if(!c.t){c.t=Date.now();c.at=Date.now();ch=true}}
   if(ch)saveST();
@@ -2743,6 +2761,8 @@ function clockSync(){
 }
 function render(){
   var v=document.getElementById('view'),h='';
+  /* 画面を離れた○×・4択の時計は、描く前に止めて学習時間に積む＝ホームの『今日の学習』にすぐ入る（2026-10-13） */
+  try{pclkSync()}catch(e){}
   /* この描画で「入場アニメーション（画面遷移＋段差）」を付けるか。
      ビューを開いたとき（go）と出題が次に進んだときだけ true。
      同じ画面内の更新（絞り込みのタップ・回答など）では動かさない
@@ -3107,7 +3127,11 @@ function vHome(){
     +'<span>解いた問題数 <b>'+n3(apn)+'</b>問</span></div>'
     /* 塗りは data-m6v で伸ばす（m6Fills）。width:% のままだと scaleX(0) のまま空に見えていた（2026-10-09 気づいて直す） */
     +'<div class="bar3" style="margin-bottom:14px"><i data-m6v="'
-    +(apN?(apd/apN).toFixed(4):'0')+'" data-m6vk="home:learn"></i></div>';
+    +(apN?(apd/apN).toFixed(4):'0')+'" data-m6vk="home:learn"></i></div>'
+    /* 学習時間＝今日と今週（月曜から）。動画・一問一答・○×・4択の合計（2026-10-13 本人
+       「ホーム画面に追加して。今日やった時間と今週の合計時間でお願い」） */
+    +'<div class="hstat" style="margin:-6px 0 14px"><span>今日の学習 <b>'+hmTxt(tlogSum(1).total)+'</b></span>'
+    +'<span>今週 <b>'+hmTxt(tlogWeek())+'</b></span></div>';
   /* いまどの期間か（1行だけ。カードは増やさない＝引き算の原則）。 */
   h+='<div class="hstat" style="margin-bottom:12px"><span>'
     /* 日付はベタ書きしない＝PLAN2 を変えたのに文字が古いまま残る事故を作らない
@@ -10027,7 +10051,7 @@ document.addEventListener('click',function(e){
   if(a==='oxnext'&&oxRunOn()){var R9=OXR.run();
     if(R9&&!S.oxRunEnd&&R9.i+1>=R9.list.length){R9.end=true;S.oxPick=null;saveST();
       OXR.leave();S.dir=null;go('review');return}}
-  if((a==='oxnext'||a==='oxprev')&&oxRunOn()){OXR.step(a==='oxnext'?1:-1);render();return}
+  if((a==='oxnext'||a==='oxprev')&&oxRunOn()){OXR.step(a==='oxnext'?1:-1);render();window.scrollTo(0,0);return}
   if(a==='oxnext'||a==='oxprev'||a==='oxgo'){
     var omax=OXB.list(S.oxDir).length,oq=oxSeq(),oni,obase=oq||OXB.vis(S.oxDir);
     if(a==='oxgo'){
@@ -10049,7 +10073,7 @@ document.addEventListener('click',function(e){
     if(oni>omax)oni=omax;                     /* omax＝おしまいの画面 */
     S.oxI=oni;S.oxPick=null;S.oxAgain=false;
     if(oni<omax)OXB.setPos(S.oxDir,oni);
-    render();return}
+    render();window.scrollTo(0,0);return}       /* 次の問題は一番上から（2026-10-13） */
   if(a==='oxgrid'){S.oxGrid=!S.oxGrid;render();return}
   /* ---- 4択（2026-09-21）。○×と同じ決まりで動かす ---- */
   /* 単元から（data-c＝単元名）と、復習から（data-r＝ng／new）。どちらも同じ画面で解く */
@@ -10255,7 +10279,9 @@ document.addEventListener('click',function(e){
     S.yonI=yni;S.yonPick=null;S.yonAgain=false;
     if(yni<ymax)YB.setPos(S.yonKey,yni);
     else{var yr3=YB.run();if(yr3&&yr3.key===S.yonKey){yr3.i=yr3.ids.length;saveST()}}
-    render();return}
+    /* 次の問題は一番上から（2026-10-13 本人「次の問題に行ったときに画面が下にスクロールしたところから始まる」）。
+       描き直すだけだと、解説を下まで読んだ位置のまま次の問題が出ていた */
+    render();window.scrollTo(0,0);return}
   if(a==='yonback'){
     S.dir=null;
     if(S.yonFrom==='review'){go('review');return}
@@ -10294,7 +10320,7 @@ document.addEventListener('click',function(e){
       var nr0=NUMR.run();
       if(a==='numnext'&&nr0.i+1>=nr0.list.length){
         nr0.end=true;S.numPick=null;saveST();NUMR.leave();S.dir=null;go('review');return}
-      if(a!=='numgo'){NUMR.step(a==='numnext'?1:-1);render();return}
+      if(a!=='numgo'){NUMR.step(a==='numnext'?1:-1);render();window.scrollTo(0,0);return}
     }
     var nbs=numBase(),nid=null;
     if(a==='numgo'){
@@ -10313,7 +10339,7 @@ document.addEventListener('click',function(e){
     if(!nid)return;
     S.numId=nid;S.numPick=null;S.numAgain=false;
     NUMB.setPos(S.numDir,nid);
-    render();return}
+    render();window.scrollTo(0,0);return}        /* 次の問題は一番上から（2026-10-13） */
   if(a==='numback'){
     if(numRunOn()){NUMR.leave();S.dir=null;go('review');return}   /* 復習から来たら復習へ */
     S.dir=null;S.fmode='num';go('fields');return}
